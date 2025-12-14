@@ -44,13 +44,8 @@ def toggle_plugin(plugin_name: str, enabled: bool, **plugin_config):
     global active_plugins
 
     if enabled:
-        # Instantiate or update the plugin
-        if plugin_name not in active_plugins:
-            active_plugins[plugin_name] = plugin_registry.instantiate(plugin_name, **plugin_config)
-        else:
-            # Update config
-            active_plugins[plugin_name].config.update(plugin_config)
-            active_plugins[plugin_name].enabled = True
+        # Always reinstantiate to ensure config is properly applied
+        active_plugins[plugin_name] = plugin_registry.instantiate(plugin_name, **plugin_config)
     else:
         # Disable the plugin
         if plugin_name in active_plugins:
@@ -120,8 +115,12 @@ def generate_image(
         return None, f"Error: {str(e)}", str(seed)
 
 
-def create_ui() -> gr.Blocks:
-    """Create the Gradio UI with menu and dynamic plugins."""
+def create_ui() -> tuple[gr.Blocks, str]:
+    """Create the Gradio UI with menu and dynamic plugins.
+
+    Returns:
+        Tuple of (app, custom_css)
+    """
 
     # Use custom CSS for menu-like appearance
     custom_css = """
@@ -147,7 +146,7 @@ def create_ui() -> gr.Blocks:
     }
     """
 
-    app = gr.Blocks(title="Pipeworks Image Generator", css=custom_css)
+    app = gr.Blocks(title="Pipeworks Image Generator")
 
     with app:
         # Menu Bar
@@ -248,15 +247,17 @@ def create_ui() -> gr.Blocks:
                             )
 
                             # Update plugin config when settings change
+                            def update_plugin_config(enabled, folder, prefix):
+                                if enabled:
+                                    toggle_plugin("SaveMetadata", enabled, folder_name=folder, filename_prefix=prefix)
+
                             metadata_folder.change(
-                                fn=lambda enabled, folder, prefix: toggle_plugin("SaveMetadata", enabled, folder_name=folder, filename_prefix=prefix) if enabled else None,
+                                fn=update_plugin_config,
                                 inputs=[save_metadata_check, metadata_folder, metadata_prefix],
-                                outputs=None,
                             )
                             metadata_prefix.change(
-                                fn=lambda enabled, folder, prefix: toggle_plugin("SaveMetadata", enabled, folder_name=folder, filename_prefix=prefix) if enabled else None,
+                                fn=update_plugin_config,
                                 inputs=[save_metadata_check, metadata_folder, metadata_prefix],
-                                outputs=None,
                             )
 
                 generate_btn = gr.Button(
@@ -327,7 +328,7 @@ def create_ui() -> gr.Blocks:
             outputs=[image_output, info_output, seed_used],
         )
 
-    return app
+    return app, custom_css
 
 
 def main():
@@ -353,7 +354,7 @@ def main():
     logger.info(f"Available plugins: {available_plugins}")
 
     # Create and launch UI
-    app = create_ui()
+    app, custom_css = create_ui()
 
     logger.info(
         f"Launching Gradio UI on {config.gradio_server_name}:{config.gradio_server_port}"
@@ -365,6 +366,7 @@ def main():
         share=config.gradio_share,
         show_error=True,
         inbrowser=False,
+        css=custom_css,
     )
 
 
