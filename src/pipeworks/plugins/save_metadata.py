@@ -50,17 +50,26 @@ class SaveMetadataPlugin(PluginBase):
             return
 
         try:
-            # Determine the output directory
+            # Determine the output directory and final image path
             if self.folder_name:
                 # Use custom folder within the image's parent directory
                 output_dir = save_path.parent / self.folder_name
                 output_dir.mkdir(parents=True, exist_ok=True)
+
+                # Save image to the metadata subfolder
+                new_image_path = output_dir / save_path.name
+                image.save(new_image_path)
+                logger.info(f"Saved image to: {new_image_path}")
+
+                # Use the new path for metadata reference
+                final_image_path = new_image_path
             else:
                 # Use the same directory as the image
                 output_dir = save_path.parent
+                final_image_path = save_path
 
             # Generate base filename
-            base_name = save_path.stem  # Image filename without extension
+            base_name = final_image_path.stem  # Image filename without extension
             if self.filename_prefix:
                 base_name = f"{self.filename_prefix}_{base_name}"
 
@@ -81,7 +90,7 @@ class SaveMetadataPlugin(PluginBase):
                 "guidance_scale": params.get("guidance_scale"),
                 "model_id": params.get("model_id"),
                 "timestamp": datetime.now().isoformat(),
-                "image_path": str(save_path),
+                "image_path": str(final_image_path),
             }
 
             # Add any additional params

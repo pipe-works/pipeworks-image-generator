@@ -179,9 +179,6 @@ mypy src/
 - 100GB+ SSD storage
 - Debian Trixie / Ubuntu 22.04+ / similar Linux
 
-## License
-
-[Add your license here]
 
 ## Acknowledgments
 
