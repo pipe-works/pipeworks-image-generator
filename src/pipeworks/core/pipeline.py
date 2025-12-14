@@ -10,6 +10,7 @@ from diffusers import ZImagePipeline
 from PIL import Image
 
 from .config import PipeworksConfig, config as default_config
+from pipeworks.plugins.base import PluginBase
 
 logger = logging.getLogger(__name__)
 
@@ -17,18 +18,22 @@ logger = logging.getLogger(__name__)
 class ImageGenerator:
     """Main image generation pipeline wrapper for Z-Image-Turbo."""
 
-    def __init__(self, config: Optional[PipeworksConfig] = None):
+    def __init__(self, config: Optional[PipeworksConfig] = None, plugins: Optional[List[PluginBase]] = None):
         """
         Initialize the image generator.
 
         Args:
             config: Configuration object. If None, uses global default config.
+            plugins: List of plugin instances to use
         """
         self.config = config or default_config
         self.pipe: Optional[ZImagePipeline] = None
         self._model_loaded = False
+        self.plugins: List[PluginBase] = plugins or []
 
         logger.info(f"Initialized ImageGenerator with model: {self.config.model_id}")
+        if self.plugins:
+            logger.info(f"Loaded {len(self.plugins)} plugins: {[p.name for p in self.plugins]}")
 
     def load_model(self) -> None:
         """Load the Z-Image-Turbo model into memory."""
@@ -175,29 +180,66 @@ class ImageGenerator:
         Returns:
             Tuple of (generated image, save path)
         """
-        # Generate image
+        # Use config defaults if not specified
+        width = width or self.config.default_width
+        height = height or self.config.default_height
+        num_inference_steps = num_inference_steps or self.config.num_inference_steps
+        guidance_scale = guidance_scale if guidance_scale is not None else self.config.guidance_scale
+
+        # Build params dict for plugins
+        params = {
+            "prompt": prompt,
+            "width": width,
+            "height": height,
+            "num_inference_steps": num_inference_steps,
+            "seed": seed,
+            "guidance_scale": guidance_scale,
+            "model_id": self.config.model_id,
+        }
+
+        # Call on_generate_start hooks
+        for plugin in self.plugins:
+            if plugin.enabled:
+                params = plugin.on_generate_start(params)
+
+        # Generate image (using potentially modified params)
         image = self.generate(
-            prompt=prompt,
-            width=width,
-            height=height,
-            num_inference_steps=num_inference_steps,
-            seed=seed,
-            guidance_scale=guidance_scale,
+            prompt=params["prompt"],
+            width=params["width"],
+            height=params["height"],
+            num_inference_steps=params["num_inference_steps"],
+            seed=params["seed"],
+            guidance_scale=params["guidance_scale"],
         )
+
+        # Call on_generate_complete hooks
+        for plugin in self.plugins:
+            if plugin.enabled:
+                image = plugin.on_generate_complete(image, params)
 
         # Generate output filename if not provided
         if output_path is None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            seed_suffix = f"_seed{seed}" if seed is not None else ""
+            seed_suffix = f"_seed{params['seed']}" if params["seed"] is not None else ""
             filename = f"pipeworks_{timestamp}{seed_suffix}.png"
             output_path = self.config.outputs_dir / filename
 
         # Ensure parent directory exists
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
+        # Call on_before_save hooks
+        for plugin in self.plugins:
+            if plugin.enabled:
+                image, output_path = plugin.on_before_save(image, output_path, params)
+
         # Save image
         image.save(output_path)
         logger.info(f"Image saved to: {output_path}")
+
+        # Call on_after_save hooks
+        for plugin in self.plugins:
+            if plugin.enabled:
+                plugin.on_after_save(image, output_path, params)
 
         return image, output_path
 

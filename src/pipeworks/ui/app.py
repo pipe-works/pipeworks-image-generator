@@ -1,16 +1,16 @@
 """Gradio UI for Pipeworks Image Generator."""
 
-import json
 import logging
 import random
-from datetime import datetime
-from pathlib import Path
+from typing import Dict, List
 
 import gradio as gr
-from PIL import Image
 
 from pipeworks.core.config import config
 from pipeworks.core.pipeline import ImageGenerator
+from pipeworks.plugins.base import PluginBase, plugin_registry
+# Import all plugins to ensure they're registered
+from pipeworks.plugins import SaveMetadataPlugin
 
 # Configure logging
 logging.basicConfig(
@@ -19,83 +19,46 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Initialize generator
-generator = ImageGenerator(config)
+# Global state for plugins
+active_plugins: Dict[str, PluginBase] = {}
+generator: ImageGenerator = None  # Will be initialized with plugins
 
 
-def save_metadata(
-    image: Image.Image,
-    image_path: Path,
-    prompt: str,
-    width: int,
-    height: int,
-    num_steps: int,
-    seed: int,
-    metadata_folder: str,
-    filename_prefix: str = "",
-):
+def reinitialize_generator():
+    """Reinitialize the generator with current active plugins."""
+    global generator
+    plugin_list = [p for p in active_plugins.values() if p.enabled]
+    generator = ImageGenerator(config, plugins=plugin_list)
+    logger.info(f"Generator reinitialized with {len(plugin_list)} active plugins")
+
+
+def toggle_plugin(plugin_name: str, enabled: bool, **plugin_config):
     """
-    Save prompt and metadata files.
+    Toggle a plugin on/off and update its configuration.
 
     Args:
-        image: The generated PIL Image
-        image_path: Path where image was originally saved
-        prompt: Generation prompt
-        width: Image width
-        height: Image height
-        num_steps: Inference steps
-        seed: Seed used
-        metadata_folder: Subfolder name for metadata
-        filename_prefix: Optional prefix for metadata files
+        plugin_name: Name of the plugin
+        enabled: Whether to enable the plugin
+        **plugin_config: Plugin-specific configuration
     """
-    try:
-        # Determine output directory and final image path
-        if metadata_folder:
-            output_dir = image_path.parent / metadata_folder
-            output_dir.mkdir(parents=True, exist_ok=True)
+    global active_plugins
 
-            # Save image to the metadata subfolder
-            new_image_path = output_dir / image_path.name
-            image.save(new_image_path)
-            logger.info(f"Saved image to: {new_image_path}")
-
-            # Use the new path for metadata reference
-            final_image_path = new_image_path
+    if enabled:
+        # Instantiate or update the plugin
+        if plugin_name not in active_plugins:
+            active_plugins[plugin_name] = plugin_registry.instantiate(plugin_name, **plugin_config)
         else:
-            output_dir = image_path.parent
-            final_image_path = image_path
+            # Update config
+            active_plugins[plugin_name].config.update(plugin_config)
+            active_plugins[plugin_name].enabled = True
+    else:
+        # Disable the plugin
+        if plugin_name in active_plugins:
+            active_plugins[plugin_name].enabled = False
 
-        # Generate base filename
-        base_name = final_image_path.stem
-        if filename_prefix:
-            base_name = f"{filename_prefix}_{base_name}"
-
-        # Save prompt to .txt file
-        txt_path = output_dir / f"{base_name}.txt"
-        with open(txt_path, "w", encoding="utf-8") as f:
-            f.write(prompt)
-        logger.info(f"Saved prompt to: {txt_path}")
-
-        # Prepare and save metadata to .json file
-        metadata = {
-            "prompt": prompt,
-            "width": width,
-            "height": height,
-            "num_inference_steps": num_steps,
-            "seed": seed,
-            "guidance_scale": 0.0,
-            "model_id": config.model_id,
-            "timestamp": datetime.now().isoformat(),
-            "image_path": str(final_image_path),
-        }
-
-        json_path = output_dir / f"{base_name}.json"
-        with open(json_path, "w", encoding="utf-8") as f:
-            json.dump(metadata, f, indent=2, ensure_ascii=False)
-        logger.info(f"Saved metadata to: {json_path}")
-
-    except Exception as e:
-        logger.error(f"Failed to save metadata: {e}", exc_info=True)
+    # Reinitialize generator with updated plugins
+    reinitialize_generator()
+    return gr.update(visible=enabled)
 
 
 def generate_image(
@@ -105,9 +68,6 @@ def generate_image(
     num_steps: int,
     seed: int,
     use_random_seed: bool,
-    save_metadata_enabled: bool,
-    metadata_folder: str,
-    metadata_prefix: str,
 ) -> tuple[str, str, str]:
     """
     Generate an image from the UI inputs.
@@ -119,9 +79,6 @@ def generate_image(
         num_steps: Number of inference steps
         seed: Random seed
         use_random_seed: Whether to use a random seed
-        save_metadata_enabled: Whether to save metadata
-        metadata_folder: Subfolder for metadata
-        metadata_prefix: Prefix for metadata files
 
     Returns:
         Tuple of (image_path, info_text, seed_used)
@@ -133,7 +90,7 @@ def generate_image(
         # Generate random seed if requested
         actual_seed = random.randint(0, 2**32 - 1) if use_random_seed else seed
 
-        # Generate and save image
+        # Generate and save image (plugins are called automatically by the pipeline)
         image, save_path = generator.generate_and_save(
             prompt=prompt,
             width=width,
@@ -142,21 +99,10 @@ def generate_image(
             seed=actual_seed,
         )
 
-        # Save metadata if enabled
-        if save_metadata_enabled:
-            save_metadata(
-                image=image,
-                image_path=save_path,
-                prompt=prompt,
-                width=width,
-                height=height,
-                num_steps=num_steps,
-                seed=actual_seed,
-                metadata_folder=metadata_folder,
-                filename_prefix=metadata_prefix,
-            )
-
         # Create info text
+        active_plugin_names = [p.name for p in generator.plugins if p.enabled]
+        plugins_info = f"\n**Active Plugins:** {', '.join(active_plugin_names)}" if active_plugin_names else ""
+
         info = f"""
 **Generation Complete!**
 
@@ -164,8 +110,7 @@ def generate_image(
 **Dimensions:** {width}x{height}
 **Steps:** {num_steps}
 **Seed:** {actual_seed}
-**Saved to:** {save_path}
-**Metadata:** {'Saved' if save_metadata_enabled else 'Not saved'}
+**Saved to:** {save_path}{plugins_info}
         """
 
         return str(save_path), info.strip(), str(actual_seed)
@@ -176,11 +121,39 @@ def generate_image(
 
 
 def create_ui() -> gr.Blocks:
-    """Create the Gradio UI."""
+    """Create the Gradio UI with menu and dynamic plugins."""
 
-    app = gr.Blocks(title="Pipeworks Image Generator")
+    # Use custom CSS for menu-like appearance
+    custom_css = """
+    .menu-bar {
+        background-color: #1f2937;
+        padding: 8px 16px;
+        border-radius: 6px;
+        margin-bottom: 16px;
+    }
+    .menu-item {
+        display: inline-block;
+        color: #e5e7eb;
+        margin-right: 20px;
+        font-weight: 500;
+        cursor: pointer;
+    }
+    .plugin-section {
+        max-height: 400px;
+        overflow-y: auto;
+        border: 1px solid #374151;
+        border-radius: 6px;
+        padding: 12px;
+    }
+    """
+
+    app = gr.Blocks(title="Pipeworks Image Generator", css=custom_css)
 
     with app:
+        # Menu Bar
+        with gr.Row(elem_classes="menu-bar"):
+            gr.HTML('<div class="menu-item">File</div><div class="menu-item">Edit</div><div class="menu-item">Plugins</div><div class="menu-item">Settings</div>')
+
         gr.Markdown(
             """
             # Pipeworks Image Generator
@@ -239,37 +212,52 @@ def create_ui() -> gr.Blocks:
                         info="Generate a new random seed each time",
                     )
 
-                # Plugins Section
-                gr.Markdown("### Plugins")
+                # Plugins Section - Collapsible and Scrollable
+                with gr.Accordion("Plugins", open=True):
+                    with gr.Group(elem_classes="plugin-section"):
+                        # Save Metadata Plugin
+                        with gr.Group():
+                            save_metadata_check = gr.Checkbox(
+                                label="Save Metadata (.txt + .json)",
+                                value=False,
+                                info="Save prompt and generation parameters to files",
+                            )
 
-                save_metadata_check = gr.Checkbox(
-                    label="Save Metadata (.txt + .json)",
-                    value=False,
-                    info="Save prompt and generation parameters to files",
-                )
+                            with gr.Group(visible=False) as metadata_settings:
+                                metadata_folder = gr.Textbox(
+                                    label="Metadata Subfolder",
+                                    value="metadata",
+                                    placeholder="Leave empty to save alongside images",
+                                    info="Subfolder within outputs directory",
+                                )
+                                metadata_prefix = gr.Textbox(
+                                    label="Filename Prefix",
+                                    value="",
+                                    placeholder="Optional prefix for metadata files",
+                                )
 
-                with gr.Group(visible=False) as metadata_settings:
-                    metadata_folder = gr.Textbox(
-                        label="Metadata Subfolder",
-                        value="metadata",
-                        placeholder="Leave empty to save alongside images",
-                        info="Subfolder within outputs directory",
-                    )
-                    metadata_prefix = gr.Textbox(
-                        label="Filename Prefix",
-                        value="",
-                        placeholder="Optional prefix for metadata files",
-                    )
+                            # Plugin toggle handler
+                            def toggle_save_metadata(enabled, folder, prefix):
+                                toggle_plugin("SaveMetadata", enabled, folder_name=folder, filename_prefix=prefix)
+                                return gr.update(visible=enabled)
 
-                # Show/hide metadata settings based on checkbox
-                def toggle_metadata_settings(enabled):
-                    return gr.update(visible=enabled)
+                            save_metadata_check.change(
+                                fn=toggle_save_metadata,
+                                inputs=[save_metadata_check, metadata_folder, metadata_prefix],
+                                outputs=[metadata_settings],
+                            )
 
-                save_metadata_check.change(
-                    fn=toggle_metadata_settings,
-                    inputs=[save_metadata_check],
-                    outputs=[metadata_settings],
-                )
+                            # Update plugin config when settings change
+                            metadata_folder.change(
+                                fn=lambda enabled, folder, prefix: toggle_plugin("SaveMetadata", enabled, folder_name=folder, filename_prefix=prefix) if enabled else None,
+                                inputs=[save_metadata_check, metadata_folder, metadata_prefix],
+                                outputs=None,
+                            )
+                            metadata_prefix.change(
+                                fn=lambda enabled, folder, prefix: toggle_plugin("SaveMetadata", enabled, folder_name=folder, filename_prefix=prefix) if enabled else None,
+                                inputs=[save_metadata_check, metadata_folder, metadata_prefix],
+                                outputs=None,
+                            )
 
                 generate_btn = gr.Button(
                     "Generate Image",
@@ -335,9 +323,6 @@ def create_ui() -> gr.Blocks:
                 steps_slider,
                 seed_input,
                 random_seed_checkbox,
-                save_metadata_check,
-                metadata_folder,
-                metadata_prefix,
             ],
             outputs=[image_output, info_output, seed_used],
         )
@@ -347,8 +332,13 @@ def create_ui() -> gr.Blocks:
 
 def main():
     """Main entry point for the application."""
+    global generator
+
     logger.info("Starting Pipeworks Image Generator...")
     logger.info(f"Configuration: {config.model_dump()}")
+
+    # Initialize generator with no plugins (plugins are added via UI)
+    generator = ImageGenerator(config, plugins=[])
 
     # Pre-load model on startup
     logger.info("Pre-loading model...")
@@ -357,6 +347,10 @@ def main():
     except Exception as e:
         logger.error(f"Failed to pre-load model: {e}")
         logger.warning("Model will be loaded on first generation attempt")
+
+    # Log available plugins
+    available_plugins = plugin_registry.list_available()
+    logger.info(f"Available plugins: {available_plugins}")
 
     # Create and launch UI
     app = create_ui()
