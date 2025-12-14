@@ -206,5 +206,22 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
-# OSX 
+# OSX
 .DS_Store
+
+# Pipeworks specific
+# Models (large ML model files)
+models/
+*.pt
+*.pth
+*.bin
+*.safetensors
+*.ckpt
+
+# Generated outputs
+outputs/
+!outputs/.gitkeep
+
+# Gradio
+gradio_cached_examples/
+flagged/

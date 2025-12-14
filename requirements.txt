@@ -1,0 +1,13 @@
+# Core dependencies
+torch>=2.5.0
+diffusers>=0.32.0
+gradio>=5.0.0
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+pillow>=10.0.0
+accelerate>=0.30.0
+transformers>=4.40.0
+python-dotenv>=1.0.0
+
+# Install from source for latest Z-Image support
+git+https://github.com/huggingface/diffusers
