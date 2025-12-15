@@ -186,7 +186,7 @@ def get_items_in_path(current_path: str) -> tuple[gr.Dropdown, str]:
     return gr.update(choices=choices, value="(None)"), display_path
 
 
-def navigate_file_selection(selected: str, current_path: str) -> tuple[gr.Dropdown, str, str]:
+def navigate_file_selection(selected: str, current_path: str) -> tuple[gr.Dropdown, str]:
     """
     Handle folder navigation when an item is selected.
 
@@ -195,14 +195,14 @@ def navigate_file_selection(selected: str, current_path: str) -> tuple[gr.Dropdo
         current_path: Current path being browsed
 
     Returns:
-        Tuple of (updated dropdown, new path, actual file selection or None)
+        Tuple of (updated dropdown, new path)
     """
     from pathlib import Path
 
     # If (None) selected, do nothing
     if selected == "(None)":
         dropdown, display = get_items_in_path(current_path)
-        return dropdown, current_path, "(None)"
+        return dropdown, current_path
 
     # Check if it's a folder (starts with folder emoji)
     if selected.startswith("📁 "):
@@ -222,11 +222,10 @@ def navigate_file_selection(selected: str, current_path: str) -> tuple[gr.Dropdo
 
         # Update dropdown with new path contents
         dropdown, display = get_items_in_path(new_path)
-        return dropdown, new_path, "(None)"
+        return dropdown, new_path
     else:
         # It's a file - keep it selected but don't navigate
-        dropdown, display = get_items_in_path(current_path)
-        return gr.update(), current_path, selected
+        return gr.update(), current_path
 
 
 def get_files_in_folder(folder: str) -> gr.Dropdown:
@@ -866,7 +865,7 @@ def create_ui() -> tuple[gr.Blocks, str]:
         start_file.change(
             fn=navigate_file_selection,
             inputs=[start_file, start_path_state],
-            outputs=[start_file, start_path_state, start_file],
+            outputs=[start_file, start_path_state],
         ).then(
             fn=lambda path: f"/{path}" if path else "/inputs",
             inputs=[start_path_state],
@@ -876,7 +875,7 @@ def create_ui() -> tuple[gr.Blocks, str]:
         middle_file.change(
             fn=navigate_file_selection,
             inputs=[middle_file, middle_path_state],
-            outputs=[middle_file, middle_path_state, middle_file],
+            outputs=[middle_file, middle_path_state],
         ).then(
             fn=lambda path: f"/{path}" if path else "/inputs",
             inputs=[middle_path_state],
@@ -886,7 +885,7 @@ def create_ui() -> tuple[gr.Blocks, str]:
         end_file.change(
             fn=navigate_file_selection,
             inputs=[end_file, end_path_state],
-            outputs=[end_file, end_path_state, end_file],
+            outputs=[end_file, end_path_state],
         ).then(
             fn=lambda path: f"/{path}" if path else "/inputs",
             inputs=[end_path_state],
