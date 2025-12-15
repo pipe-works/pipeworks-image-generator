@@ -568,31 +568,31 @@ def create_ui() -> tuple[gr.Blocks, str]:
         # Prompt Builder mode change handlers
         def update_mode_visibility(mode):
             """Update visibility of line number inputs based on mode."""
-            return {
-                "line": gr.update(visible=mode in ["Specific Line", "Line Range"]),
-                "range_end": gr.update(visible=mode == "Line Range"),
-                "count": gr.update(visible=mode == "Random Multiple"),
-            }
+            return (
+                gr.update(visible=mode in ["Specific Line", "Line Range"]),
+                gr.update(visible=mode == "Line Range"),
+                gr.update(visible=mode == "Random Multiple"),
+            )
 
         # Start segment mode handler
         start_mode.change(
             fn=update_mode_visibility,
             inputs=[start_mode],
-            outputs={"line": start_line, "range_end": start_range_end, "count": start_count},
+            outputs=[start_line, start_range_end, start_count],
         )
 
         # Middle segment mode handler
         middle_mode.change(
             fn=update_mode_visibility,
             inputs=[middle_mode],
-            outputs={"line": middle_line, "range_end": middle_range_end, "count": middle_count},
+            outputs=[middle_line, middle_range_end, middle_count],
         )
 
         # End segment mode handler
         end_mode.change(
             fn=update_mode_visibility,
             inputs=[end_mode],
-            outputs={"line": end_line, "range_end": end_range_end, "count": end_count},
+            outputs=[end_line, end_range_end, end_count],
         )
 
         # Build prompt button handler
