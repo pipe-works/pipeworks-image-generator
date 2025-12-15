@@ -248,12 +248,37 @@ def generate_image(
     runs: int,
     seed: int,
     use_random_seed: bool,
+    # Segment parameters for dynamic prompts
+    start_text: str,
+    start_folder: str,
+    start_file: str,
+    start_mode: str,
+    start_line: int,
+    start_range_end: int,
+    start_count: int,
+    start_dynamic: bool,
+    middle_text: str,
+    middle_folder: str,
+    middle_file: str,
+    middle_mode: str,
+    middle_line: int,
+    middle_range_end: int,
+    middle_count: int,
+    middle_dynamic: bool,
+    end_text: str,
+    end_folder: str,
+    end_file: str,
+    end_mode: str,
+    end_line: int,
+    end_range_end: int,
+    end_count: int,
+    end_dynamic: bool,
 ) -> tuple[List[str], str, str]:
     """
     Generate image(s) from the UI inputs.
 
     Args:
-        prompt: Text prompt
+        prompt: Text prompt (used if no dynamic segments)
         width: Image width
         height: Image height
         num_steps: Number of inference steps
@@ -261,12 +286,16 @@ def generate_image(
         runs: Number of runs to execute
         seed: Random seed
         use_random_seed: Whether to use a random seed
+        start_*, middle_*, end_*: Segment parameters for dynamic prompts
 
     Returns:
         Tuple of (image_paths, info_text, seed_used)
     """
-    if not prompt or prompt.strip() == "":
-        return [], "Error: Please provide a prompt", str(seed)
+    # Check if any segment is dynamic
+    has_dynamic = start_dynamic or middle_dynamic or end_dynamic
+
+    if not has_dynamic and (not prompt or prompt.strip() == ""):
+        return [], "Error: Please provide a prompt or enable dynamic segments", str(seed)
 
     try:
         batch_size = max(1, int(batch_size))  # Ensure at least 1
@@ -275,6 +304,7 @@ def generate_image(
 
         generated_paths = []
         seeds_used = []
+        prompts_used = []  # Track prompts if dynamic
         current_seed = seed
 
         # Loop through runs
@@ -283,6 +313,20 @@ def generate_image(
 
             # Generate batch_size images for this run
             for i in range(batch_size):
+                # Build prompt dynamically if any segment is dynamic
+                if has_dynamic:
+                    current_prompt = build_combined_prompt(
+                        start_text, start_folder, start_file, start_mode, start_line, start_range_end, start_count,
+                        middle_text, middle_folder, middle_file, middle_mode, middle_line, middle_range_end, middle_count,
+                        end_text, end_folder, end_file, end_mode, end_line, end_range_end, end_count,
+                    )
+                    if current_prompt:
+                        prompts_used.append(current_prompt)
+                    else:
+                        current_prompt = prompt  # Fall back to static prompt
+                else:
+                    current_prompt = prompt
+
                 # Generate random seed if requested, or use sequential seed
                 if use_random_seed:
                     actual_seed = random.randint(0, 2**32 - 1)
@@ -292,7 +336,7 @@ def generate_image(
 
                 # Generate and save image (plugins are called automatically by the pipeline)
                 image, save_path = generator.generate_and_save(
-                    prompt=prompt,
+                    prompt=current_prompt,
                     width=width,
                     height=height,
                     num_inference_steps=num_steps,
@@ -317,15 +361,26 @@ def generate_image(
             seeds_display = f"{seeds_used[0]} - {seeds_used[-1]}"
             paths_display = f"{len(generated_paths)} images saved to output folder"
 
+        # Dynamic prompts info
+        dynamic_info = ""
+        if has_dynamic:
+            dynamic_info = "\n**Dynamic Prompts:** Enabled (prompts rebuilt for each image)"
+            if len(prompts_used) <= 3:
+                # Show all prompts if 3 or fewer
+                dynamic_info += f"\n**Sample Prompts:** {', '.join(prompts_used[:3])}"
+            else:
+                # Show first 2 prompts as samples
+                dynamic_info += f"\n**Sample Prompts:** {prompts_used[0]}, {prompts_used[1]}, ..."
+
         info = f"""
 **Generation Complete!**
 
-**Prompt:** {prompt}
+**Prompt:** {prompt if not has_dynamic else "(Dynamic)"}
 **Dimensions:** {width}x{height}
 **Steps:** {num_steps}
 **Batch Size:** {batch_size} × **Runs:** {runs} = **Total:** {total_images} images
 **Seeds:** {seeds_display}
-**Saved to:** {paths_display}{plugins_info}
+**Saved to:** {paths_display}{dynamic_info}{plugins_info}
         """
 
         # Return all generated images for display in gallery
@@ -396,6 +451,11 @@ def create_ui() -> tuple[gr.Blocks, str]:
                                 choices=["Random Line", "Specific Line", "Line Range", "All Lines", "Random Multiple"],
                                 value="Random Line"
                             )
+                            start_dynamic = gr.Checkbox(
+                                label="Dynamic",
+                                value=False,
+                                info="Rebuild this segment for each image"
+                            )
                         with gr.Row():
                             start_line = gr.Number(label="Line #", value=1, minimum=1, precision=0, visible=False)
                             start_range_end = gr.Number(label="End Line #", value=1, minimum=1, precision=0, visible=False)
@@ -414,6 +474,11 @@ def create_ui() -> tuple[gr.Blocks, str]:
                                 choices=["Random Line", "Specific Line", "Line Range", "All Lines", "Random Multiple"],
                                 value="Random Line"
                             )
+                            middle_dynamic = gr.Checkbox(
+                                label="Dynamic",
+                                value=False,
+                                info="Rebuild this segment for each image"
+                            )
                         with gr.Row():
                             middle_line = gr.Number(label="Line #", value=1, minimum=1, precision=0, visible=False)
                             middle_range_end = gr.Number(label="End Line #", value=1, minimum=1, precision=0, visible=False)
@@ -431,6 +496,11 @@ def create_ui() -> tuple[gr.Blocks, str]:
                                 label="Mode",
                                 choices=["Random Line", "Specific Line", "Line Range", "All Lines", "Random Multiple"],
                                 value="Random Line"
+                            )
+                            end_dynamic = gr.Checkbox(
+                                label="Dynamic",
+                                value=False,
+                                info="Rebuild this segment for each image"
                             )
                         with gr.Row():
                             end_line = gr.Number(label="Line #", value=1, minimum=1, precision=0, visible=False)
@@ -704,6 +774,10 @@ def create_ui() -> tuple[gr.Blocks, str]:
                 runs_input,
                 seed_input,
                 random_seed_checkbox,
+                # Segment parameters for dynamic prompts
+                start_text, start_folder, start_file, start_mode, start_line, start_range_end, start_count, start_dynamic,
+                middle_text, middle_folder, middle_file, middle_mode, middle_line, middle_range_end, middle_count, middle_dynamic,
+                end_text, end_folder, end_file, end_mode, end_line, end_range_end, end_count, end_dynamic,
             ],
             outputs=[image_output, info_output, seed_used],
         )
