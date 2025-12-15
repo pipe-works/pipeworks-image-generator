@@ -600,9 +600,21 @@ def create_ui() -> tuple[gr.Blocks, str]:
                     with gr.Group():
                         start_segment_title = gr.Markdown("**Start Segment**")
                         start_text = gr.Textbox(label="Start Text", placeholder="Optional text...", lines=1)
+
+                        # Initialize file browser choices
+                        initial_choices = ["(None)"]
+                        try:
+                            temp_pb = PromptBuilder(config.inputs_dir)
+                            folders, files = temp_pb.get_items_in_path("")
+                            for folder in folders:
+                                initial_choices.append(f"📁 {folder}")
+                            initial_choices.extend(files)
+                        except Exception as e:
+                            logger.error(f"Error initializing file browser: {e}")
+
                         with gr.Row():
                             start_path_display = gr.Textbox(label="Current Path", value="/inputs", interactive=False, scale=1)
-                            start_file = gr.Dropdown(label="File/Folder Browser", choices=["(None)"], value="(None)", scale=2)
+                            start_file = gr.Dropdown(label="File/Folder Browser", choices=initial_choices, value="(None)", scale=2)
                         start_path_state = gr.State(value="")  # Hidden state to track current path
                         with gr.Row():
                             start_mode = gr.Dropdown(
@@ -626,7 +638,7 @@ def create_ui() -> tuple[gr.Blocks, str]:
                         middle_text = gr.Textbox(label="Middle Text", placeholder="Optional text...", lines=1)
                         with gr.Row():
                             middle_path_display = gr.Textbox(label="Current Path", value="/inputs", interactive=False, scale=1)
-                            middle_file = gr.Dropdown(label="File/Folder Browser", choices=["(None)"], value="(None)", scale=2)
+                            middle_file = gr.Dropdown(label="File/Folder Browser", choices=initial_choices, value="(None)", scale=2)
                         middle_path_state = gr.State(value="")  # Hidden state to track current path
                         with gr.Row():
                             middle_mode = gr.Dropdown(
@@ -650,7 +662,7 @@ def create_ui() -> tuple[gr.Blocks, str]:
                         end_text = gr.Textbox(label="End Text", placeholder="Optional text...", lines=1)
                         with gr.Row():
                             end_path_display = gr.Textbox(label="Current Path", value="/inputs", interactive=False, scale=1)
-                            end_file = gr.Dropdown(label="File/Folder Browser", choices=["(None)"], value="(None)", scale=2)
+                            end_file = gr.Dropdown(label="File/Folder Browser", choices=initial_choices, value="(None)", scale=2)
                         end_path_state = gr.State(value="")  # Hidden state to track current path
                         with gr.Row():
                             end_mode = gr.Dropdown(
@@ -843,24 +855,6 @@ def create_ui() -> tuple[gr.Blocks, str]:
         )
 
         # Event handlers
-        # Initialize file browsers with root directory contents
-        def init_file_browser():
-            dropdown, display = get_items_in_path("")
-            return dropdown, display
-
-        app.load(
-            fn=init_file_browser,
-            outputs=[start_file, start_path_display],
-        )
-        app.load(
-            fn=init_file_browser,
-            outputs=[middle_file, middle_path_display],
-        )
-        app.load(
-            fn=init_file_browser,
-            outputs=[end_file, end_path_display],
-        )
-
         # Hierarchical navigation handlers for file selection
         start_file.change(
             fn=navigate_file_selection,
