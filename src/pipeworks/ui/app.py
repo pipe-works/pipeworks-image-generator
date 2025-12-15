@@ -612,9 +612,8 @@ def create_ui() -> tuple[gr.Blocks, str]:
                         except Exception as e:
                             logger.error(f"Error initializing file browser: {e}")
 
-                        with gr.Row():
-                            start_path_display = gr.Textbox(label="Current Path", value="/inputs", interactive=False, scale=1)
-                            start_file = gr.Dropdown(label="File/Folder Browser", choices=initial_choices, value="(None)", scale=2)
+                        start_path_display = gr.Textbox(label="Current Path", value="/inputs", interactive=False)
+                        start_file = gr.Dropdown(label="File/Folder Browser", choices=initial_choices, value="(None)")
                         start_path_state = gr.State(value="")  # Hidden state to track current path
                         with gr.Row():
                             start_mode = gr.Dropdown(
@@ -636,9 +635,8 @@ def create_ui() -> tuple[gr.Blocks, str]:
                     with gr.Group():
                         middle_segment_title = gr.Markdown("**Middle Segment**")
                         middle_text = gr.Textbox(label="Middle Text", placeholder="Optional text...", lines=1)
-                        with gr.Row():
-                            middle_path_display = gr.Textbox(label="Current Path", value="/inputs", interactive=False, scale=1)
-                            middle_file = gr.Dropdown(label="File/Folder Browser", choices=initial_choices, value="(None)", scale=2)
+                        middle_path_display = gr.Textbox(label="Current Path", value="/inputs", interactive=False)
+                        middle_file = gr.Dropdown(label="File/Folder Browser", choices=initial_choices, value="(None)")
                         middle_path_state = gr.State(value="")  # Hidden state to track current path
                         with gr.Row():
                             middle_mode = gr.Dropdown(
@@ -660,9 +658,8 @@ def create_ui() -> tuple[gr.Blocks, str]:
                     with gr.Group():
                         end_segment_title = gr.Markdown("**End Segment**")
                         end_text = gr.Textbox(label="End Text", placeholder="Optional text...", lines=1)
-                        with gr.Row():
-                            end_path_display = gr.Textbox(label="Current Path", value="/inputs", interactive=False, scale=1)
-                            end_file = gr.Dropdown(label="File/Folder Browser", choices=initial_choices, value="(None)", scale=2)
+                        end_path_display = gr.Textbox(label="Current Path", value="/inputs", interactive=False)
+                        end_file = gr.Dropdown(label="File/Folder Browser", choices=initial_choices, value="(None)")
                         end_path_state = gr.State(value="")  # Hidden state to track current path
                         with gr.Row():
                             end_mode = gr.Dropdown(
