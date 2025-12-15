@@ -9,6 +9,7 @@ import gradio as gr
 from pipeworks.core.config import config
 from pipeworks.core.pipeline import ImageGenerator
 from pipeworks.core.tokenizer import TokenizerAnalyzer
+from pipeworks.core.prompt_builder import PromptBuilder
 from pipeworks.plugins.base import PluginBase, plugin_registry
 # Import all plugins to ensure they're registered
 from pipeworks.plugins import SaveMetadataPlugin
@@ -24,6 +25,7 @@ logger = logging.getLogger(__name__)
 active_plugins: Dict[str, PluginBase] = {}
 generator: ImageGenerator = None  # Will be initialized with plugins
 tokenizer_analyzer: TokenizerAnalyzer = None  # Will be initialized on startup
+prompt_builder: PromptBuilder = None  # Will be initialized on startup
 
 
 def update_generator_plugins():
@@ -136,6 +138,86 @@ def analyze_prompt(prompt: str) -> str:
     except Exception as e:
         logger.error(f"Error analyzing prompt: {e}", exc_info=True)
         return f"*Error analyzing prompt: {str(e)}*"
+
+
+def get_available_files() -> List[str]:
+    """Get list of available text files from inputs directory."""
+    global prompt_builder
+    if prompt_builder is None:
+        prompt_builder = PromptBuilder(config.inputs_dir)
+
+    files = prompt_builder.scan_text_files()
+    return ["(None)"] + files
+
+
+def build_combined_prompt(
+    start_text: str,
+    start_file: str,
+    start_mode: str,
+    start_line: int,
+    start_range_end: int,
+    start_count: int,
+    middle_text: str,
+    middle_file: str,
+    middle_mode: str,
+    middle_line: int,
+    middle_range_end: int,
+    middle_count: int,
+    end_text: str,
+    end_file: str,
+    end_mode: str,
+    end_line: int,
+    end_range_end: int,
+    end_count: int,
+) -> str:
+    """
+    Build a combined prompt from multiple segments.
+
+    Args:
+        start_*: Start segment parameters
+        middle_*: Middle segment parameters
+        end_*: End segment parameters
+
+    Returns:
+        Combined prompt string
+    """
+    global prompt_builder
+    if prompt_builder is None:
+        prompt_builder = PromptBuilder(config.inputs_dir)
+
+    segments = []
+
+    # Helper to add segment
+    def add_segment(text, file, mode, line, range_end, count):
+        # Add user text if provided
+        if text and text.strip():
+            segments.append(("text", text.strip()))
+
+        # Add file selection if file is chosen
+        if file and file != "(None)":
+            if mode == "Random Line":
+                segments.append(("file_random", file))
+            elif mode == "Specific Line":
+                segments.append(("file_specific", f"{file}|{line}"))
+            elif mode == "Line Range":
+                segments.append(("file_range", f"{file}|{line}|{range_end}"))
+            elif mode == "All Lines":
+                segments.append(("file_all", file))
+            elif mode == "Random Multiple":
+                segments.append(("file_random_multi", f"{file}|{count}"))
+
+    # Add segments in order
+    add_segment(start_text, start_file, start_mode, start_line, start_range_end, start_count)
+    add_segment(middle_text, middle_file, middle_mode, middle_line, middle_range_end, middle_count)
+    add_segment(end_text, end_file, end_mode, end_line, end_range_end, end_count)
+
+    # Build the final prompt
+    try:
+        result = prompt_builder.build_prompt(segments)
+        return result if result else ""
+    except Exception as e:
+        logger.error(f"Error building prompt: {e}", exc_info=True)
+        return f"Error: {str(e)}"
 
 
 def generate_image(
@@ -260,6 +342,64 @@ def create_ui() -> tuple[gr.Blocks, str]:
                     lines=3,
                     value="A serene mountain landscape at sunset with vibrant colors",
                 )
+
+                # Prompt Builder
+                with gr.Accordion("Prompt Builder", open=False):
+                    gr.Markdown("*Build prompts by combining text and random lines from files in the `inputs/` directory*")
+
+                    # Get available files
+                    available_files = get_available_files()
+
+                    # Start Segment
+                    with gr.Group():
+                        gr.Markdown("**Start Segment**")
+                        start_text = gr.Textbox(label="Start Text", placeholder="Optional text...", lines=1)
+                        with gr.Row():
+                            start_file = gr.Dropdown(label="File", choices=available_files, value="(None)")
+                            start_mode = gr.Dropdown(
+                                label="Mode",
+                                choices=["Random Line", "Specific Line", "Line Range", "All Lines", "Random Multiple"],
+                                value="Random Line"
+                            )
+                        with gr.Row():
+                            start_line = gr.Number(label="Line #", value=1, minimum=1, precision=0, visible=False)
+                            start_range_end = gr.Number(label="End Line #", value=1, minimum=1, precision=0, visible=False)
+                            start_count = gr.Number(label="Count", value=1, minimum=1, maximum=10, precision=0, visible=False)
+
+                    # Middle Segment
+                    with gr.Group():
+                        gr.Markdown("**Middle Segment**")
+                        middle_text = gr.Textbox(label="Middle Text", placeholder="Optional text...", lines=1)
+                        with gr.Row():
+                            middle_file = gr.Dropdown(label="File", choices=available_files, value="(None)")
+                            middle_mode = gr.Dropdown(
+                                label="Mode",
+                                choices=["Random Line", "Specific Line", "Line Range", "All Lines", "Random Multiple"],
+                                value="Random Line"
+                            )
+                        with gr.Row():
+                            middle_line = gr.Number(label="Line #", value=1, minimum=1, precision=0, visible=False)
+                            middle_range_end = gr.Number(label="End Line #", value=1, minimum=1, precision=0, visible=False)
+                            middle_count = gr.Number(label="Count", value=1, minimum=1, maximum=10, precision=0, visible=False)
+
+                    # End Segment
+                    with gr.Group():
+                        gr.Markdown("**End Segment**")
+                        end_text = gr.Textbox(label="End Text", placeholder="Optional text...", lines=1)
+                        with gr.Row():
+                            end_file = gr.Dropdown(label="File", choices=available_files, value="(None)")
+                            end_mode = gr.Dropdown(
+                                label="Mode",
+                                choices=["Random Line", "Specific Line", "Line Range", "All Lines", "Random Multiple"],
+                                value="Random Line"
+                            )
+                        with gr.Row():
+                            end_line = gr.Number(label="Line #", value=1, minimum=1, precision=0, visible=False)
+                            end_range_end = gr.Number(label="End Line #", value=1, minimum=1, precision=0, visible=False)
+                            end_count = gr.Number(label="Count", value=1, minimum=1, maximum=10, precision=0, visible=False)
+
+                    # Build Button
+                    build_prompt_btn = gr.Button("Build Prompt", variant="secondary")
 
                 # Tokenizer Analyzer
                 with gr.Accordion("Tokenizer Analyzer", open=False):
@@ -425,6 +565,47 @@ def create_ui() -> tuple[gr.Blocks, str]:
         )
 
         # Event handlers
+        # Prompt Builder mode change handlers
+        def update_mode_visibility(mode):
+            """Update visibility of line number inputs based on mode."""
+            return {
+                "line": gr.update(visible=mode in ["Specific Line", "Line Range"]),
+                "range_end": gr.update(visible=mode == "Line Range"),
+                "count": gr.update(visible=mode == "Random Multiple"),
+            }
+
+        # Start segment mode handler
+        start_mode.change(
+            fn=update_mode_visibility,
+            inputs=[start_mode],
+            outputs={"line": start_line, "range_end": start_range_end, "count": start_count},
+        )
+
+        # Middle segment mode handler
+        middle_mode.change(
+            fn=update_mode_visibility,
+            inputs=[middle_mode],
+            outputs={"line": middle_line, "range_end": middle_range_end, "count": middle_count},
+        )
+
+        # End segment mode handler
+        end_mode.change(
+            fn=update_mode_visibility,
+            inputs=[end_mode],
+            outputs={"line": end_line, "range_end": end_range_end, "count": end_count},
+        )
+
+        # Build prompt button handler
+        build_prompt_btn.click(
+            fn=build_combined_prompt,
+            inputs=[
+                start_text, start_file, start_mode, start_line, start_range_end, start_count,
+                middle_text, middle_file, middle_mode, middle_line, middle_range_end, middle_count,
+                end_text, end_file, end_mode, end_line, end_range_end, end_count,
+            ],
+            outputs=[prompt_input],
+        )
+
         # Aspect ratio preset handler
         aspect_ratio_dropdown.change(
             fn=set_aspect_ratio,
