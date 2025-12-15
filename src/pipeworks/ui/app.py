@@ -868,12 +868,6 @@ def create_ui() -> tuple[gr.Blocks, str]:
             outputs=[image_output, info_output, seed_used],
         )
 
-        # Gallery select handler - show prompt when image is clicked
-        image_output.select(
-            fn=show_selected_image_info,
-            outputs=[selected_image_info],
-        )
-
     return app, custom_css
 
 
