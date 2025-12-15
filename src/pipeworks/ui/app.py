@@ -91,7 +91,7 @@ def generate_image(
     batch_size: int,
     seed: int,
     use_random_seed: bool,
-) -> tuple[str, str, str]:
+) -> tuple[List[str], str, str]:
     """
     Generate image(s) from the UI inputs.
 
@@ -105,10 +105,10 @@ def generate_image(
         use_random_seed: Whether to use a random seed
 
     Returns:
-        Tuple of (image_path, info_text, seed_used)
+        Tuple of (image_paths, info_text, seed_used)
     """
     if not prompt or prompt.strip() == "":
-        return None, "Error: Please provide a prompt", str(seed)
+        return [], "Error: Please provide a prompt", str(seed)
 
     try:
         batch_size = max(1, int(batch_size))  # Ensure at least 1
@@ -158,12 +158,12 @@ def generate_image(
 **Saved to:** {paths_display}{plugins_info}
         """
 
-        # Return the last generated image for display
-        return generated_paths[-1], info.strip(), str(seeds_used[-1])
+        # Return all generated images for display in gallery
+        return generated_paths, info.strip(), str(seeds_used[-1])
 
     except Exception as e:
         logger.error(f"Error generating image: {e}", exc_info=True)
-        return None, f"Error: {str(e)}", str(seed)
+        return [], f"Error: {str(e)}", str(seed)
 
 
 def create_ui() -> tuple[gr.Blocks, str]:
@@ -351,12 +351,15 @@ def create_ui() -> tuple[gr.Blocks, str]:
 
             with gr.Column(scale=1):
                 # Output display
-                gr.Markdown("### Generated Image")
+                gr.Markdown("### Generated Images")
 
-                image_output = gr.Image(
+                image_output = gr.Gallery(
                     label="Output",
                     type="filepath",
                     height=600,
+                    columns=2,
+                    rows=2,
+                    object_fit="contain",
                 )
 
                 # Show the seed that was actually used
