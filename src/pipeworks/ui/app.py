@@ -140,30 +140,46 @@ def analyze_prompt(prompt: str) -> str:
         return f"*Error analyzing prompt: {str(e)}*"
 
 
-def get_available_files() -> List[str]:
-    """Get list of available text files from inputs directory."""
+def get_available_folders() -> List[str]:
+    """Get list of available folders from inputs directory."""
     global prompt_builder
     if prompt_builder is None:
         prompt_builder = PromptBuilder(config.inputs_dir)
 
-    files = prompt_builder.scan_text_files()
-    return ["(None)"] + files
+    folders = prompt_builder.scan_folders()
+    return ["(None)"] + folders
+
+
+def get_files_in_folder(folder: str) -> gr.Dropdown:
+    """Get list of files in a specific folder."""
+    global prompt_builder
+    if prompt_builder is None:
+        prompt_builder = PromptBuilder(config.inputs_dir)
+
+    if folder == "(None)":
+        return gr.update(choices=["(None)"], value="(None)")
+
+    files = prompt_builder.get_files_in_folder(folder)
+    return gr.update(choices=["(None)"] + files, value="(None)" if not files else files[0])
 
 
 def build_combined_prompt(
     start_text: str,
+    start_folder: str,
     start_file: str,
     start_mode: str,
     start_line: int,
     start_range_end: int,
     start_count: int,
     middle_text: str,
+    middle_folder: str,
     middle_file: str,
     middle_mode: str,
     middle_line: int,
     middle_range_end: int,
     middle_count: int,
     end_text: str,
+    end_folder: str,
     end_file: str,
     end_mode: str,
     end_line: int,
@@ -188,28 +204,31 @@ def build_combined_prompt(
     segments = []
 
     # Helper to add segment
-    def add_segment(text, file, mode, line, range_end, count):
+    def add_segment(text, folder, file, mode, line, range_end, count):
         # Add user text if provided
         if text and text.strip():
             segments.append(("text", text.strip()))
 
         # Add file selection if file is chosen
-        if file and file != "(None)":
+        if folder and folder != "(None)" and file and file != "(None)":
+            # Get full file path
+            full_path = prompt_builder.get_full_path(folder, file)
+
             if mode == "Random Line":
-                segments.append(("file_random", file))
+                segments.append(("file_random", full_path))
             elif mode == "Specific Line":
-                segments.append(("file_specific", f"{file}|{line}"))
+                segments.append(("file_specific", f"{full_path}|{line}"))
             elif mode == "Line Range":
-                segments.append(("file_range", f"{file}|{line}|{range_end}"))
+                segments.append(("file_range", f"{full_path}|{line}|{range_end}"))
             elif mode == "All Lines":
-                segments.append(("file_all", file))
+                segments.append(("file_all", full_path))
             elif mode == "Random Multiple":
-                segments.append(("file_random_multi", f"{file}|{count}"))
+                segments.append(("file_random_multi", f"{full_path}|{count}"))
 
     # Add segments in order
-    add_segment(start_text, start_file, start_mode, start_line, start_range_end, start_count)
-    add_segment(middle_text, middle_file, middle_mode, middle_line, middle_range_end, middle_count)
-    add_segment(end_text, end_file, end_mode, end_line, end_range_end, end_count)
+    add_segment(start_text, start_folder, start_file, start_mode, start_line, start_range_end, start_count)
+    add_segment(middle_text, middle_folder, middle_file, middle_mode, middle_line, middle_range_end, middle_count)
+    add_segment(end_text, end_folder, end_file, end_mode, end_line, end_range_end, end_count)
 
     # Build the final prompt
     try:
@@ -347,15 +366,17 @@ def create_ui() -> tuple[gr.Blocks, str]:
                 with gr.Accordion("Prompt Builder", open=False):
                     gr.Markdown("*Build prompts by combining text and random lines from files in the `inputs/` directory*")
 
-                    # Get available files
-                    available_files = get_available_files()
+                    # Get available folders
+                    available_folders = get_available_folders()
 
                     # Start Segment
                     with gr.Group():
                         gr.Markdown("**Start Segment**")
                         start_text = gr.Textbox(label="Start Text", placeholder="Optional text...", lines=1)
                         with gr.Row():
-                            start_file = gr.Dropdown(label="File", choices=available_files, value="(None)")
+                            start_folder = gr.Dropdown(label="Folder", choices=available_folders, value="(None)")
+                            start_file = gr.Dropdown(label="File", choices=["(None)"], value="(None)")
+                        with gr.Row():
                             start_mode = gr.Dropdown(
                                 label="Mode",
                                 choices=["Random Line", "Specific Line", "Line Range", "All Lines", "Random Multiple"],
@@ -371,7 +392,9 @@ def create_ui() -> tuple[gr.Blocks, str]:
                         gr.Markdown("**Middle Segment**")
                         middle_text = gr.Textbox(label="Middle Text", placeholder="Optional text...", lines=1)
                         with gr.Row():
-                            middle_file = gr.Dropdown(label="File", choices=available_files, value="(None)")
+                            middle_folder = gr.Dropdown(label="Folder", choices=available_folders, value="(None)")
+                            middle_file = gr.Dropdown(label="File", choices=["(None)"], value="(None)")
+                        with gr.Row():
                             middle_mode = gr.Dropdown(
                                 label="Mode",
                                 choices=["Random Line", "Specific Line", "Line Range", "All Lines", "Random Multiple"],
@@ -387,7 +410,9 @@ def create_ui() -> tuple[gr.Blocks, str]:
                         gr.Markdown("**End Segment**")
                         end_text = gr.Textbox(label="End Text", placeholder="Optional text...", lines=1)
                         with gr.Row():
-                            end_file = gr.Dropdown(label="File", choices=available_files, value="(None)")
+                            end_folder = gr.Dropdown(label="Folder", choices=available_folders, value="(None)")
+                            end_file = gr.Dropdown(label="File", choices=["(None)"], value="(None)")
+                        with gr.Row():
                             end_mode = gr.Dropdown(
                                 label="Mode",
                                 choices=["Random Line", "Specific Line", "Line Range", "All Lines", "Random Multiple"],
@@ -565,6 +590,25 @@ def create_ui() -> tuple[gr.Blocks, str]:
         )
 
         # Event handlers
+        # Prompt Builder folder change handlers
+        start_folder.change(
+            fn=get_files_in_folder,
+            inputs=[start_folder],
+            outputs=[start_file],
+        )
+
+        middle_folder.change(
+            fn=get_files_in_folder,
+            inputs=[middle_folder],
+            outputs=[middle_file],
+        )
+
+        end_folder.change(
+            fn=get_files_in_folder,
+            inputs=[end_folder],
+            outputs=[end_file],
+        )
+
         # Prompt Builder mode change handlers
         def update_mode_visibility(mode):
             """Update visibility of line number inputs based on mode."""
@@ -599,9 +643,9 @@ def create_ui() -> tuple[gr.Blocks, str]:
         build_prompt_btn.click(
             fn=build_combined_prompt,
             inputs=[
-                start_text, start_file, start_mode, start_line, start_range_end, start_count,
-                middle_text, middle_file, middle_mode, middle_line, middle_range_end, middle_count,
-                end_text, end_file, end_mode, end_line, end_range_end, end_count,
+                start_text, start_folder, start_file, start_mode, start_line, start_range_end, start_count,
+                middle_text, middle_folder, middle_file, middle_mode, middle_line, middle_range_end, middle_count,
+                end_text, end_folder, end_file, end_mode, end_line, end_range_end, end_count,
             ],
             outputs=[prompt_input],
         )

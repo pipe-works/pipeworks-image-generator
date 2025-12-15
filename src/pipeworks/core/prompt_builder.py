@@ -40,6 +40,80 @@ class PromptBuilder:
 
         return sorted(txt_files)
 
+    def scan_folders(self) -> List[str]:
+        """
+        Scan inputs directory for folders containing .txt files.
+
+        Returns:
+            List of folder names (including "(Root)" for files in inputs/)
+        """
+        if not self.inputs_dir.exists():
+            logger.warning(f"Inputs directory does not exist: {self.inputs_dir}")
+            return ["(Root)"]
+
+        folders = set()
+
+        # Check for files directly in inputs/ directory
+        has_root_files = any(self.inputs_dir.glob("*.txt"))
+        if has_root_files:
+            folders.add("(Root)")
+
+        # Find all folders containing .txt files
+        for txt_file in self.inputs_dir.rglob("*.txt"):
+            relative_path = txt_file.relative_to(self.inputs_dir)
+            if relative_path.parent != Path("."):
+                # Get the top-level folder
+                top_folder = str(relative_path.parts[0])
+                folders.add(top_folder)
+
+        return sorted(list(folders))
+
+    def get_files_in_folder(self, folder: str) -> List[str]:
+        """
+        Get all .txt files in a specific folder.
+
+        Args:
+            folder: Folder name, or "(Root)" for files in inputs/ root
+
+        Returns:
+            List of filenames (not full paths)
+        """
+        if not self.inputs_dir.exists():
+            return []
+
+        files = []
+
+        if folder == "(Root)":
+            # Get files directly in inputs/ directory
+            for txt_file in self.inputs_dir.glob("*.txt"):
+                files.append(txt_file.name)
+        else:
+            # Get files in the specified folder (and subfolders)
+            folder_path = self.inputs_dir / folder
+            if folder_path.exists():
+                for txt_file in folder_path.rglob("*.txt"):
+                    # Get relative path from the folder
+                    relative_path = txt_file.relative_to(folder_path)
+                    files.append(str(relative_path))
+
+        return sorted(files)
+
+    def get_full_path(self, folder: str, filename: str) -> str:
+        """
+        Get the full relative path for a file given folder and filename.
+
+        Args:
+            folder: Folder name or "(Root)"
+            filename: Filename
+
+        Returns:
+            Full relative path from inputs_dir
+        """
+        if folder == "(Root)":
+            return filename
+        else:
+            return f"{folder}/{filename}"
+
     def read_file_lines(self, file_path: str) -> List[str]:
         """
         Read lines from a text file.
