@@ -466,8 +466,12 @@ def load_gallery_folder(
         state = initialize_ui_state(state)
 
         # Handle folder navigation
-        if selected_item.startswith("📁"):
+        if selected_item and selected_item.startswith("📁"):
             folder_name = selected_item[2:].strip()  # Remove emoji prefix
+
+            # Skip if it's just a placeholder
+            if not folder_name or folder_name in ["(No folders)", "(Error)", "- Select folder --"]:
+                return gr.update(), current_path, state.gallery_images, state
 
             if folder_name == "..":
                 # Go up one level
@@ -485,10 +489,10 @@ def load_gallery_folder(
             state.gallery_current_path = new_path
 
             # Get items in new path
-            folders, files = state.gallery_browser.get_items_in_path(new_path)
+            folders, _ = state.gallery_browser.get_items_in_path(new_path)
 
             # Build dropdown choices
-            choices = []
+            choices = ["-- Select folder --"]  # Neutral first choice
             if new_path:  # Add parent navigation if not at root
                 choices.append("📁 ..")
 
@@ -496,36 +500,21 @@ def load_gallery_folder(
             for folder in folders:
                 choices.append(f"📁 {folder}")
 
-            # Don't add files to dropdown - they're shown in gallery
-            if not choices:
-                choices = ["(No folders)"]
-
             # Scan for images in new path
             images = state.gallery_browser.scan_images(new_path)
             state.gallery_images = images
 
-            return gr.update(choices=choices, value=choices[0]), new_path, images, state
+            # Update dropdown with new choices and set to neutral selection
+            logger.info(f"Navigated to: {new_path}, {len(images)} images, {len(folders)} folders")
+            return gr.update(choices=choices, value="-- Select folder --"), new_path, images, state
 
         else:
-            # Not a folder selection, just load images from current path
-            images = state.gallery_browser.scan_images(current_path)
-            state.gallery_images = images
-
-            # Get current dropdown choices
-            folders, _ = state.gallery_browser.get_items_in_path(current_path)
-            choices = []
-            if current_path:
-                choices.append("📁 ..")
-            for folder in folders:
-                choices.append(f"📁 {folder}")
-            if not choices:
-                choices = ["(No folders)"]
-
-            return gr.update(choices=choices), current_path, images, state
+            # Not a folder selection, just return current state
+            return gr.update(), current_path, state.gallery_images, state
 
     except Exception as e:
         logger.error(f"Error loading gallery folder: {e}", exc_info=True)
-        return gr.update(), current_path, [], state
+        return gr.update(), current_path, state.gallery_images, state
 
 
 def select_gallery_image(
@@ -672,17 +661,16 @@ def initialize_gallery_browser(state: UIState) -> tuple[gr.Dropdown, str, list[s
         folders, _ = state.gallery_browser.get_items_in_path(current_path)
 
         # Build dropdown choices
-        choices = []
+        choices = ["-- Select folder --"]  # Neutral first choice
         for folder in folders:
             choices.append(f"📁 {folder}")
-        if not choices:
-            choices = ["(No folders)"]
 
         # Scan for images at root
         images = state.gallery_browser.scan_images(current_path)
         state.gallery_images = images
 
-        return gr.update(choices=choices, value=choices[0]), current_path, images, state
+        logger.info(f"Initialized gallery: {len(images)} images, {len(folders)} folders at root")
+        return gr.update(choices=choices, value="-- Select folder --"), current_path, images, state
 
     except Exception as e:
         logger.error(f"Error initializing gallery browser: {e}", exc_info=True)
