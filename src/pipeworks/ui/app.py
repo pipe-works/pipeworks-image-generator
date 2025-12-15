@@ -154,13 +154,20 @@ def show_selected_image_info(evt: gr.SelectData) -> str:
     """
     global image_prompt_map
 
-    # evt.index is the index of the selected image in the gallery
-    # evt.value is the image data (path when type="filepath")
-    if evt.value and evt.value in image_prompt_map:
-        prompt = image_prompt_map[evt.value]
-        filename = Path(evt.value).name
+    # evt.value is a dict with image data when type="filepath"
+    # Extract the path from the dict
+    if evt.value:
+        # evt.value can be a dict like {"name": "path/to/file.png"} or just the path
+        if isinstance(evt.value, dict):
+            image_path = evt.value.get("name") or evt.value.get("path")
+        else:
+            image_path = evt.value
 
-        return f"""
+        if image_path and image_path in image_prompt_map:
+            prompt = image_prompt_map[image_path]
+            filename = Path(image_path).name
+
+            return f"""
 **Selected Image:** {filename}
 
 **Prompt Used:**
@@ -168,8 +175,8 @@ def show_selected_image_info(evt: gr.SelectData) -> str:
 {prompt}
 ```
 """
-    else:
-        return "*No prompt information available for this image*"
+
+    return "*No prompt information available for this image*"
 
 
 def get_available_folders() -> List[str]:
