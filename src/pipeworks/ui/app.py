@@ -167,27 +167,14 @@ def generate_image(
 
 
 def create_ui() -> tuple[gr.Blocks, str]:
-    """Create the Gradio UI with menu and dynamic plugins.
+    """Create the Gradio UI with dynamic plugins.
 
     Returns:
         Tuple of (app, custom_css)
     """
 
-    # Use custom CSS for menu-like appearance
+    # Custom CSS for plugin section
     custom_css = """
-    .menu-bar {
-        background-color: #1f2937;
-        padding: 8px 16px;
-        border-radius: 6px;
-        margin-bottom: 16px;
-    }
-    .menu-item {
-        display: inline-block;
-        color: #e5e7eb;
-        margin-right: 20px;
-        font-weight: 500;
-        cursor: pointer;
-    }
     .plugin-section {
         max-height: 400px;
         overflow-y: auto;
@@ -200,10 +187,6 @@ def create_ui() -> tuple[gr.Blocks, str]:
     app = gr.Blocks(title="Pipeworks Image Generator")
 
     with app:
-        # Menu Bar
-        with gr.Row(elem_classes="menu-bar"):
-            gr.HTML('<div class="menu-item">File</div><div class="menu-item">Edit</div><div class="menu-item">Plugins</div><div class="menu-item">Settings</div>')
-
         gr.Markdown(
             """
             # Pipeworks Image Generator
