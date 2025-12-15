@@ -326,12 +326,6 @@ def create_ui() -> tuple[gr.Blocks, str]:
                     size="lg",
                 )
 
-                # Info display
-                info_output = gr.Markdown(
-                    label="Generation Info",
-                    value="*Ready to generate images*",
-                )
-
             with gr.Column(scale=1):
                 # Output display
                 gr.Markdown("### Generated Images")
@@ -352,20 +346,11 @@ def create_ui() -> tuple[gr.Blocks, str]:
                     value="42",
                 )
 
-        # Example prompts
-        with gr.Accordion("Example Prompts", open=False):
-            gr.Examples(
-                examples=[
-                    ["A serene mountain landscape at sunset with vibrant colors"],
-                    ["Young woman in red traditional dress, photorealistic portrait"],
-                    ["Modern architectural building with glass facade and clean lines"],
-                    ["Cute cat sleeping on a cozy blanket, soft lighting"],
-                    ["Abstract geometric pattern with bold colors and shapes"],
-                    ["Futuristic cityscape at night with neon lights"],
-                ],
-                inputs=prompt_input,
-                label="Click to use example prompts",
-            )
+                # Info display
+                info_output = gr.Markdown(
+                    label="Generation Info",
+                    value="*Ready to generate images*",
+                )
 
         # Model info footer
         gr.Markdown(
