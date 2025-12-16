@@ -364,6 +364,32 @@ class PromptBuilder:
             return ""
         return lines[line_number - 1]
 
+    def get_sequential_line(self, file_path: str, start_line: int, run_index: int) -> str:
+        """
+        Get a sequential line from a text file based on run index.
+
+        This method is designed for batch generation where each run should use
+        the next sequential line from a file. The line number is calculated as:
+        line_number = start_line + run_index
+
+        Args:
+            file_path: Relative path from inputs_dir
+            start_line: Starting line number (1-indexed)
+            run_index: Zero-indexed run number (0, 1, 2, ...)
+
+        Returns:
+            The line at (start_line + run_index), or empty string if out of range
+
+        Examples:
+            >>> # Run 0 uses line 3, Run 1 uses line 4, Run 2 uses line 5
+            >>> builder.get_sequential_line("styles.txt", start_line=3, run_index=0)
+            'photorealistic'
+            >>> builder.get_sequential_line("styles.txt", start_line=3, run_index=1)
+            'hyperrealistic'
+        """
+        line_number = start_line + run_index
+        return self.get_specific_line(file_path, line_number)
+
     def get_line_range(self, file_path: str, start: int, end: int) -> str:
         """
         Get a range of lines from a text file (1-indexed, inclusive).
@@ -516,6 +542,17 @@ class PromptBuilder:
                         parts.append(result)
                 except ValueError:
                     logger.error(f"Invalid file_random_multi format: {content}")
+
+            elif segment_type == "file_sequential":
+                # Sequential line (format: "filepath|start_line|run_index")
+                # Used for batch processing where each run uses next sequential line
+                try:
+                    filepath, start_line, run_index = content.split("|")
+                    result = self.get_sequential_line(filepath, int(start_line), int(run_index))
+                    if result:
+                        parts.append(result)
+                except ValueError:
+                    logger.error(f"Invalid file_sequential format: {content}")
 
         # Join all parts with comma-space separator
         # This creates a natural prompt structure that works well with diffusion models

@@ -66,6 +66,14 @@ class SegmentUI:
                 self.count = gr.Number(
                     label="Count", value=1, minimum=1, maximum=10, precision=0, visible=False
                 )
+                self.sequential_start_line = gr.Number(
+                    label="Start Line #",
+                    value=1,
+                    minimum=1,
+                    precision=0,
+                    visible=False,
+                    info="Starting line for sequential mode",
+                )
 
     def get_all_components(self) -> list[gr.components.Component]:
         """Return all Gradio components in this segment.
@@ -84,6 +92,7 @@ class SegmentUI:
             self.line,
             self.range_end,
             self.count,
+            self.sequential_start_line,
         ]
 
     def get_input_components(self) -> list[gr.components.Component]:
@@ -101,6 +110,7 @@ class SegmentUI:
             self.range_end,
             self.count,
             self.dynamic,
+            self.sequential_start_line,
         ]
 
     def get_output_components(self) -> list[gr.components.Component]:
@@ -119,13 +129,15 @@ class SegmentUI:
         """
         return self.file, self.path_state, self.path_display
 
-    def get_mode_visibility_outputs(self) -> tuple[gr.Number, gr.Number, gr.Number]:
+    def get_mode_visibility_outputs(
+        self,
+    ) -> tuple[gr.Number, gr.Number, gr.Number, gr.Number]:
         """Return components that change visibility based on mode.
 
         Returns:
-            Tuple of (line, range_end, count) number inputs
+            Tuple of (line, range_end, count, sequential_start_line) number inputs
         """
-        return self.line, self.range_end, self.count
+        return self.line, self.range_end, self.count, self.sequential_start_line
 
     @staticmethod
     def values_to_config(
@@ -137,6 +149,7 @@ class SegmentUI:
         range_end: int,
         count: int,
         dynamic: bool,
+        sequential_start_line: int,
     ) -> SegmentConfig:
         """Convert UI component values to SegmentConfig dataclass.
 
@@ -149,6 +162,7 @@ class SegmentUI:
             range_end: Range end input
             count: Count input
             dynamic: Dynamic checkbox state
+            sequential_start_line: Starting line for Sequential mode
 
         Returns:
             SegmentConfig instance with all values
@@ -162,6 +176,7 @@ class SegmentUI:
             range_end=int(range_end) if range_end else 1,
             count=int(count) if count else 1,
             dynamic=dynamic,
+            sequential_start_line=int(sequential_start_line) if sequential_start_line else 1,
         )
 
     @staticmethod
@@ -192,19 +207,20 @@ class SegmentUI:
             return f"**{name}**"
 
 
-def update_mode_visibility(mode: str) -> tuple[gr.Number, gr.Number, gr.Number]:
+def update_mode_visibility(mode: str) -> tuple[gr.Number, gr.Number, gr.Number, gr.Number]:
     """Update visibility of line number inputs based on selected mode.
 
     Args:
-        mode: Selected mode (e.g., "Random Line", "Specific Line")
+        mode: Selected mode (e.g., "Random Line", "Specific Line", "Sequential")
 
     Returns:
-        Tuple of gr.update() calls for (line, range_end, count)
+        Tuple of gr.update() calls for (line, range_end, count, sequential_start_line)
     """
     return (
         gr.update(visible=mode in ["Specific Line", "Line Range"]),
         gr.update(visible=mode == "Line Range"),
         gr.update(visible=mode == "Random Multiple"),
+        gr.update(visible=mode == "Sequential"),
     )
 
 

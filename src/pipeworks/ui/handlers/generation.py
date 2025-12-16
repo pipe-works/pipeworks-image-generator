@@ -115,7 +115,8 @@ def generate_image(
                 # Build prompt dynamically if any segment is dynamic
                 if has_dynamic:
                     try:
-                        current_prompt = build_combined_prompt(start, middle, end, state)
+                        # Pass run index for Sequential mode support
+                        current_prompt = build_combined_prompt(start, middle, end, state, run_index=run)
                         if current_prompt:
                             prompts_used.append(current_prompt)
                         else:

@@ -47,7 +47,7 @@ class TestSegmentUI:
             segment = SegmentUI("Test", ["(None)"])
             inputs = segment.get_input_components()
 
-            assert len(inputs) == 8  # text, path_state, file, mode, line, range_end, count, dynamic
+            assert len(inputs) == 9  # text, path_state, file, mode, line, range_end, count, dynamic, sequential_start_line
 
     def test_get_output_components(self):
         """Test that get_output_components returns correct components."""
@@ -95,11 +95,12 @@ class TestSegmentUI:
              patch('gradio.Row'):
 
             segment = SegmentUI("Test", ["(None)"])
-            line, range_end, count = segment.get_mode_visibility_outputs()
+            line, range_end, count, sequential_start_line = segment.get_mode_visibility_outputs()
 
             assert line is segment.line
             assert range_end is segment.range_end
             assert count is segment.count
+            assert sequential_start_line is segment.sequential_start_line
 
     def test_values_to_config(self):
         """Test that values_to_config creates correct SegmentConfig."""
@@ -111,7 +112,8 @@ class TestSegmentUI:
             5,
             10,
             3,
-            True
+            True,
+            2  # sequential_start_line
         )
 
         assert isinstance(config, SegmentConfig)
@@ -123,6 +125,7 @@ class TestSegmentUI:
         assert config.range_end == 10
         assert config.count == 3
         assert config.dynamic is True
+        assert config.sequential_start_line == 2
 
     def test_values_to_config_handles_none_numbers(self):
         """Test that values_to_config handles None number values."""
@@ -134,12 +137,14 @@ class TestSegmentUI:
             None,  # line
             None,  # range_end
             None,  # count
-            False
+            False,
+            None  # sequential_start_line
         )
 
         assert config.line == 1  # Default
         assert config.range_end == 1  # Default
         assert config.count == 1  # Default
+        assert config.sequential_start_line == 1  # Default
 
     def test_format_title_unconfigured(self):
         """Test format_title for unconfigured segment."""
@@ -178,44 +183,58 @@ class TestUpdateModeVisibility:
 
     def test_random_line_hides_all(self):
         """Test that Random Line mode hides all number inputs."""
-        line, range_end, count = update_mode_visibility("Random Line")
+        line, range_end, count, sequential_start_line = update_mode_visibility("Random Line")
 
         # Should return gr.update() objects
         assert line == gr.update(visible=False)
         assert range_end == gr.update(visible=False)
         assert count == gr.update(visible=False)
+        assert sequential_start_line == gr.update(visible=False)
 
     def test_specific_line_shows_line_only(self):
         """Test that Specific Line mode shows line input only."""
-        line, range_end, count = update_mode_visibility("Specific Line")
+        line, range_end, count, sequential_start_line = update_mode_visibility("Specific Line")
 
         assert line == gr.update(visible=True)
         assert range_end == gr.update(visible=False)
         assert count == gr.update(visible=False)
+        assert sequential_start_line == gr.update(visible=False)
 
     def test_line_range_shows_line_and_range(self):
         """Test that Line Range mode shows line and range_end."""
-        line, range_end, count = update_mode_visibility("Line Range")
+        line, range_end, count, sequential_start_line = update_mode_visibility("Line Range")
 
         assert line == gr.update(visible=True)
         assert range_end == gr.update(visible=True)
         assert count == gr.update(visible=False)
+        assert sequential_start_line == gr.update(visible=False)
 
     def test_random_multiple_shows_count_only(self):
         """Test that Random Multiple mode shows count input only."""
-        line, range_end, count = update_mode_visibility("Random Multiple")
+        line, range_end, count, sequential_start_line = update_mode_visibility("Random Multiple")
 
         assert line == gr.update(visible=False)
         assert range_end == gr.update(visible=False)
         assert count == gr.update(visible=True)
+        assert sequential_start_line == gr.update(visible=False)
 
     def test_all_lines_hides_all(self):
         """Test that All Lines mode hides all number inputs."""
-        line, range_end, count = update_mode_visibility("All Lines")
+        line, range_end, count, sequential_start_line = update_mode_visibility("All Lines")
 
         assert line == gr.update(visible=False)
         assert range_end == gr.update(visible=False)
         assert count == gr.update(visible=False)
+        assert sequential_start_line == gr.update(visible=False)
+
+    def test_sequential_shows_sequential_start_line_only(self):
+        """Test that Sequential mode shows sequential_start_line input only."""
+        line, range_end, count, sequential_start_line = update_mode_visibility("Sequential")
+
+        assert line == gr.update(visible=False)
+        assert range_end == gr.update(visible=False)
+        assert count == gr.update(visible=False)
+        assert sequential_start_line == gr.update(visible=True)
 
 
 class TestCreateThreeSegments:

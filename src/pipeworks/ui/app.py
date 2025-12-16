@@ -325,12 +325,12 @@ def create_generation_tab(ui_state):
         # Mode visibility handlers for all three segments
         for segment in [start_segment, middle_segment, end_segment]:
             mode_dropdown = segment.mode
-            line, range_end, count = segment.get_mode_visibility_outputs()
+            line, range_end, count, sequential_start_line = segment.get_mode_visibility_outputs()
 
             mode_dropdown.change(
                 fn=update_mode_visibility,
                 inputs=[mode_dropdown],
-                outputs=[line, range_end, count],
+                outputs=[line, range_end, count, sequential_start_line],
             )
 
         # Build prompt button handler

@@ -23,6 +23,7 @@ class SegmentConfig:
     range_end: int = 1
     count: int = 1
     dynamic: bool = False
+    sequential_start_line: int = 1  # Starting line for Sequential mode
 
     def is_configured(self) -> bool:
         """Check if segment has a valid file selected.
@@ -152,7 +153,14 @@ class UIState:
 
 
 # Constants for UI
-SEGMENT_MODES = ["Random Line", "Specific Line", "Line Range", "All Lines", "Random Multiple"]
+SEGMENT_MODES = [
+    "Random Line",
+    "Specific Line",
+    "Line Range",
+    "All Lines",
+    "Random Multiple",
+    "Sequential",
+]
 
 ASPECT_RATIOS = {
     "Square 1:1 (1024x1024)": (1024, 1024),

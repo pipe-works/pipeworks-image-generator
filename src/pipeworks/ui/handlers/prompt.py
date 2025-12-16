@@ -90,7 +90,11 @@ def navigate_file_selection(
 
 
 def build_combined_prompt(
-    start: SegmentConfig, middle: SegmentConfig, end: SegmentConfig, state: UIState
+    start: SegmentConfig,
+    middle: SegmentConfig,
+    end: SegmentConfig,
+    state: UIState,
+    run_index: int = 0,
 ) -> str:
     """Build a combined prompt from multiple segments.
 
@@ -99,6 +103,7 @@ def build_combined_prompt(
         middle: Middle segment configuration
         end: End segment configuration
         state: UI state (contains prompt_builder)
+        run_index: Zero-indexed run number (for Sequential mode)
 
     Returns:
         Combined prompt string or error message
@@ -129,6 +134,13 @@ def build_combined_prompt(
                 segments.append(("file_all", full_path))
             elif segment.mode == "Random Multiple":
                 segments.append(("file_random_multi", f"{full_path}|{segment.count}"))
+            elif segment.mode == "Sequential":
+                segments.append(
+                    (
+                        "file_sequential",
+                        f"{full_path}|{segment.sequential_start_line}|{run_index}",
+                    )
+                )
 
     # Add segments in order
     add_segment(start)
