@@ -556,6 +556,42 @@ class QwenImageEditAdapter(ModelAdapterBase):
 
         return edited_image, output_path
 
+    def unload_model(self) -> None:
+        """Unload the Qwen-Image-Edit model from memory.
+
+        This method:
+        1. Deletes the pipeline instance
+        2. Clears CUDA cache if using GPU
+        3. Resets the loaded flag
+        4. Logs unload success
+        """
+        if self._model_loaded:
+            logger.info("Unloading Qwen-Image-Edit model...")
+
+            # Delete pipeline
+            if self.pipe is not None:
+                del self.pipe
+                self.pipe = None
+
+            # Clear CUDA cache
+            self._clear_gpu_memory()
+
+            # Reset flag
+            self._model_loaded = False
+
+            logger.info("Qwen-Image-Edit model unloaded successfully")
+
+    @property
+    def is_loaded(self) -> bool:
+        """Check if the model is currently loaded.
+
+        Returns
+        -------
+        bool
+            True if model is loaded, False otherwise
+        """
+        return self._model_loaded
+
 
 # Register adapter
 model_registry.register(QwenImageEditAdapter)
