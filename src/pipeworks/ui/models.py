@@ -39,7 +39,7 @@ class SegmentConfig:
         Returns:
             True if segment has text or a configured file
         """
-        return bool(self.text.strip()) or self.is_configured()
+        return bool(self.text and self.text.strip()) or self.is_configured()
 
 
 @dataclass
