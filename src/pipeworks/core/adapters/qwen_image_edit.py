@@ -1,8 +1,8 @@
 """Qwen-Image-Edit model adapter.
 
-This module provides the adapter for the Qwen-Image-Edit-2509 model, which performs
-instruction-based image editing. Unlike text-to-image models, this takes an
-existing image and modifies it based on natural language instructions.
+This module provides the adapter for the Qwen-Image-Edit-2509 model (fp8 quantized),
+which performs instruction-based image editing. Unlike text-to-image models, this takes
+an existing image and modifies it based on natural language instructions.
 
 Qwen-Image-Edit Specifics
 --------------------------
@@ -100,10 +100,11 @@ class QwenImageEditAdapter(ModelAdapterBase):
     -----
     - Model loading can take 20-40 seconds depending on hardware
     - Model cache is stored in config.models_dir
-    - Full model size: ~57.7GB (bfloat16 precision)
+    - FP8 model size: ~20.4GB (fp8_e4m3fn quantized)
+    - Full model size: ~40.9GB (bfloat16 precision, if using official Qwen model)
     - First generation after loading takes longer due to CUDA compilation
     - Supports single or multi-image editing (up to 3 images)
-    - Requires VRAM: 12-16GB (bfloat16), 24GB (float32)
+    - Requires VRAM: 8-12GB (fp8), 12-16GB (bfloat16)
 
     Examples
     --------
@@ -262,9 +263,16 @@ class QwenImageEditAdapter(ModelAdapterBase):
 
             # Load pipeline from HuggingFace Hub (or local cache)
             # Use QwenImageEditPlusPipeline specifically (not AutoPipeline)
+            # For aidiffuser/Qwen-Image-Edit-2509, use fp8 variant for smaller size
+            variant = None
+            if "aidiffuser" in self.model_id.lower():
+                variant = "fp8_e4m3fn"
+                logger.info(f"Loading fp8 quantized variant: {variant}")
+
             self.pipe = QwenImageEditPlusPipeline.from_pretrained(
                 self.model_id,
                 torch_dtype=torch_dtype,
+                variant=variant,
                 low_cpu_mem_usage=True,  # Reduces VRAM during loading
                 cache_dir=str(self.config.models_dir),
             )

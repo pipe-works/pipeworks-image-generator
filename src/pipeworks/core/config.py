@@ -192,8 +192,8 @@ class PipeworksConfig(BaseSettings):
         description="HuggingFace model ID for Z-Image-Turbo",
     )
     qwen_model_id: str = Field(
-        default="Qwen/Qwen-Image-Edit-2509",
-        description="HuggingFace model ID for Qwen-Image-Edit",
+        default="aidiffuser/Qwen-Image-Edit-2509",
+        description="HuggingFace model ID for Qwen-Image-Edit (fp8 quantized version)",
     )
 
     # General model settings (shared across adapters)
