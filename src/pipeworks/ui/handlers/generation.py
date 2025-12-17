@@ -21,7 +21,9 @@ from ..validation import (
 logger = logging.getLogger(__name__)
 
 
-def switch_model_handler(model_name: str, state: UIState) -> tuple[str, UIState]:
+def switch_model_handler(
+    model_name: str, state: UIState
+) -> tuple[str, gr.update, gr.update, UIState]:
     """Handle model switching from the UI.
 
     Args:
@@ -29,26 +31,75 @@ def switch_model_handler(model_name: str, state: UIState) -> tuple[str, UIState]
         state: UI state
 
     Returns:
-        Tuple of (status_message, updated_state)
+        Tuple of (status_message, image_edit_group_update, text_to_image_group_update, updated_state)
     """
     try:
         logger.info(f"UI requesting model switch to: {model_name}")
 
         # Check if already using this model
         if state.current_model_name == model_name:
-            return f"✅ Already using {model_name}", state
+            # Determine current model type for UI visibility
+            is_image_edit = _is_image_edit_model(model_name)
+            return (
+                f"✅ Already using {model_name}",
+                gr.update(visible=is_image_edit),
+                gr.update(visible=not is_image_edit),
+                state,
+            )
 
         # Switch the model
         state = switch_model(state, model_name)
 
+        # Determine model type for UI visibility
+        is_image_edit = _is_image_edit_model(model_name)
+
         success_msg = f"✅ Successfully switched to **{model_name}**"
-        logger.info(f"Model switch successful: {model_name}")
-        return success_msg, state
+        if is_image_edit:
+            success_msg += "\n\n📸 **Image editing mode** - Upload an image and provide editing instructions"
+        else:
+            success_msg += "\n\n✨ **Text-to-image mode** - Describe the image you want to generate"
+
+        logger.info(f"Model switch successful: {model_name} (image_edit={is_image_edit})")
+
+        return (
+            success_msg,
+            gr.update(visible=is_image_edit),  # Show image edit group for image-edit models
+            gr.update(visible=not is_image_edit),  # Show text-to-image group for others
+            state,
+        )
 
     except Exception as e:
         logger.error(f"Failed to switch model: {e}", exc_info=True)
         error_msg = f"❌ Failed to switch model: {str(e)}"
-        return error_msg, state
+        # Keep current UI state on error
+        is_image_edit = _is_image_edit_model(state.current_model_name)
+        return (
+            error_msg,
+            gr.update(visible=is_image_edit),
+            gr.update(visible=not is_image_edit),
+            state,
+        )
+
+
+def _is_image_edit_model(model_name: str) -> bool:
+    """Check if a model is an image-edit type model.
+
+    Args:
+        model_name: Name of the model adapter
+
+    Returns:
+        True if model is image-edit type, False otherwise
+    """
+    # Check the model type from the registry
+    try:
+        adapter_class = model_registry.get_adapter_class(model_name)
+        if adapter_class:
+            return getattr(adapter_class, "model_type", "text-to-image") == "image-edit"
+    except Exception as e:
+        logger.warning(f"Could not determine model type for {model_name}: {e}")
+
+    # Fallback: Check name patterns
+    return "edit" in model_name.lower() or "qwen" in model_name.lower()
 
 
 def get_available_models() -> list[str]:
@@ -92,13 +143,15 @@ def generate_image(
     middle: SegmentConfig,
     end: SegmentConfig,
     state: UIState,
+    input_image: str | None = None,
+    instruction: str | None = None,
 ) -> tuple[list[str], str, str, UIState]:
-    """Generate image(s) from the UI inputs.
+    """Generate or edit image(s) from the UI inputs.
 
     Args:
-        prompt: Text prompt (used if no dynamic segments)
-        width: Image width
-        height: Image height
+        prompt: Text prompt (used for text-to-image if no dynamic segments)
+        width: Image width (text-to-image only)
+        height: Image height (text-to-image only)
         num_steps: Number of inference steps
         batch_size: Number of images per run
         runs: Number of runs to execute
@@ -108,28 +161,45 @@ def generate_image(
         middle: Middle segment configuration
         end: End segment configuration
         state: UI state
+        input_image: Input image path for image editing (optional)
+        instruction: Editing instruction for image editing (optional)
 
     Returns:
         Tuple of (image_paths, info_text, seed_used, updated_state)
     """
     # Import here to avoid circular dependency
+    from pathlib import Path
+    from PIL import Image
+
     from .prompt import build_combined_prompt
 
     try:
         # Initialize state
         state = initialize_ui_state(state)
 
-        # Check if current model supports text-to-image generation
-        if state.model_adapter.model_type != "text-to-image":
-            error_msg = (
-                f"❌ **Model Type Mismatch**\n\n"
-                f"The current model **{state.current_model_name}** is a "
-                f"**{state.model_adapter.model_type}** model.\n\n"
-                f"This UI generation flow currently only supports **text-to-image** models.\n\n"
-                f"Please switch to **Z-Image-Turbo** using the model dropdown above, "
-                f"or use the programmatic API for image editing workflows."
-            )
-            return [], error_msg, str(seed), state
+        # Determine if this is image editing or text-to-image
+        is_image_edit = state.model_adapter.model_type == "image-edit"
+
+        # Validate based on model type
+        if is_image_edit:
+            # Image editing workflow - require input_image
+            if not input_image:
+                error_msg = (
+                    f"❌ **Missing Input Image**\n\n"
+                    f"The model **{state.current_model_name}** requires an input image.\n\n"
+                    f"Please upload an image above to edit."
+                )
+                return [], error_msg, str(seed), state
+
+            if not instruction or not instruction.strip():
+                error_msg = (
+                    f"❌ **Missing Editing Instruction**\n\n"
+                    f"Please provide an instruction describing how you want to edit the image."
+                )
+                return [], error_msg, str(seed), state
+        else:
+            # Text-to-image workflow - no input image needed
+            pass
 
         # Create GenerationParams and validate
         params = GenerationParams(
@@ -180,9 +250,14 @@ def generate_image(
                 else:
                     current_prompt = prompt
 
-                # Validate final prompt
-                if current_prompt:
-                    validate_prompt_content(current_prompt)
+                # Validate final prompt/instruction
+                if is_image_edit:
+                    current_instruction = instruction
+                    if current_instruction:
+                        validate_prompt_content(current_instruction)
+                else:
+                    if current_prompt:
+                        validate_prompt_content(current_prompt)
 
                 # Generate random seed if requested, or use sequential seed
                 if use_random_seed:
@@ -191,14 +266,25 @@ def generate_image(
                     actual_seed = current_seed
                     current_seed += 1
 
-                # Generate and save image (plugins are called automatically)
-                image, save_path = state.generator.generate_and_save(
-                    prompt=current_prompt,
-                    width=width,
-                    height=height,
-                    num_inference_steps=num_steps,
-                    seed=actual_seed,
-                )
+                # Generate and save image based on model type
+                if is_image_edit:
+                    # Image editing workflow
+                    input_img = Image.open(input_image)
+                    image, save_path = state.generator.generate_and_save(
+                        input_image=input_img,
+                        instruction=current_instruction,
+                        num_inference_steps=num_steps,
+                        seed=actual_seed,
+                    )
+                else:
+                    # Text-to-image workflow
+                    image, save_path = state.generator.generate_and_save(
+                        prompt=current_prompt,
+                        width=width,
+                        height=height,
+                        num_inference_steps=num_steps,
+                        seed=actual_seed,
+                    )
 
                 generated_paths.append(str(save_path))
                 seeds_used.append(actual_seed)
@@ -231,7 +317,20 @@ def generate_image(
                 # Show first 2 prompts as samples
                 dynamic_info += f"\n**Sample Prompts:** {prompts_used[0]}, {prompts_used[1]}, ..."
 
-        info = f"""
+        # Create info text based on model type
+        if is_image_edit:
+            info = f"""
+✅ **Image Editing Complete!**
+
+**Instruction:** {instruction}
+**Input Image:** {Path(input_image).name}
+**Steps:** {num_steps}
+**Batch Size:** {batch_size} × **Runs:** {runs} = **Total:** {params.total_images} images
+**Seeds:** {seeds_display}
+**Saved to:** {paths_display}{plugins_info}
+            """
+        else:
+            info = f"""
 ✅ **Generation Complete!**
 
 **Prompt:** {prompt if not has_dynamic else "(Dynamic)"}
@@ -240,7 +339,7 @@ def generate_image(
 **Batch Size:** {batch_size} × **Runs:** {runs} = **Total:** {params.total_images} images
 **Seeds:** {seeds_display}
 **Saved to:** {paths_display}{dynamic_info}{plugins_info}
-        """
+            """
 
         # Return all generated images for display in gallery
         return generated_paths, info.strip(), str(seeds_used[-1]), state

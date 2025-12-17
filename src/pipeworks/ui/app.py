@@ -116,12 +116,31 @@ def create_generation_tab(ui_state):
                 value=f"✅ **Current:** {config.default_model_adapter}"
             )
 
-            prompt_input = gr.Textbox(
-                label="Prompt",
-                placeholder="Describe the image you want to generate...",
-                lines=3,
-                value="A serene mountain landscape at sunset with vibrant colors",
-            )
+            # Image Editing Section (visible only for image-edit models like Qwen)
+            with gr.Group(visible=False) as image_edit_group:
+                gr.Markdown("### Image Editing")
+                input_image = gr.Image(
+                    label="Input Image",
+                    type="filepath",
+                    sources=["upload", "clipboard"],
+                    height=300,
+                )
+                instruction_input = gr.Textbox(
+                    label="Editing Instruction",
+                    placeholder="Describe what changes you want to make to the image...",
+                    lines=3,
+                    value="change the sky to a sunset with vibrant orange and pink colors",
+                    info="Natural language instruction for editing the image",
+                )
+
+            # Text-to-Image Section (visible only for text-to-image models like Z-Image-Turbo)
+            with gr.Group(visible=True) as text_to_image_group:
+                prompt_input = gr.Textbox(
+                    label="Prompt",
+                    placeholder="Describe the image you want to generate...",
+                    lines=3,
+                    value="A serene mountain landscape at sunset with vibrant colors",
+                )
 
             # Prompt Builder
             with gr.Accordion("Prompt Builder", open=False):
@@ -277,11 +296,16 @@ def create_generation_tab(ui_state):
                             outputs=[ui_state],
                         )
 
-            # Model selection event handler
+            # Model selection event handler (updates UI visibility based on model type)
             model_dropdown.change(
                 fn=switch_model_handler,
                 inputs=[model_dropdown, ui_state],
-                outputs=[model_status, ui_state],
+                outputs=[
+                    model_status,
+                    image_edit_group,
+                    text_to_image_group,
+                    ui_state,
+                ],
             )
 
             generate_btn = gr.Button(
@@ -424,28 +448,30 @@ def create_generation_tab(ui_state):
         # Generate button handler
         def generate_wrapper(*values):
             """Wrapper to convert segment values to SegmentConfig objects."""
-            # Extract values
-            prompt = values[0]
-            width = values[1]
-            height = values[2]
-            num_steps = values[3]
-            batch_size = values[4]
-            runs = values[5]
-            seed = values[6]
-            use_random_seed = values[7]
+            # Extract values - now includes image editing inputs
+            input_img = values[0]
+            instruction = values[1]
+            prompt = values[2]
+            width = values[3]
+            height = values[4]
+            num_steps = values[5]
+            batch_size = values[6]
+            runs = values[7]
+            seed = values[8]
+            use_random_seed = values[9]
 
             # Segment values (9 values each: text, path, file, mode, line, range_end, count, dynamic, sequential_start_line)
-            start_values = values[8:17]
-            middle_values = values[17:26]
-            end_values = values[26:35]
-            state = values[35]
+            start_values = values[10:19]
+            middle_values = values[19:28]
+            end_values = values[28:37]
+            state = values[37]
 
             # Convert to SegmentConfig objects
             start_cfg = SegmentUI.values_to_config(*start_values)
             middle_cfg = SegmentUI.values_to_config(*middle_values)
             end_cfg = SegmentUI.values_to_config(*end_values)
 
-            # Call generate_image with clean parameters
+            # Call generate_image with clean parameters (includes image editing params)
             return generate_image(
                 prompt,
                 width,
@@ -459,10 +485,14 @@ def create_generation_tab(ui_state):
                 middle_cfg,
                 end_cfg,
                 state,
+                input_image=input_img,
+                instruction=instruction,
             )
 
-        # Collect all inputs for generation
+        # Collect all inputs for generation (includes image editing inputs)
         generation_inputs = [
+            input_image,
+            instruction_input,
             prompt_input,
             width_slider,
             height_slider,
