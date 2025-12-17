@@ -143,7 +143,7 @@ def generate_image(
     middle: SegmentConfig,
     end: SegmentConfig,
     state: UIState,
-    input_image: str | None = None,
+    input_images: list[str] | None = None,
     instruction: str | None = None,
 ) -> tuple[list[str], str, str, UIState]:
     """Generate or edit image(s) from the UI inputs.
@@ -161,7 +161,7 @@ def generate_image(
         middle: Middle segment configuration
         end: End segment configuration
         state: UI state
-        input_image: Input image path for image editing (optional)
+        input_images: Input image paths for image editing (1-3 images, optional)
         instruction: Editing instruction for image editing (optional)
 
     Returns:
@@ -182,19 +182,27 @@ def generate_image(
 
         # Validate based on model type
         if is_image_edit:
-            # Image editing workflow - require input_image
-            if not input_image:
+            # Image editing workflow - require at least one input_image
+            if not input_images or len(input_images) == 0:
                 error_msg = (
                     f"❌ **Missing Input Image**\n\n"
-                    f"The model **{state.current_model_name}** requires an input image.\n\n"
+                    f"The model **{state.current_model_name}** requires at least one input image.\n\n"
                     f"Please upload an image above to edit."
+                )
+                return [], error_msg, str(seed), state
+
+            if len(input_images) > 3:
+                error_msg = (
+                    f"❌ **Too Many Images**\n\n"
+                    f"Qwen-Image-Edit supports a maximum of 3 images.\n\n"
+                    f"You provided {len(input_images)} images."
                 )
                 return [], error_msg, str(seed), state
 
             if not instruction or not instruction.strip():
                 error_msg = (
                     f"❌ **Missing Editing Instruction**\n\n"
-                    f"Please provide an instruction describing how you want to edit the image."
+                    f"Please provide an instruction describing how you want to edit/composite the images."
                 )
                 return [], error_msg, str(seed), state
         else:
@@ -268,14 +276,25 @@ def generate_image(
 
                 # Generate and save image based on model type
                 if is_image_edit:
-                    # Image editing workflow
-                    input_img = Image.open(input_image)
-                    image, save_path = state.generator.generate_and_save(
-                        input_image=input_img,
-                        instruction=current_instruction,
-                        num_inference_steps=num_steps,
-                        seed=actual_seed,
-                    )
+                    # Image editing workflow - load all input images
+                    loaded_images = [Image.open(img_path) for img_path in input_images]
+
+                    # For multi-image, pass as list; for single image, can pass as single or list
+                    if len(loaded_images) == 1:
+                        image, save_path = state.generator.generate_and_save(
+                            input_image=loaded_images[0],
+                            instruction=current_instruction,
+                            num_inference_steps=num_steps,
+                            seed=actual_seed,
+                        )
+                    else:
+                        # Multi-image composition
+                        image, save_path = state.generator.generate_and_save(
+                            input_image=loaded_images,
+                            instruction=current_instruction,
+                            num_inference_steps=num_steps,
+                            seed=actual_seed,
+                        )
                 else:
                     # Text-to-image workflow
                     image, save_path = state.generator.generate_and_save(
@@ -319,11 +338,20 @@ def generate_image(
 
         # Create info text based on model type
         if is_image_edit:
+            # Format input images display
+            if len(input_images) == 1:
+                images_display = f"**Input Image:** {Path(input_images[0]).name}"
+            else:
+                image_names = [Path(img).name for img in input_images]
+                images_display = f"**Input Images ({len(input_images)}):**\n" + "\n".join(
+                    f"  {i+1}. {name}" for i, name in enumerate(image_names)
+                )
+
             info = f"""
 ✅ **Image Editing Complete!**
 
 **Instruction:** {instruction}
-**Input Image:** {Path(input_image).name}
+{images_display}
 **Steps:** {num_steps}
 **Batch Size:** {batch_size} × **Runs:** {runs} = **Total:** {params.total_images} images
 **Seeds:** {seeds_display}

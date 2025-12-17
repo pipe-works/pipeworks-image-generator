@@ -492,7 +492,7 @@ class QwenImageEditAdapter(ModelAdapterBase):
 
     def generate(
         self,
-        input_image: Image.Image,
+        input_image: Image.Image | list[Image.Image],
         instruction: str,
         num_inference_steps: Optional[int] = None,
         guidance_scale: float = 1.0,
@@ -500,11 +500,11 @@ class QwenImageEditAdapter(ModelAdapterBase):
         seed: Optional[int] = None,
         negative_prompt: str = " ",
     ) -> Image.Image:
-        """Edit an image based on a natural language instruction.
+        """Edit or composite image(s) based on a natural language instruction.
 
         Args:
-            input_image: Source PIL Image to edit
-            instruction: Natural language instruction for the edit
+            input_image: Source PIL Image(s) to edit (single image or list of 1-3 images)
+            instruction: Natural language instruction for the edit/composition
             num_inference_steps: Number of denoising steps (default 40)
             guidance_scale: How closely to follow instruction (default 1.0)
             true_cfg_scale: Consistency preservation strength (default 4.0)
@@ -514,7 +514,7 @@ class QwenImageEditAdapter(ModelAdapterBase):
         Returns
         -------
         Image.Image
-            Edited PIL Image
+            Edited/composited PIL Image
 
         Raises
         ------
@@ -526,7 +526,8 @@ class QwenImageEditAdapter(ModelAdapterBase):
         Notes
         -----
         - If model is not loaded, it will be loaded automatically
-        - Input image is automatically resized if > 1024px
+        - Input images are automatically resized if > 1024px
+        - Supports 1-3 input images for composition (e.g., character + hat + background)
         - guidance_scale controls prompt adherence (1.0 is typical)
         - true_cfg_scale controls identity/consistency preservation
         - Same inputs + seed = same output (reproducible)
@@ -541,11 +542,23 @@ class QwenImageEditAdapter(ModelAdapterBase):
         if not instruction or not instruction.strip():
             raise ValueError("instruction is required for image editing")
 
+        # Normalize input_image to always be a list
+        if isinstance(input_image, Image.Image):
+            images = [input_image]
+        else:
+            images = input_image
+
+        if len(images) == 0:
+            raise ValueError("At least one input image is required")
+
+        if len(images) > 3:
+            raise ValueError("Maximum of 3 input images supported")
+
         # Use reasonable defaults
         num_inference_steps = num_inference_steps or 40
 
         logger.info(
-            f"Editing image: steps={num_inference_steps}, "
+            f"Editing {len(images)} image(s): steps={num_inference_steps}, "
             f"guidance={guidance_scale}, true_cfg={true_cfg_scale}, seed={seed}"
         )
         logger.info(f"Instruction: {instruction}")
@@ -554,8 +567,10 @@ class QwenImageEditAdapter(ModelAdapterBase):
             # Clear GPU memory before inference
             self._clear_gpu_memory()
 
-            # Preprocess input image
-            processed_image = self._preprocess_image(input_image)
+            # Preprocess all input images
+            processed_images = [self._preprocess_image(img) for img in images]
+
+            logger.info(f"Preprocessed {len(processed_images)} images for editing/composition")
 
             # Create generator for reproducibility
             generator = None
@@ -566,9 +581,10 @@ class QwenImageEditAdapter(ModelAdapterBase):
             start_time = time.time()
 
             # Run inference with proper parameters for Qwen-Image-Edit-2509
+            # The pipeline expects a list of images
             with torch.inference_mode():
                 output = self.pipe(
-                    image=[processed_image],  # Must be a list
+                    image=processed_images,  # List of 1-3 images
                     prompt=instruction,
                     num_inference_steps=num_inference_steps,
                     guidance_scale=guidance_scale,

@@ -118,19 +118,35 @@ def create_generation_tab(ui_state):
 
             # Image Editing Section (visible only for image-edit models like Qwen)
             with gr.Group(visible=False) as image_edit_group:
-                gr.Markdown("### Image Editing")
-                input_image = gr.Image(
-                    label="Input Image",
-                    type="filepath",
-                    sources=["upload", "clipboard"],
-                    height=300,
+                gr.Markdown(
+                    "### Image Editing\n"
+                    "*Upload 1-3 images to edit or composite. Examples: character + accessory, person + scene*"
                 )
+                with gr.Row():
+                    input_image_1 = gr.Image(
+                        label="Image 1 (Required)",
+                        type="filepath",
+                        sources=["upload", "clipboard"],
+                        height=250,
+                    )
+                    input_image_2 = gr.Image(
+                        label="Image 2 (Optional)",
+                        type="filepath",
+                        sources=["upload", "clipboard"],
+                        height=250,
+                    )
+                    input_image_3 = gr.Image(
+                        label="Image 3 (Optional)",
+                        type="filepath",
+                        sources=["upload", "clipboard"],
+                        height=250,
+                    )
                 instruction_input = gr.Textbox(
                     label="Editing Instruction",
-                    placeholder="Describe what changes you want to make to the image...",
+                    placeholder="Describe the composition or changes (e.g., 'character is wearing the hat', 'person in front of the background')...",
                     lines=3,
-                    value="change the sky to a sunset with vibrant orange and pink colors",
-                    info="Natural language instruction for editing the image",
+                    value="the character is wearing the hat",
+                    info="Natural language instruction for editing/compositing the images",
                 )
 
             # Text-to-Image Section (visible only for text-to-image models like Z-Image-Turbo)
@@ -448,28 +464,33 @@ def create_generation_tab(ui_state):
         # Generate button handler
         def generate_wrapper(*values):
             """Wrapper to convert segment values to SegmentConfig objects."""
-            # Extract values - now includes image editing inputs
-            input_img = values[0]
-            instruction = values[1]
-            prompt = values[2]
-            width = values[3]
-            height = values[4]
-            num_steps = values[5]
-            batch_size = values[6]
-            runs = values[7]
-            seed = values[8]
-            use_random_seed = values[9]
+            # Extract values - now includes image editing inputs (3 images)
+            input_img_1 = values[0]
+            input_img_2 = values[1]
+            input_img_3 = values[2]
+            instruction = values[3]
+            prompt = values[4]
+            width = values[5]
+            height = values[6]
+            num_steps = values[7]
+            batch_size = values[8]
+            runs = values[9]
+            seed = values[10]
+            use_random_seed = values[11]
 
             # Segment values (9 values each: text, path, file, mode, line, range_end, count, dynamic, sequential_start_line)
-            start_values = values[10:19]
-            middle_values = values[19:28]
-            end_values = values[28:37]
-            state = values[37]
+            start_values = values[12:21]
+            middle_values = values[21:30]
+            end_values = values[30:39]
+            state = values[39]
 
             # Convert to SegmentConfig objects
             start_cfg = SegmentUI.values_to_config(*start_values)
             middle_cfg = SegmentUI.values_to_config(*middle_values)
             end_cfg = SegmentUI.values_to_config(*end_values)
+
+            # Collect input images (filter out None values)
+            input_images = [img for img in [input_img_1, input_img_2, input_img_3] if img is not None]
 
             # Call generate_image with clean parameters (includes image editing params)
             return generate_image(
@@ -485,13 +506,15 @@ def create_generation_tab(ui_state):
                 middle_cfg,
                 end_cfg,
                 state,
-                input_image=input_img,
+                input_images=input_images if input_images else None,
                 instruction=instruction,
             )
 
         # Collect all inputs for generation (includes image editing inputs)
         generation_inputs = [
-            input_image,
+            input_image_1,
+            input_image_2,
+            input_image_3,
             instruction_input,
             prompt_input,
             width_slider,
