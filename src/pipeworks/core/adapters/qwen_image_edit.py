@@ -257,6 +257,14 @@ class QwenImageEditAdapter(ModelAdapterBase):
         logger.info(f"Loading Qwen-Image-Edit model {self.model_id}...")
         logger.info(f"Device: {self.config.device}, Dtype: {self.config.torch_dtype}")
 
+        # Suggest memory optimization environment variable
+        import os
+        if not os.environ.get("PYTORCH_CUDA_ALLOC_CONF"):
+            logger.info(
+                "TIP: Set PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True "
+                "to reduce CUDA memory fragmentation"
+            )
+
         try:
             # Import the specific pipeline class for Qwen
             from diffusers import QwenImageEditPlusPipeline
@@ -375,14 +383,24 @@ class QwenImageEditAdapter(ModelAdapterBase):
                         raise
 
             if use_cpu_offload:
-                logger.info("Enabling model CPU offloading (moves components to GPU only when needed)")
-                logger.info("This reduces VRAM usage but slows inference ~2-3x")
-                self.pipe.enable_model_cpu_offload()
+                logger.info("Enabling sequential CPU offloading (most aggressive memory saving)")
+                logger.info("This reduces VRAM usage significantly but slows inference ~3-5x")
+                # Use sequential CPU offload for maximum memory efficiency
+                # This moves each layer to GPU only when needed, not the whole component
+                try:
+                    self.pipe.enable_sequential_cpu_offload()
+                    logger.info("Sequential CPU offload enabled successfully")
+                except Exception as e:
+                    logger.warning(f"Sequential offload failed: {e}, trying model offload...")
+                    self.pipe.enable_model_cpu_offload()
 
-            # Apply performance optimizations
+            # Apply memory optimizations (always enable for Qwen to reduce VRAM)
+            logger.info("Enabling attention slicing to reduce VRAM usage")
+            self.pipe.enable_attention_slicing()
+
+            # Apply additional performance optimizations if configured
             if self.config.enable_attention_slicing:
-                logger.info("Enabling attention slicing")
-                self.pipe.enable_attention_slicing()
+                logger.info("Attention slicing already enabled")
 
             # Try to enable memory-efficient attention if available
             try:
