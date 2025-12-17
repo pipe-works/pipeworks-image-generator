@@ -133,7 +133,7 @@ class QwenImageEditAdapter(ModelAdapterBase):
     name = "Qwen-Image-Edit"
     description = "Instruction-based image editing with Qwen-Image-Edit-2509"
     model_type = "image-edit"
-    version = "2.0.0"
+    version = "2.1.0"
 
     def __init__(
         self, config: PipeworksConfig, plugins: Optional[list[PluginBase]] = None
@@ -267,7 +267,6 @@ class QwenImageEditAdapter(ModelAdapterBase):
                 torch_dtype=torch_dtype,
                 low_cpu_mem_usage=True,  # Reduces VRAM during loading
                 cache_dir=str(self.config.models_dir),
-                trust_remote_code=True,
             )
 
             logger.info("Pipeline loaded successfully")
@@ -319,6 +318,59 @@ class QwenImageEditAdapter(ModelAdapterBase):
         except Exception as e:
             logger.error(f"Failed to load Qwen-Image-Edit model: {e}")
             raise
+
+    def unload_model(self) -> None:
+        """Unload the model from memory.
+
+        This method:
+        1. Deletes the pipeline instance
+        2. Clears CUDA cache if using GPU
+        3. Resets the model loaded flag
+        4. Logs the unload operation
+
+        Notes
+        -----
+        - Safe to call even if model is not loaded
+        - Frees all GPU memory used by the model
+        - Model can be reloaded by calling load_model() again
+        """
+        if not self._model_loaded:
+            logger.info("Qwen-Image-Edit model not loaded, skipping unload...")
+            return
+
+        try:
+            logger.info("Unloading Qwen-Image-Edit model...")
+
+            # Delete pipeline instance
+            if self.pipe is not None:
+                del self.pipe
+                self.pipe = None
+
+            # Clear CUDA cache
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()
+                logger.info("Cleared CUDA cache after model unload")
+
+            # Reset loaded flag
+            self._model_loaded = False
+            logger.info("Qwen-Image-Edit model unloaded successfully!")
+
+        except Exception as e:
+            logger.error(f"Error unloading model: {e}")
+            # Don't raise - we want to continue even if unload partially fails
+            self._model_loaded = False
+
+    @property
+    def is_loaded(self) -> bool:
+        """Check if the model is currently loaded in memory.
+
+        Returns
+        -------
+        bool
+            True if model is loaded and pipeline exists, False otherwise
+        """
+        return self._model_loaded and self.pipe is not None
 
     def generate(
         self,
@@ -555,42 +607,6 @@ class QwenImageEditAdapter(ModelAdapterBase):
                 )
 
         return edited_image, output_path
-
-    def unload_model(self) -> None:
-        """Unload the Qwen-Image-Edit model from memory.
-
-        This method:
-        1. Deletes the pipeline instance
-        2. Clears CUDA cache if using GPU
-        3. Resets the loaded flag
-        4. Logs unload success
-        """
-        if self._model_loaded:
-            logger.info("Unloading Qwen-Image-Edit model...")
-
-            # Delete pipeline
-            if self.pipe is not None:
-                del self.pipe
-                self.pipe = None
-
-            # Clear CUDA cache
-            self._clear_gpu_memory()
-
-            # Reset flag
-            self._model_loaded = False
-
-            logger.info("Qwen-Image-Edit model unloaded successfully")
-
-    @property
-    def is_loaded(self) -> bool:
-        """Check if the model is currently loaded.
-
-        Returns
-        -------
-        bool
-            True if model is loaded, False otherwise
-        """
-        return self._model_loaded
 
 
 # Register adapter
