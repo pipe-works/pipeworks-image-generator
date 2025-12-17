@@ -441,8 +441,9 @@ class ZImageTurboAdapter(ModelAdapterBase):
         This method:
         1. Deletes the pipeline instance
         2. Clears CUDA cache if using GPU
-        3. Resets the loaded flag
-        4. Logs unload success
+        3. Synchronizes CUDA operations
+        4. Resets the loaded flag
+        5. Logs unload success
         """
         if self._model_loaded:
             logger.info("Unloading Z-Image-Turbo model...")
@@ -450,9 +451,10 @@ class ZImageTurboAdapter(ModelAdapterBase):
             self.pipe = None
             self._model_loaded = False
 
-            # Clear CUDA cache
+            # Clear CUDA cache and synchronize
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
+                torch.cuda.synchronize()  # Wait for GPU to finish freeing memory
 
             logger.info("Z-Image-Turbo model unloaded successfully")
 
