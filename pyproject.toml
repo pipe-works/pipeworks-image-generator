@@ -31,6 +31,13 @@ dev = [
     "ruff>=0.3.0",
     "mypy>=1.9.0",
 ]
+docs = [
+    "sphinx>=7.0.0",
+    "sphinx-rtd-theme>=2.0.0",
+    "sphinx-autodoc-typehints>=1.25.0",
+    "myst-parser>=2.0.0",  # For Markdown support
+    "linkify-it-py>=2.0.0",  # For automatic URL detection in Markdown
+]
 
 [project.scripts]
 pipeworks = "pipeworks.ui.app:main"
