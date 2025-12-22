@@ -90,18 +90,30 @@ def navigate_file_selection(
 
 
 def build_combined_prompt(
-    start: SegmentConfig,
-    middle: SegmentConfig,
-    end: SegmentConfig,
+    start_1: SegmentConfig,
+    start_2: SegmentConfig,
+    start_3: SegmentConfig,
+    mid_1: SegmentConfig,
+    mid_2: SegmentConfig,
+    mid_3: SegmentConfig,
+    end_1: SegmentConfig,
+    end_2: SegmentConfig,
+    end_3: SegmentConfig,
     state: UIState,
     run_index: int = 0,
 ) -> str:
     """Build a combined prompt from multiple segments.
 
     Args:
-        start: Start segment configuration
-        middle: Middle segment configuration
-        end: End segment configuration
+        start_1: Start segment 1 configuration
+        start_2: Start segment 2 configuration
+        start_3: Start segment 3 configuration
+        mid_1: Mid segment 1 configuration
+        mid_2: Mid segment 2 configuration
+        mid_3: Mid segment 3 configuration
+        end_1: End segment 1 configuration
+        end_2: End segment 2 configuration
+        end_3: End segment 3 configuration
         state: UI state (contains prompt_builder)
         run_index: Zero-indexed run number (for Sequential mode)
 
@@ -142,10 +154,16 @@ def build_combined_prompt(
                     )
                 )
 
-    # Add segments in order
-    add_segment(start)
-    add_segment(middle)
-    add_segment(end)
+    # Add segments in order (Start 1-3, Mid 1-3, End 1-3)
+    add_segment(start_1)
+    add_segment(start_2)
+    add_segment(start_3)
+    add_segment(mid_1)
+    add_segment(mid_2)
+    add_segment(mid_3)
+    add_segment(end_1)
+    add_segment(end_2)
+    add_segment(end_3)
 
     # Build the final prompt
     try:

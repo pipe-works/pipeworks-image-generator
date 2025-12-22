@@ -238,3 +238,39 @@ def create_three_segments(initial_choices: list[str]) -> tuple[SegmentUI, Segmen
     end = SegmentUI("End", initial_choices)
 
     return start, middle, end
+
+
+def create_nine_segments(
+    initial_choices: list[str],
+) -> tuple[
+    SegmentUI,
+    SegmentUI,
+    SegmentUI,
+    SegmentUI,
+    SegmentUI,
+    SegmentUI,
+    SegmentUI,
+    SegmentUI,
+    SegmentUI,
+]:
+    """Create nine segment UI components arranged in 3x3 grid.
+
+    Args:
+        initial_choices: Initial file/folder choices for dropdowns
+
+    Returns:
+        Tuple of 9 segments: (start_1, start_2, start_3, mid_1, mid_2, mid_3, end_1, end_2, end_3)
+    """
+    start_1 = SegmentUI("Start 1", initial_choices)
+    start_2 = SegmentUI("Start 2", initial_choices)
+    start_3 = SegmentUI("Start 3", initial_choices)
+
+    mid_1 = SegmentUI("Mid 1", initial_choices)
+    mid_2 = SegmentUI("Mid 2", initial_choices)
+    mid_3 = SegmentUI("Mid 3", initial_choices)
+
+    end_1 = SegmentUI("End 1", initial_choices)
+    end_2 = SegmentUI("End 2", initial_choices)
+    end_3 = SegmentUI("End 3", initial_choices)
+
+    return start_1, start_2, start_3, mid_1, mid_2, mid_3, end_1, end_2, end_3

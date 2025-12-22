@@ -7,7 +7,7 @@ import gradio as gr
 from pipeworks.core.config import config
 from pipeworks.plugins.base import plugin_registry
 
-from .components import SegmentUI, create_three_segments, update_mode_visibility
+from .components import SegmentUI, create_nine_segments, create_three_segments, update_mode_visibility
 from .handlers import (
     analyze_prompt,
     apply_gallery_filter,
@@ -100,6 +100,34 @@ def create_generation_tab(ui_state):
     Args:
         ui_state: UI state component
     """
+    # Image output at the very top (full width)
+    gr.Markdown("### Generated Images")
+
+    image_output = gr.Gallery(
+        label="Output",
+        type="filepath",
+        height=400,
+        columns=4,
+        rows=1,
+        object_fit="contain",
+    )
+
+    # Show the seed that was actually used
+    with gr.Row():
+        seed_used = gr.Textbox(
+            label="Seed Used",
+            interactive=False,
+            value=str(DEFAULT_SEED),
+            scale=1,
+        )
+        # Info display
+        info_output = gr.Markdown(
+            label="Generation Info",
+            value="*Ready to generate images*",
+            scale=2,
+        )
+
+    # Main content area
     with gr.Row():
         with gr.Column(scale=1):
             # Input controls
@@ -179,8 +207,26 @@ def create_generation_tab(ui_state):
                 except Exception as e:
                     logger.error(f"Error initializing file browser: {e}")
 
-                # Create three segment components (eliminates code duplication!)
-                start_segment, middle_segment, end_segment = create_three_segments(initial_choices)
+                # Row 1: Start segments
+                gr.Markdown("**Start Segments**")
+                with gr.Row():
+                    start_1 = SegmentUI("Start 1", initial_choices)
+                    start_2 = SegmentUI("Start 2", initial_choices)
+                    start_3 = SegmentUI("Start 3", initial_choices)
+
+                # Row 2: Mid segments
+                gr.Markdown("**Mid Segments**")
+                with gr.Row():
+                    mid_1 = SegmentUI("Mid 1", initial_choices)
+                    mid_2 = SegmentUI("Mid 2", initial_choices)
+                    mid_3 = SegmentUI("Mid 3", initial_choices)
+
+                # Row 3: End segments
+                gr.Markdown("**End Segments**")
+                with gr.Row():
+                    end_1 = SegmentUI("End 1", initial_choices)
+                    end_2 = SegmentUI("End 2", initial_choices)
+                    end_3 = SegmentUI("End 3", initial_choices)
 
                 # Build Button
                 build_prompt_btn = gr.Button("Build Prompt", variant="secondary")
@@ -330,207 +376,266 @@ def create_generation_tab(ui_state):
                 size="lg",
             )
 
-        with gr.Column(scale=1):
-            # Output display
-            gr.Markdown("### Generated Images")
+    # Model info footer
+    gr.Markdown(
+        f"""
+        ---
+        **Model:** {config.model_id} | **Device:** {config.device} |
+        **Dtype:** {config.torch_dtype}
 
-            image_output = gr.Gallery(
-                label="Output",
-                type="filepath",
-                height=600,
-                columns=2,
-                rows=2,
-                object_fit="contain",
-            )
+        *Outputs saved to: {config.outputs_dir}*
+        """
+    )
 
-            # Show the seed that was actually used
-            seed_used = gr.Textbox(
-                label="Seed Used",
-                interactive=False,
-                value=str(DEFAULT_SEED),
-            )
+    # Event handlers
+    # File browser navigation for all nine segments
+    for segment in [start_1, start_2, start_3, mid_1, mid_2, mid_3, end_1, end_2, end_3]:
+        file_dropdown, path_state, path_display = segment.get_navigation_components()
 
-            # Info display
-            info_output = gr.Markdown(
-                label="Generation Info",
-                value="*Ready to generate images*",
-            )
-
-        # Model info footer
-        gr.Markdown(
-            f"""
-            ---
-            **Model:** {config.model_id} | **Device:** {config.device} |
-            **Dtype:** {config.torch_dtype}
-
-            *Outputs saved to: {config.outputs_dir}*
-            """
+        file_dropdown.change(
+            fn=navigate_file_selection,
+            inputs=[file_dropdown, path_state, ui_state],
+            outputs=[file_dropdown, path_state, ui_state],
+        ).then(
+            fn=lambda path: f"/{path}" if path else "/inputs",
+            inputs=[path_state],
+            outputs=[path_display],
         )
 
-        # Event handlers
-        # File browser navigation for all three segments
-        for segment in [start_segment, middle_segment, end_segment]:
-            file_dropdown, path_state, path_display = segment.get_navigation_components()
+    # Mode visibility handlers for all nine segments
+    for segment in [start_1, start_2, start_3, mid_1, mid_2, mid_3, end_1, end_2, end_3]:
+        mode_dropdown = segment.mode
+        line, range_end, count, sequential_start_line = segment.get_mode_visibility_outputs()
 
-            file_dropdown.change(
-                fn=navigate_file_selection,
-                inputs=[file_dropdown, path_state, ui_state],
-                outputs=[file_dropdown, path_state, ui_state],
-            ).then(
-                fn=lambda path: f"/{path}" if path else "/inputs",
-                inputs=[path_state],
-                outputs=[path_display],
-            )
-
-        # Mode visibility handlers for all three segments
-        for segment in [start_segment, middle_segment, end_segment]:
-            mode_dropdown = segment.mode
-            line, range_end, count, sequential_start_line = segment.get_mode_visibility_outputs()
-
-            mode_dropdown.change(
-                fn=update_mode_visibility,
-                inputs=[mode_dropdown],
-                outputs=[line, range_end, count, sequential_start_line],
-            )
-
-        # Build prompt button handler
-        def build_and_update_prompt(*values):
-            """Build prompt from segment values and update UI."""
-            # Split values into segment groups (9 values each: text, path, file, mode, line, range_end, count, dynamic, sequential_start_line)
-            start_values = values[0:9]
-            middle_values = values[9:18]
-            end_values = values[18:27]
-            state = values[27]
-
-            # Convert to SegmentConfig objects
-            start_cfg = SegmentUI.values_to_config(*start_values)
-            middle_cfg = SegmentUI.values_to_config(*middle_values)
-            end_cfg = SegmentUI.values_to_config(*end_values)
-
-            # Initialize state
-            state = initialize_ui_state(state)
-
-            # Build prompt
-            try:
-                prompt = build_combined_prompt(start_cfg, middle_cfg, end_cfg, state)
-            except ValidationError as e:
-                prompt = f"Error: {str(e)}"
-
-            # Update titles with status
-            start_title = SegmentUI.format_title(
-                "Start", start_cfg.file, start_cfg.mode, start_cfg.dynamic
-            )
-            middle_title = SegmentUI.format_title(
-                "Middle", middle_cfg.file, middle_cfg.mode, middle_cfg.dynamic
-            )
-            end_title = SegmentUI.format_title("End", end_cfg.file, end_cfg.mode, end_cfg.dynamic)
-
-            return prompt, start_title, middle_title, end_title, state
-
-        # Collect all segment inputs
-        all_segment_inputs = (
-            start_segment.get_input_components()
-            + middle_segment.get_input_components()
-            + end_segment.get_input_components()
-            + [ui_state]
+        mode_dropdown.change(
+            fn=update_mode_visibility,
+            inputs=[mode_dropdown],
+            outputs=[line, range_end, count, sequential_start_line],
         )
 
-        build_prompt_btn.click(
-            fn=build_and_update_prompt,
-            inputs=all_segment_inputs,
-            outputs=[
-                prompt_input,
-                start_segment.title,
-                middle_segment.title,
-                end_segment.title,
-                ui_state,
-            ],
-        )
+    # Build prompt button handler
+    def build_and_update_prompt(*values):
+        """Build prompt from segment values and update UI."""
+        # Split values into segment groups (9 values each: text, path, file, mode, line, range_end, count, dynamic, sequential_start_line)
+        start_1_values = values[0:9]
+        start_2_values = values[9:18]
+        start_3_values = values[18:27]
+        mid_1_values = values[27:36]
+        mid_2_values = values[36:45]
+        mid_3_values = values[45:54]
+        end_1_values = values[54:63]
+        end_2_values = values[63:72]
+        end_3_values = values[72:81]
+        state = values[81]
 
-        # Aspect ratio preset handler
-        aspect_ratio_dropdown.change(
-            fn=set_aspect_ratio,
-            inputs=[aspect_ratio_dropdown],
-            outputs=[width_slider, height_slider],
-        )
+        # Convert to SegmentConfig objects
+        start_1_cfg = SegmentUI.values_to_config(*start_1_values)
+        start_2_cfg = SegmentUI.values_to_config(*start_2_values)
+        start_3_cfg = SegmentUI.values_to_config(*start_3_values)
+        mid_1_cfg = SegmentUI.values_to_config(*mid_1_values)
+        mid_2_cfg = SegmentUI.values_to_config(*mid_2_values)
+        mid_3_cfg = SegmentUI.values_to_config(*mid_3_values)
+        end_1_cfg = SegmentUI.values_to_config(*end_1_values)
+        end_2_cfg = SegmentUI.values_to_config(*end_2_values)
+        end_3_cfg = SegmentUI.values_to_config(*end_3_values)
 
-        # Tokenizer analyzer handler
-        prompt_input.change(
-            fn=analyze_prompt,
-            inputs=[prompt_input, ui_state],
-            outputs=[tokenizer_output, ui_state],
-        )
+        # Initialize state
+        state = initialize_ui_state(state)
 
-        # Generate button handler
-        def generate_wrapper(*values):
-            """Wrapper to convert segment values to SegmentConfig objects."""
-            # Extract values - now includes image editing inputs (3 images)
-            input_img_1 = values[0]
-            input_img_2 = values[1]
-            input_img_3 = values[2]
-            instruction = values[3]
-            prompt = values[4]
-            width = values[5]
-            height = values[6]
-            num_steps = values[7]
-            batch_size = values[8]
-            runs = values[9]
-            seed = values[10]
-            use_random_seed = values[11]
-
-            # Segment values (9 values each: text, path, file, mode, line, range_end, count, dynamic, sequential_start_line)
-            start_values = values[12:21]
-            middle_values = values[21:30]
-            end_values = values[30:39]
-            state = values[39]
-
-            # Convert to SegmentConfig objects
-            start_cfg = SegmentUI.values_to_config(*start_values)
-            middle_cfg = SegmentUI.values_to_config(*middle_values)
-            end_cfg = SegmentUI.values_to_config(*end_values)
-
-            # Collect input images (filter out None values)
-            input_images = [img for img in [input_img_1, input_img_2, input_img_3] if img is not None]
-
-            # Call generate_image with clean parameters (includes image editing params)
-            return generate_image(
-                prompt,
-                width,
-                height,
-                num_steps,
-                batch_size,
-                runs,
-                seed,
-                use_random_seed,
-                start_cfg,
-                middle_cfg,
-                end_cfg,
+        # Build prompt
+        try:
+            prompt = build_combined_prompt(
+                start_1_cfg,
+                start_2_cfg,
+                start_3_cfg,
+                mid_1_cfg,
+                mid_2_cfg,
+                mid_3_cfg,
+                end_1_cfg,
+                end_2_cfg,
+                end_3_cfg,
                 state,
-                input_images=input_images if input_images else None,
-                instruction=instruction,
             )
+        except ValidationError as e:
+            prompt = f"Error: {str(e)}"
 
-        # Collect all inputs for generation (includes image editing inputs)
-        generation_inputs = [
-            input_image_1,
-            input_image_2,
-            input_image_3,
-            instruction_input,
-            prompt_input,
-            width_slider,
-            height_slider,
-            steps_slider,
-            batch_input,
-            runs_input,
-            seed_input,
-            random_seed_checkbox,
-        ] + all_segment_inputs
-
-        generate_btn.click(
-            fn=generate_wrapper,
-            inputs=generation_inputs,
-            outputs=[image_output, info_output, seed_used, ui_state],
+        # Update titles with status
+        start_1_title = SegmentUI.format_title(
+            "Start 1", start_1_cfg.file, start_1_cfg.mode, start_1_cfg.dynamic
         )
+        start_2_title = SegmentUI.format_title(
+            "Start 2", start_2_cfg.file, start_2_cfg.mode, start_2_cfg.dynamic
+        )
+        start_3_title = SegmentUI.format_title(
+            "Start 3", start_3_cfg.file, start_3_cfg.mode, start_3_cfg.dynamic
+        )
+        mid_1_title = SegmentUI.format_title(
+            "Mid 1", mid_1_cfg.file, mid_1_cfg.mode, mid_1_cfg.dynamic
+        )
+        mid_2_title = SegmentUI.format_title(
+            "Mid 2", mid_2_cfg.file, mid_2_cfg.mode, mid_2_cfg.dynamic
+        )
+        mid_3_title = SegmentUI.format_title(
+            "Mid 3", mid_3_cfg.file, mid_3_cfg.mode, mid_3_cfg.dynamic
+        )
+        end_1_title = SegmentUI.format_title(
+            "End 1", end_1_cfg.file, end_1_cfg.mode, end_1_cfg.dynamic
+        )
+        end_2_title = SegmentUI.format_title(
+            "End 2", end_2_cfg.file, end_2_cfg.mode, end_2_cfg.dynamic
+        )
+        end_3_title = SegmentUI.format_title(
+            "End 3", end_3_cfg.file, end_3_cfg.mode, end_3_cfg.dynamic
+        )
+
+        return (
+            prompt,
+            start_1_title,
+            start_2_title,
+            start_3_title,
+            mid_1_title,
+            mid_2_title,
+            mid_3_title,
+            end_1_title,
+            end_2_title,
+            end_3_title,
+            state,
+        )
+
+    # Collect all segment inputs
+    all_segment_inputs = (
+        start_1.get_input_components()
+        + start_2.get_input_components()
+        + start_3.get_input_components()
+        + mid_1.get_input_components()
+        + mid_2.get_input_components()
+        + mid_3.get_input_components()
+        + end_1.get_input_components()
+        + end_2.get_input_components()
+        + end_3.get_input_components()
+        + [ui_state]
+    )
+
+    build_prompt_btn.click(
+        fn=build_and_update_prompt,
+        inputs=all_segment_inputs,
+        outputs=[
+            prompt_input,
+            start_1.title,
+            start_2.title,
+            start_3.title,
+            mid_1.title,
+            mid_2.title,
+            mid_3.title,
+            end_1.title,
+            end_2.title,
+            end_3.title,
+            ui_state,
+        ],
+    )
+
+    # Aspect ratio preset handler
+    aspect_ratio_dropdown.change(
+        fn=set_aspect_ratio,
+        inputs=[aspect_ratio_dropdown],
+        outputs=[width_slider, height_slider],
+    )
+
+    # Tokenizer analyzer handler
+    prompt_input.change(
+        fn=analyze_prompt,
+        inputs=[prompt_input, ui_state],
+        outputs=[tokenizer_output, ui_state],
+    )
+
+    # Generate button handler
+    def generate_wrapper(*values):
+        """Wrapper to convert segment values to SegmentConfig objects."""
+        # Extract values - now includes image editing inputs (3 images)
+        input_img_1 = values[0]
+        input_img_2 = values[1]
+        input_img_3 = values[2]
+        instruction = values[3]
+        prompt = values[4]
+        width = values[5]
+        height = values[6]
+        num_steps = values[7]
+        batch_size = values[8]
+        runs = values[9]
+        seed = values[10]
+        use_random_seed = values[11]
+
+        # Segment values (9 values each: text, path, file, mode, line, range_end, count, dynamic, sequential_start_line)
+        start_1_values = values[12:21]
+        start_2_values = values[21:30]
+        start_3_values = values[30:39]
+        mid_1_values = values[39:48]
+        mid_2_values = values[48:57]
+        mid_3_values = values[57:66]
+        end_1_values = values[66:75]
+        end_2_values = values[75:84]
+        end_3_values = values[84:93]
+        state = values[93]
+
+        # Convert to SegmentConfig objects
+        start_1_cfg = SegmentUI.values_to_config(*start_1_values)
+        start_2_cfg = SegmentUI.values_to_config(*start_2_values)
+        start_3_cfg = SegmentUI.values_to_config(*start_3_values)
+        mid_1_cfg = SegmentUI.values_to_config(*mid_1_values)
+        mid_2_cfg = SegmentUI.values_to_config(*mid_2_values)
+        mid_3_cfg = SegmentUI.values_to_config(*mid_3_values)
+        end_1_cfg = SegmentUI.values_to_config(*end_1_values)
+        end_2_cfg = SegmentUI.values_to_config(*end_2_values)
+        end_3_cfg = SegmentUI.values_to_config(*end_3_values)
+
+        # Collect input images (filter out None values)
+        input_images = [img for img in [input_img_1, input_img_2, input_img_3] if img is not None]
+
+        # Call generate_image with clean parameters (includes image editing params)
+        return generate_image(
+            prompt,
+            width,
+            height,
+            num_steps,
+            batch_size,
+            runs,
+            seed,
+            use_random_seed,
+            start_1_cfg,
+            start_2_cfg,
+            start_3_cfg,
+            mid_1_cfg,
+            mid_2_cfg,
+            mid_3_cfg,
+            end_1_cfg,
+            end_2_cfg,
+            end_3_cfg,
+            state,
+            input_images=input_images if input_images else None,
+            instruction=instruction,
+        )
+
+    # Collect all inputs for generation (includes image editing inputs)
+    generation_inputs = [
+        input_image_1,
+        input_image_2,
+        input_image_3,
+        instruction_input,
+        prompt_input,
+        width_slider,
+        height_slider,
+        steps_slider,
+        batch_input,
+        runs_input,
+        seed_input,
+        random_seed_checkbox,
+    ] + all_segment_inputs
+
+    generate_btn.click(
+        fn=generate_wrapper,
+        inputs=generation_inputs,
+        outputs=[image_output, info_output, seed_used, ui_state],
+    )
 
 
 def create_gallery_tab(ui_state):

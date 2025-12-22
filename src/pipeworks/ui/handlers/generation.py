@@ -139,9 +139,15 @@ def generate_image(
     runs: int,
     seed: int,
     use_random_seed: bool,
-    start: SegmentConfig,
-    middle: SegmentConfig,
-    end: SegmentConfig,
+    start_1: SegmentConfig,
+    start_2: SegmentConfig,
+    start_3: SegmentConfig,
+    mid_1: SegmentConfig,
+    mid_2: SegmentConfig,
+    mid_3: SegmentConfig,
+    end_1: SegmentConfig,
+    end_2: SegmentConfig,
+    end_3: SegmentConfig,
     state: UIState,
     input_images: list[str] | None = None,
     instruction: str | None = None,
@@ -157,9 +163,15 @@ def generate_image(
         runs: Number of runs to execute
         seed: Random seed
         use_random_seed: Whether to use a random seed
-        start: Start segment configuration
-        middle: Middle segment configuration
-        end: End segment configuration
+        start_1: Start segment 1 configuration
+        start_2: Start segment 2 configuration
+        start_3: Start segment 3 configuration
+        mid_1: Mid segment 1 configuration
+        mid_2: Mid segment 2 configuration
+        mid_3: Mid segment 3 configuration
+        end_1: End segment 1 configuration
+        end_2: End segment 2 configuration
+        end_3: End segment 3 configuration
         state: UI state
         input_images: Input image paths for image editing (1-3 images, optional)
         instruction: Editing instruction for image editing (optional)
@@ -225,7 +237,7 @@ def generate_image(
         validate_generation_params(params)
 
         # Check if any segment is dynamic
-        segments = (start, middle, end)
+        segments = (start_1, start_2, start_3, mid_1, mid_2, mid_3, end_1, end_2, end_3)
         has_dynamic = any(seg.dynamic for seg in segments)
 
         # Validate segments
@@ -246,7 +258,19 @@ def generate_image(
                 if has_dynamic:
                     try:
                         # Pass run index for Sequential mode support
-                        current_prompt = build_combined_prompt(start, middle, end, state, run_index=run)
+                        current_prompt = build_combined_prompt(
+                            start_1,
+                            start_2,
+                            start_3,
+                            mid_1,
+                            mid_2,
+                            mid_3,
+                            end_1,
+                            end_2,
+                            end_3,
+                            state,
+                            run_index=run,
+                        )
                         if current_prompt:
                             prompts_used.append(current_prompt)
                         else:
