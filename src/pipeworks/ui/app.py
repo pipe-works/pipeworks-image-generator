@@ -112,20 +112,19 @@ def create_generation_tab(ui_state):
         object_fit="contain",
     )
 
-    # Show the seed that was actually used
+    # Show the seed that was actually used and info
     with gr.Row():
-        seed_used = gr.Textbox(
-            label="Seed Used",
-            interactive=False,
-            value=str(DEFAULT_SEED),
-            scale=1,
-        )
-        # Info display
-        info_output = gr.Markdown(
-            label="Generation Info",
-            value="*Ready to generate images*",
-            scale=2,
-        )
+        with gr.Column(scale=1):
+            seed_used = gr.Textbox(
+                label="Seed Used",
+                interactive=False,
+                value=str(DEFAULT_SEED),
+            )
+        with gr.Column(scale=2):
+            # Info display
+            info_output = gr.Markdown(
+                value="*Ready to generate images*",
+            )
 
     # Main content area
     with gr.Row():
