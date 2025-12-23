@@ -17,9 +17,14 @@ class TestInitializeUIState:
 
     def test_initialize_none_creates_new_state(self):
         """Test that passing None creates a new UIState."""
-        with patch('pipeworks.ui.state.ImageGenerator'), \
+        with patch('pipeworks.ui.state.model_registry') as mock_registry, \
              patch('pipeworks.ui.state.TokenizerAnalyzer'), \
-             patch('pipeworks.ui.state.PromptBuilder'):
+             patch('pipeworks.ui.state.PromptBuilder'), \
+             patch('pipeworks.ui.state.GalleryBrowser'), \
+             patch('pipeworks.ui.state.FavoritesDB'), \
+             patch('pipeworks.ui.state.CatalogManager'):
+
+            mock_registry.instantiate.return_value = Mock()
 
             result = initialize_ui_state(None)
 
@@ -28,7 +33,8 @@ class TestInitializeUIState:
     def test_initialize_returns_if_already_initialized(self):
         """Test that already initialized state is returned as-is."""
         state = UIState()
-        state.generator = Mock()
+        state.model_adapter = Mock()
+        state.generator = state.model_adapter  # Backward compatibility
         state.tokenizer_analyzer = Mock()
         state.prompt_builder = Mock()
 
@@ -38,31 +44,40 @@ class TestInitializeUIState:
         assert result.is_initialized()
 
     def test_initialize_creates_generator(self, test_config):
-        """Test that generator is created if None."""
+        """Test that model adapter is created if None."""
         state = UIState()
 
-        with patch('pipeworks.ui.state.ImageGenerator') as MockGen, \
+        with patch('pipeworks.ui.state.model_registry') as mock_registry, \
              patch('pipeworks.ui.state.TokenizerAnalyzer') as MockTok, \
              patch('pipeworks.ui.state.PromptBuilder') as MockPB, \
+             patch('pipeworks.ui.state.GalleryBrowser'), \
+             patch('pipeworks.ui.state.FavoritesDB'), \
+             patch('pipeworks.ui.state.CatalogManager'), \
              patch('pipeworks.ui.state.config', test_config):
 
-            mock_gen = Mock()
-            MockGen.return_value = mock_gen
+            mock_adapter = Mock()
+            mock_adapter.load_model = Mock()
+            mock_registry.instantiate.return_value = mock_adapter
 
             result = initialize_ui_state(state)
 
-            assert result.generator is mock_gen
-            MockGen.assert_called_once()
+            assert result.model_adapter is mock_adapter
+            assert result.generator is mock_adapter  # Backward compatibility alias
+            mock_registry.instantiate.assert_called_once()
 
     def test_initialize_creates_tokenizer(self, test_config):
         """Test that tokenizer is created if None."""
         state = UIState()
 
-        with patch('pipeworks.ui.state.ImageGenerator'), \
+        with patch('pipeworks.ui.state.model_registry') as mock_registry, \
              patch('pipeworks.ui.state.TokenizerAnalyzer') as MockTok, \
              patch('pipeworks.ui.state.PromptBuilder'), \
+             patch('pipeworks.ui.state.GalleryBrowser'), \
+             patch('pipeworks.ui.state.FavoritesDB'), \
+             patch('pipeworks.ui.state.CatalogManager'), \
              patch('pipeworks.ui.state.config', test_config):
 
+            mock_registry.instantiate.return_value = Mock()
             mock_tok = Mock()
             MockTok.return_value = mock_tok
 
@@ -75,11 +90,15 @@ class TestInitializeUIState:
         """Test that prompt builder is created if None."""
         state = UIState()
 
-        with patch('pipeworks.ui.state.ImageGenerator'), \
+        with patch('pipeworks.ui.state.model_registry') as mock_registry, \
              patch('pipeworks.ui.state.TokenizerAnalyzer'), \
              patch('pipeworks.ui.state.PromptBuilder') as MockPB, \
+             patch('pipeworks.ui.state.GalleryBrowser'), \
+             patch('pipeworks.ui.state.FavoritesDB'), \
+             patch('pipeworks.ui.state.CatalogManager'), \
              patch('pipeworks.ui.state.config', test_config):
 
+            mock_registry.instantiate.return_value = Mock()
             mock_pb = Mock()
             MockPB.return_value = mock_pb
 
@@ -92,45 +111,56 @@ class TestInitializeUIState:
         """Test that model loading is attempted."""
         state = UIState()
 
-        with patch('pipeworks.ui.state.ImageGenerator') as MockGen, \
+        with patch('pipeworks.ui.state.model_registry') as mock_registry, \
              patch('pipeworks.ui.state.TokenizerAnalyzer'), \
              patch('pipeworks.ui.state.PromptBuilder'), \
+             patch('pipeworks.ui.state.GalleryBrowser'), \
+             patch('pipeworks.ui.state.FavoritesDB'), \
+             patch('pipeworks.ui.state.CatalogManager'), \
              patch('pipeworks.ui.state.config', test_config):
 
-            mock_gen = Mock()
-            MockGen.return_value = mock_gen
+            mock_adapter = Mock()
+            mock_registry.instantiate.return_value = mock_adapter
 
             initialize_ui_state(state)
 
-            mock_gen.load_model.assert_called_once()
+            mock_adapter.load_model.assert_called_once()
 
     def test_initialize_handles_model_load_failure(self, test_config):
         """Test that model load failure is handled gracefully."""
         state = UIState()
 
-        with patch('pipeworks.ui.state.ImageGenerator') as MockGen, \
+        with patch('pipeworks.ui.state.model_registry') as mock_registry, \
              patch('pipeworks.ui.state.TokenizerAnalyzer'), \
              patch('pipeworks.ui.state.PromptBuilder'), \
+             patch('pipeworks.ui.state.GalleryBrowser'), \
+             patch('pipeworks.ui.state.FavoritesDB'), \
+             patch('pipeworks.ui.state.CatalogManager'), \
              patch('pipeworks.ui.state.config', test_config):
 
-            mock_gen = Mock()
-            mock_gen.load_model.side_effect = Exception("Model load failed")
-            MockGen.return_value = mock_gen
+            mock_adapter = Mock()
+            mock_adapter.load_model.side_effect = Exception("Model load failed")
+            mock_registry.instantiate.return_value = mock_adapter
 
             # Should not raise, should log error
             result = initialize_ui_state(state)
 
-            assert result.generator is mock_gen
+            assert result.model_adapter is mock_adapter
+            assert result.generator is mock_adapter
 
     def test_initialize_loads_tokenizer(self, test_config):
         """Test that tokenizer loading is attempted."""
         state = UIState()
 
-        with patch('pipeworks.ui.state.ImageGenerator'), \
+        with patch('pipeworks.ui.state.model_registry') as mock_registry, \
              patch('pipeworks.ui.state.TokenizerAnalyzer') as MockTok, \
              patch('pipeworks.ui.state.PromptBuilder'), \
+             patch('pipeworks.ui.state.GalleryBrowser'), \
+             patch('pipeworks.ui.state.FavoritesDB'), \
+             patch('pipeworks.ui.state.CatalogManager'), \
              patch('pipeworks.ui.state.config', test_config):
 
+            mock_registry.instantiate.return_value = Mock()
             mock_tok = Mock()
             MockTok.return_value = mock_tok
 
@@ -141,11 +171,16 @@ class TestInitializeUIState:
     def test_initialize_partial_state(self, test_config):
         """Test that partial state is completed."""
         state = UIState()
-        state.generator = Mock()  # Already set
+        existing_adapter = Mock()
+        state.model_adapter = existing_adapter
+        state.generator = existing_adapter  # Backward compatibility
 
-        with patch('pipeworks.ui.state.ImageGenerator'), \
+        with patch('pipeworks.ui.state.model_registry'), \
              patch('pipeworks.ui.state.TokenizerAnalyzer') as MockTok, \
              patch('pipeworks.ui.state.PromptBuilder') as MockPB, \
+             patch('pipeworks.ui.state.GalleryBrowser'), \
+             patch('pipeworks.ui.state.FavoritesDB'), \
+             patch('pipeworks.ui.state.CatalogManager'), \
              patch('pipeworks.ui.state.config', test_config):
 
             mock_tok = Mock()
@@ -155,8 +190,9 @@ class TestInitializeUIState:
 
             result = initialize_ui_state(state)
 
-            # Generator should not be replaced
-            assert result.generator is state.generator
+            # Model adapter should not be replaced
+            assert result.model_adapter is existing_adapter
+            assert result.generator is existing_adapter
             # But tokenizer and prompt_builder should be created
             assert result.tokenizer_analyzer is mock_tok
             assert result.prompt_builder is mock_pb
@@ -166,18 +202,19 @@ class TestUpdateGeneratorPlugins:
     """Tests for update_generator_plugins function."""
 
     def test_update_with_no_generator(self):
-        """Test that update handles missing generator gracefully."""
+        """Test that update handles missing model adapter gracefully."""
         state = UIState()
 
         result = update_generator_plugins(state)
 
         assert result is state
-        assert state.generator is None
+        assert state.model_adapter is None
 
     def test_update_with_enabled_plugins(self):
-        """Test that enabled plugins are added to generator."""
+        """Test that enabled plugins are added to model adapter."""
         state = UIState()
-        state.generator = Mock()
+        state.model_adapter = Mock()
+        state.generator = state.model_adapter  # Backward compatibility
 
         plugin1 = Mock(enabled=True)
         plugin2 = Mock(enabled=True)
@@ -191,32 +228,34 @@ class TestUpdateGeneratorPlugins:
 
         result = update_generator_plugins(state)
 
-        assert len(state.generator.plugins) == 2
-        assert plugin1 in state.generator.plugins
-        assert plugin2 in state.generator.plugins
-        assert plugin3 not in state.generator.plugins
+        assert len(state.model_adapter.plugins) == 2
+        assert plugin1 in state.model_adapter.plugins
+        assert plugin2 in state.model_adapter.plugins
+        assert plugin3 not in state.model_adapter.plugins
 
     def test_update_with_no_enabled_plugins(self):
-        """Test that generator gets empty list when no enabled plugins."""
+        """Test that model adapter gets empty list when no enabled plugins."""
         state = UIState()
-        state.generator = Mock()
+        state.model_adapter = Mock()
+        state.generator = state.model_adapter
 
         plugin1 = Mock(enabled=False)
         state.active_plugins = {"plugin1": plugin1}
 
         result = update_generator_plugins(state)
 
-        assert state.generator.plugins == []
+        assert state.model_adapter.plugins == []
 
     def test_update_with_empty_plugins(self):
-        """Test that generator gets empty list when no plugins."""
+        """Test that model adapter gets empty list when no plugins."""
         state = UIState()
-        state.generator = Mock()
+        state.model_adapter = Mock()
+        state.generator = state.model_adapter
         state.active_plugins = {}
 
         result = update_generator_plugins(state)
 
-        assert state.generator.plugins == []
+        assert state.model_adapter.plugins == []
 
 
 class TestTogglePlugin:
@@ -225,7 +264,8 @@ class TestTogglePlugin:
     def test_enable_plugin_creates_instance(self):
         """Test that enabling plugin creates new instance."""
         state = UIState()
-        state.generator = Mock()
+        state.model_adapter = Mock()
+        state.generator = state.model_adapter
 
         with patch('pipeworks.plugins.base.plugin_registry') as mock_registry:
             mock_plugin = Mock(enabled=True)
@@ -243,7 +283,8 @@ class TestTogglePlugin:
     def test_disable_plugin_sets_enabled_false(self):
         """Test that disabling plugin sets enabled to False."""
         state = UIState()
-        state.generator = Mock()
+        state.model_adapter = Mock()
+        state.generator = state.model_adapter
 
         plugin = Mock(enabled=True)
         state.active_plugins = {"TestPlugin": plugin}
@@ -255,7 +296,8 @@ class TestTogglePlugin:
     def test_disable_nonexistent_plugin(self):
         """Test that disabling nonexistent plugin doesn't crash."""
         state = UIState()
-        state.generator = Mock()
+        state.model_adapter = Mock()
+        state.generator = state.model_adapter
 
         result = toggle_plugin(state, "NonExistent", False)
 
@@ -263,9 +305,10 @@ class TestTogglePlugin:
         assert result is state
 
     def test_enable_updates_generator_plugins(self):
-        """Test that enabling plugin updates generator."""
+        """Test that enabling plugin updates model adapter."""
         state = UIState()
-        state.generator = Mock()
+        state.model_adapter = Mock()
+        state.generator = state.model_adapter
 
         with patch('pipeworks.plugins.base.plugin_registry') as mock_registry:
             mock_plugin = Mock(enabled=True)
@@ -273,13 +316,14 @@ class TestTogglePlugin:
 
             result = toggle_plugin(state, "TestPlugin", True)
 
-            # Generator.plugins should be updated
-            assert len(state.generator.plugins) > 0
+            # Model adapter plugins should be updated
+            assert len(state.model_adapter.plugins) > 0
 
     def test_enable_with_config_params(self):
         """Test that plugin config params are passed through."""
         state = UIState()
-        state.generator = Mock()
+        state.model_adapter = Mock()
+        state.generator = state.model_adapter
 
         with patch('pipeworks.plugins.base.plugin_registry') as mock_registry:
             mock_plugin = Mock(enabled=True)
@@ -306,20 +350,23 @@ class TestCleanupUIState:
     def test_cleanup_unloads_model(self):
         """Test that cleanup unloads the model."""
         state = UIState()
-        mock_generator = Mock()
-        state.generator = mock_generator
+        mock_adapter = Mock()
+        state.model_adapter = mock_adapter
+        state.generator = mock_adapter
 
         cleanup_ui_state(state)
 
-        mock_generator.unload_model.assert_called_once()
+        mock_adapter.unload_model.assert_called_once()
 
     def test_cleanup_clears_generator(self):
-        """Test that cleanup sets generator to None."""
+        """Test that cleanup sets model adapter to None."""
         state = UIState()
-        state.generator = Mock()
+        state.model_adapter = Mock()
+        state.generator = state.model_adapter
 
         cleanup_ui_state(state)
 
+        assert state.model_adapter is None
         assert state.generator is None
 
     def test_cleanup_clears_tokenizer(self):
@@ -352,18 +399,21 @@ class TestCleanupUIState:
     def test_cleanup_handles_unload_failure(self):
         """Test that cleanup handles model unload failure gracefully."""
         state = UIState()
-        state.generator = Mock()
-        state.generator.unload_model.side_effect = Exception("Unload failed")
+        mock_adapter = Mock()
+        mock_adapter.unload_model.side_effect = Exception("Unload failed")
+        state.model_adapter = mock_adapter
+        state.generator = mock_adapter
 
         # Should not raise
         cleanup_ui_state(state)
 
+        assert state.model_adapter is None
         assert state.generator is None
 
     def test_cleanup_with_partial_state(self):
         """Test that cleanup works with partial state."""
         state = UIState()
-        state.generator = None  # Already None
+        state.model_adapter = None  # Already None
         state.tokenizer_analyzer = Mock()
 
         # Should not crash
@@ -378,6 +428,7 @@ class TestCleanupUIState:
         # Should not crash
         cleanup_ui_state(state)
 
+        assert state.model_adapter is None
         assert state.generator is None
         assert state.tokenizer_analyzer is None
         assert state.prompt_builder is None

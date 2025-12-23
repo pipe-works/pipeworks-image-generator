@@ -415,7 +415,8 @@ class TestUIState:
     def test_is_initialized_true_when_complete(self):
         """Test is_initialized returns True when fully initialized."""
         state = UIState()
-        state.generator = "mock_generator"
+        state.model_adapter = "mock_adapter"
+        state.generator = state.model_adapter  # Backward compatibility
         state.tokenizer_analyzer = "mock_tokenizer"
         state.prompt_builder = "mock_prompt_builder"
 
