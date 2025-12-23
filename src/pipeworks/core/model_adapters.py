@@ -134,14 +134,10 @@ class ModelAdapterBase(ABC):
 
     name: str = "Base Model Adapter"
     description: str = "Base class for model adapters"
-    model_type: Literal["text-to-image", "image-edit", "img2img", "inpainting"] = (
-        "text-to-image"
-    )
+    model_type: Literal["text-to-image", "image-edit", "img2img", "inpainting"] = "text-to-image"
     version: str = "0.1.0"
 
-    def __init__(
-        self, config: PipeworksConfig, plugins: list[PluginBase] | None = None
-    ) -> None:
+    def __init__(self, config: PipeworksConfig, plugins: list[PluginBase] | None = None) -> None:
         """Initialize the model adapter.
 
         Args:
@@ -153,9 +149,7 @@ class ModelAdapterBase(ABC):
 
         logger.info(f"Initialized {self.name} adapter")
         if self.plugins:
-            logger.info(
-                f"Loaded {len(self.plugins)} plugins: {[p.name for p in self.plugins]}"
-            )
+            logger.info(f"Loaded {len(self.plugins)} plugins: {[p.name for p in self.plugins]}")
 
     @abstractmethod
     def load_model(self) -> None:
@@ -326,9 +320,7 @@ class ModelRegistry:
         adapter_name = adapter_class.name
 
         if adapter_name in self._adapters:
-            logger.warning(
-                f"Model adapter '{adapter_name}' is already registered, overwriting"
-            )
+            logger.warning(f"Model adapter '{adapter_name}' is already registered, overwriting")
 
         self._adapters[adapter_name] = adapter_class
         self._instances[adapter_name] = []
@@ -360,8 +352,7 @@ class ModelRegistry:
         if adapter_name not in self._adapters:
             available = ", ".join(self.list_available())
             raise KeyError(
-                f"Model adapter '{adapter_name}' not found. "
-                f"Available adapters: {available}"
+                f"Model adapter '{adapter_name}' not found. " f"Available adapters: {available}"
             )
 
         adapter_class = self._adapters[adapter_name]
@@ -416,9 +407,7 @@ class ModelRegistry:
             "version": adapter_class.version,
         }
 
-    def get_adapters_by_type(
-        self, model_type: str
-    ) -> list[dict[str, Any]]:
+    def get_adapters_by_type(self, model_type: str) -> list[dict[str, Any]]:
         """Get all adapters that support a specific model type.
 
         Args:

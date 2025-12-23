@@ -161,9 +161,7 @@ class WorkflowBase(ABC):
         .. deprecated:: 1.0.0
            Use :attr:`model_adapter` instead.
         """
-        logger.warning(
-            "workflow.generator is deprecated. Use workflow.model_adapter instead."
-        )
+        logger.warning("workflow.generator is deprecated. Use workflow.model_adapter instead.")
         return self.model_adapter
 
     @abstractmethod

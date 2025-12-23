@@ -75,13 +75,12 @@ See Also
 - PipeworksConfig: Configuration options and environment variables
 """
 
-from pipeworks.core.config import PipeworksConfig, config
-from pipeworks.core.model_adapters import ModelAdapterBase, model_registry
-from pipeworks.core.pipeline import ImageGenerator
-
 # Import adapters to ensure they're registered
 # This must happen after model_registry is imported
 from pipeworks.core.adapters import QwenImageEditAdapter, ZImageTurboAdapter  # noqa: F401
+from pipeworks.core.config import PipeworksConfig, config
+from pipeworks.core.model_adapters import ModelAdapterBase, model_registry
+from pipeworks.core.pipeline import ImageGenerator
 
 __all__ = [
     "ImageGenerator",  # Legacy

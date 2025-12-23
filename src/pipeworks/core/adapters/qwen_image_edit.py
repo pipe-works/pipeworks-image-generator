@@ -61,11 +61,10 @@ See Also
 
 import logging
 import time
-import torch
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
+import torch
 from PIL import Image
 
 from pipeworks.core.config import PipeworksConfig
@@ -142,9 +141,7 @@ class QwenImageEditAdapter(ModelAdapterBase):
     model_type = "image-edit"
     version = "2.1.0"
 
-    def __init__(
-        self, config: PipeworksConfig, plugins: Optional[list[PluginBase]] = None
-    ) -> None:
+    def __init__(self, config: PipeworksConfig, plugins: list[PluginBase] | None = None) -> None:
         """Initialize the Qwen-Image-Edit adapter.
 
         Args:
@@ -160,9 +157,7 @@ class QwenImageEditAdapter(ModelAdapterBase):
         self._model_loaded = False
 
         # Get model ID from config
-        self.model_id = getattr(
-            config, "qwen_model_id", "Qwen/Qwen-Image-Edit-2509"
-        )
+        self.model_id = getattr(config, "qwen_model_id", "Qwen/Qwen-Image-Edit-2509")
         logger.info(f"Configured Qwen-Image-Edit with model: {self.model_id}")
 
     def _clear_gpu_memory(self) -> None:
@@ -175,9 +170,7 @@ class QwenImageEditAdapter(ModelAdapterBase):
             torch.cuda.empty_cache()
             torch.cuda.synchronize()
 
-    def _preprocess_image(
-        self, image: Image.Image, max_size: int = 1024
-    ) -> Image.Image:
+    def _preprocess_image(self, image: Image.Image, max_size: int = 1024) -> Image.Image:
         """Preprocess image for inference.
 
         Handles:
@@ -201,6 +194,7 @@ class QwenImageEditAdapter(ModelAdapterBase):
             # Auto-orient based on EXIF data if available
             try:
                 from PIL import ImageOps
+
                 image = ImageOps.exif_transpose(image)
             except Exception:
                 pass
@@ -209,14 +203,12 @@ class QwenImageEditAdapter(ModelAdapterBase):
             if max(image.size) > max_size:
                 original_size = image.size
                 image.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
-                logger.info(
-                    f"Resized image from {original_size} to {image.size}"
-                )
+                logger.info(f"Resized image from {original_size} to {image.size}")
 
             # Convert to RGB if necessary
             if image.mode != "RGB":
                 image = image.convert("RGB")
-                logger.info(f"Converted image mode to RGB")
+                logger.info("Converted image mode to RGB")
 
             return image
 
@@ -259,6 +251,7 @@ class QwenImageEditAdapter(ModelAdapterBase):
 
         # Suggest memory optimization environment variable
         import os
+
         if not os.environ.get("PYTORCH_CUDA_ALLOC_CONF"):
             logger.info(
                 "TIP: Set PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True "
@@ -282,13 +275,17 @@ class QwenImageEditAdapter(ModelAdapterBase):
             # Check if using aidiffuser fp8 model (only has weight files, no pipeline structure)
             if "aidiffuser" in self.model_id.lower():
                 logger.info("Detected aidiffuser repo - using optimized fp8 loading")
-                logger.info("Step 1: Loading pipeline configs (no weights) from official Qwen repo...")
+                logger.info(
+                    "Step 1: Loading pipeline configs (no weights) from official Qwen repo..."
+                )
 
-                # Load ONLY the pipeline structure/configs from official Qwen (no weights loaded yet)
+                # Load ONLY the pipeline structure/configs from official Qwen
+                # (no weights loaded yet)
                 official_model_id = "Qwen/Qwen-Image-Edit-2509"
 
                 # First, download just the config files (no model weights)
                 from huggingface_hub import snapshot_download
+
                 config_path = snapshot_download(
                     repo_id=official_model_id,
                     cache_dir=str(self.config.models_dir),
@@ -327,10 +324,10 @@ class QwenImageEditAdapter(ModelAdapterBase):
                 except (AttributeError, NotImplementedError, TypeError, Exception) as e:
                     logger.warning(f"from_single_file not supported: {type(e).__name__}")
                     logger.error(
-                        f"Cannot load aidiffuser fp8 model efficiently. "
-                        f"To use Qwen-Image-Edit, please set in your .env file:\n"
-                        f"  PIPEWORKS_QWEN_MODEL_ID=Qwen/Qwen-Image-Edit-2509\n"
-                        f"Or use the official model which has full pipeline support."
+                        "Cannot load aidiffuser fp8 model efficiently. "
+                        "To use Qwen-Image-Edit, please set in your .env file:\n"
+                        "  PIPEWORKS_QWEN_MODEL_ID=Qwen/Qwen-Image-Edit-2509\n"
+                        "Or use the official model which has full pipeline support."
                     )
                     raise RuntimeError(
                         "Aidiffuser fp8 loading requires from_single_file() support. "
@@ -339,6 +336,7 @@ class QwenImageEditAdapter(ModelAdapterBase):
 
                 # Clean up state dict from memory
                 import gc
+
                 del fp8_state_dict
                 gc.collect()
             else:
@@ -363,7 +361,9 @@ class QwenImageEditAdapter(ModelAdapterBase):
                 try:
                     total_vram = torch.cuda.get_device_properties(0).total_memory / (1024**3)  # GB
                     if total_vram < 48:  # Less than 48GB VRAM
-                        logger.info(f"Detected {total_vram:.1f}GB VRAM - enabling CPU offloading for Qwen")
+                        logger.info(
+                            f"Detected {total_vram:.1f}GB VRAM - enabling CPU offloading for Qwen"
+                        )
                         use_cpu_offload = True
                 except Exception:
                     # If we can't check VRAM, default to CPU offloading for safety
@@ -413,12 +413,8 @@ class QwenImageEditAdapter(ModelAdapterBase):
             if self.config.attention_backend != "default":
                 try:
                     if hasattr(self.pipe, "transformer"):
-                        self.pipe.transformer.set_attention_backend(
-                            self.config.attention_backend
-                        )
-                        logger.info(
-                            f"Set attention backend to: {self.config.attention_backend}"
-                        )
+                        self.pipe.transformer.set_attention_backend(self.config.attention_backend)
+                        logger.info(f"Set attention backend to: {self.config.attention_backend}")
                 except Exception as e:
                     logger.warning(
                         f"Could not set attention backend: {e}. Continuing with default."
@@ -494,10 +490,10 @@ class QwenImageEditAdapter(ModelAdapterBase):
         self,
         input_image: Image.Image | list[Image.Image],
         instruction: str,
-        num_inference_steps: Optional[int] = None,
+        num_inference_steps: int | None = None,
         guidance_scale: float = 1.0,
         true_cfg_scale: float = 4.0,
-        seed: Optional[int] = None,
+        seed: int | None = None,
         negative_prompt: str = " ",
     ) -> Image.Image:
         """Edit or composite image(s) based on a natural language instruction.
@@ -600,8 +596,7 @@ class QwenImageEditAdapter(ModelAdapterBase):
             image = output.images[0]
 
             logger.info(
-                f"Image edited successfully in {inference_time:.2f}s. "
-                f"Output size: {image.size}"
+                f"Image edited successfully in {inference_time:.2f}s. " f"Output size: {image.size}"
             )
 
             return image
@@ -618,12 +613,12 @@ class QwenImageEditAdapter(ModelAdapterBase):
         self,
         input_image: Image.Image,
         instruction: str,
-        num_inference_steps: Optional[int] = None,
+        num_inference_steps: int | None = None,
         guidance_scale: float = 1.0,
         true_cfg_scale: float = 4.0,
-        seed: Optional[int] = None,
+        seed: int | None = None,
         negative_prompt: str = " ",
-        output_path: Optional[Path] = None,
+        output_path: Path | None = None,
     ) -> tuple[Image.Image, Path]:
         """Edit an image and save it to disk with plugin hooks.
 
@@ -689,11 +684,14 @@ class QwenImageEditAdapter(ModelAdapterBase):
         # Call plugin hooks for generation complete
         for plugin in self.plugins:
             if hasattr(plugin, "on_generate_complete"):
-                edited_image = plugin.on_generate_complete(
-                    adapter=self,
-                    image=edited_image,
-                    instruction=instruction,
-                ) or edited_image
+                edited_image = (
+                    plugin.on_generate_complete(
+                        adapter=self,
+                        image=edited_image,
+                        instruction=instruction,
+                    )
+                    or edited_image
+                )
 
         # Determine output path
         if output_path is None:
@@ -701,10 +699,7 @@ class QwenImageEditAdapter(ModelAdapterBase):
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             # Use first 30 chars of instruction, sanitized
             instruction_prefix = (
-                instruction[:30]
-                .replace(" ", "_")
-                .replace("/", "_")
-                .replace("\\", "_")
+                instruction[:30].replace(" ", "_").replace("/", "_").replace("\\", "_")
             )
             filename = f"qwen_edit_{timestamp}_{instruction_prefix}.png"
             output_path = self.config.outputs_dir / filename

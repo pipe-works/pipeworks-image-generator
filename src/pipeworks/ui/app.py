@@ -149,7 +149,8 @@ def create_generation_tab(ui_state):
             with gr.Group(visible=False) as image_edit_group:
                 gr.Markdown(
                     "### Image Editing\n"
-                    "*Upload 1-3 images to edit or composite. Examples: character + accessory, person + scene*"
+                    "*Upload 1-3 images to edit or composite. "
+                    "Examples: character + accessory, person + scene*"
                 )
                 with gr.Row():
                     input_image_1 = gr.Image(
@@ -172,7 +173,11 @@ def create_generation_tab(ui_state):
                     )
                 instruction_input = gr.Textbox(
                     label="Editing Instruction",
-                    placeholder="Describe the composition or changes (e.g., 'character is wearing the hat', 'person in front of the background')...",
+                    placeholder=(
+                        "Describe the composition or changes "
+                        "(e.g., 'character is wearing the hat', "
+                        "'person in front of the background')..."
+                    ),
                     lines=3,
                     value="the character is wearing the hat",
                     info="Natural language instruction for editing/compositing the images",
@@ -509,7 +514,9 @@ def create_generation_tab(ui_state):
 
         Now includes condition text concatenation for Start 2 and Start 3.
         """
-        # Split values into segment groups (9 values each: text, path, file, mode, line, range_end, count, dynamic, sequential_start_line)
+        # Split values into segment groups
+        # (9 values each: text, path, file, mode, line, range_end, count, dynamic,
+        # sequential_start_line)
         start_1_values = list(values[0:9])
 
         # Start 2 with conditions (3 condition values + 9 segment values)
@@ -534,7 +541,8 @@ def create_generation_tab(ui_state):
         state = values[87]
 
         # Concatenate condition text with Start 2 text if condition is enabled
-        # Show the condition in the prompt preview (even if dynamic - it will be regenerated during generation)
+        # Show the condition in the prompt preview (even if dynamic - it will be
+        # regenerated during generation)
         if condition_type_2_val != "None" and condition_text_2_val:
             # Condition text comes first, then user text (if any)
             original_text = start_2_values[0]  # First value is text
@@ -696,7 +704,9 @@ def create_generation_tab(ui_state):
         seed = values[10]
         use_random_seed = values[11]
 
-        # Segment values (9 values each: text, path, file, mode, line, range_end, count, dynamic, sequential_start_line)
+        # Segment values
+        # (9 values each: text, path, file, mode, line, range_end, count, dynamic,
+        # sequential_start_line)
         # Start 1 (no conditions)
         start_1_values = list(values[12:21])
 

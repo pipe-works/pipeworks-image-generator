@@ -134,9 +134,7 @@ class ZImageTurboAdapter(ModelAdapterBase):
     model_type = "text-to-image"
     version = "1.0.0"
 
-    def __init__(
-        self, config: PipeworksConfig, plugins: list[PluginBase] | None = None
-    ) -> None:
+    def __init__(self, config: PipeworksConfig, plugins: list[PluginBase] | None = None) -> None:
         """Initialize the Z-Image-Turbo adapter.
 
         Args:
@@ -148,9 +146,7 @@ class ZImageTurboAdapter(ModelAdapterBase):
         self._model_loaded = False
 
         # Get model ID from config (should be in PIPEWORKS_ZIMAGE_MODEL_ID env var)
-        self.model_id = getattr(
-            config, "zimage_model_id", "Tongyi-MAI/Z-Image-Turbo"
-        )
+        self.model_id = getattr(config, "zimage_model_id", "Tongyi-MAI/Z-Image-Turbo")
         logger.info(f"Configured Z-Image-Turbo with model: {self.model_id}")
 
     def load_model(self) -> None:
@@ -223,12 +219,8 @@ class ZImageTurboAdapter(ModelAdapterBase):
 
             # Use alternative attention backend (e.g., Flash-Attention-2)
             if self.config.attention_backend != "default":
-                self.pipe.transformer.set_attention_backend(
-                    self.config.attention_backend
-                )
-                logger.info(
-                    f"Set attention backend to: {self.config.attention_backend}"
-                )
+                self.pipe.transformer.set_attention_backend(self.config.attention_backend)
+                logger.info(f"Set attention backend to: {self.config.attention_backend}")
 
             # Compile model with torch.compile for faster inference
             # First run is slower, subsequent runs are faster
@@ -296,9 +288,7 @@ class ZImageTurboAdapter(ModelAdapterBase):
             )
         guidance_scale = 0.0
 
-        logger.info(
-            f"Generating image: {width}x{height}, steps={num_inference_steps}, seed={seed}"
-        )
+        logger.info(f"Generating image: {width}x{height}, steps={num_inference_steps}, seed={seed}")
         logger.info(f"Prompt: {prompt}")
 
         # Create generator for reproducibility

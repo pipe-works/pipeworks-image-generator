@@ -31,7 +31,8 @@ def switch_model_handler(
         state: UI state
 
     Returns:
-        Tuple of (status_message, image_edit_group_update, text_to_image_group_update, updated_state)
+        Tuple of (status_message, image_edit_group_update, text_to_image_group_update,
+            updated_state)
     """
     try:
         logger.info(f"UI requesting model switch to: {model_name}")
@@ -213,7 +214,8 @@ def generate_image(
             if not input_images or len(input_images) == 0:
                 error_msg = (
                     f"❌ **Missing Input Image**\n\n"
-                    f"The model **{state.current_model_name}** requires at least one input image.\n\n"
+                    f"The model **{state.current_model_name}** requires at least one "
+                    f"input image.\n\n"
                     f"Please upload an image above to edit."
                 )
                 return [], error_msg, str(seed), state
@@ -229,7 +231,8 @@ def generate_image(
             if not instruction or not instruction.strip():
                 error_msg = (
                     "❌ **Missing Editing Instruction**\n\n"
-                    "Please provide an instruction describing how you want to edit/composite the images."
+                    "Please provide an instruction describing how you want to "
+                    "edit/composite the images."
                 )
                 return [], error_msg, str(seed), state
         else:
@@ -317,7 +320,8 @@ def generate_image(
                 if has_dynamic or condition_dynamic_2 or condition_dynamic_3:
                     try:
                         # Pass run index for Sequential mode support
-                        # Use current_start_2 and current_start_3 (which may have dynamic conditions prepended)
+                        # Use current_start_2 and current_start_3 (which may have dynamic
+                        # conditions prepended)
                         current_prompt = build_combined_prompt(
                             start_1,
                             current_start_2,
