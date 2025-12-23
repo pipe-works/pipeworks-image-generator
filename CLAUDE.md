@@ -59,6 +59,19 @@ pytest -vv --showlocals
 **Test Coverage:** The project maintains 50%+ overall coverage, with core business logic (models, validation, state, components) at 93-100% coverage. The UI glue code in `app.py` is excluded from coverage as it's difficult to unit test.
 
 ### Code Quality
+
+**Automatic Formatting (Recommended):**
+```bash
+# Install pre-commit hooks (one-time setup)
+pip install pre-commit
+pre-commit install
+
+# Now ruff and black will auto-fix on every commit!
+# To run manually on all files:
+pre-commit run --all-files
+```
+
+**Manual Formatting:**
 ```bash
 # Check linting (ruff)
 ruff check src/
@@ -81,6 +94,7 @@ mypy src/pipeworks/ui/ --ignore-missing-imports
 - Target version: Python 3.12
 - Black formatter for consistent style
 - Ruff for linting (rules: E, F, I, N, W, UP)
+- **Pre-commit hooks enabled** - auto-fixes on commit
 
 ### CI/CD
 The project uses GitHub Actions for CI on `main` and `develop` branches:

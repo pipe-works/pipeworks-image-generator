@@ -93,10 +93,14 @@ jobs:
     - name: Run ruff
       run: |
         ruff check src/
+        echo ""
+        echo "💡 To auto-fix locally, run: ruff check src/ --fix"
 
-    - name: Run black (check only)
+    - name: Run black
       run: |
-        black --check src/
+        black --check --diff src/
+        echo ""
+        echo "💡 To auto-fix locally, run: black src/"
 
     - name: Run mypy
       run: |
