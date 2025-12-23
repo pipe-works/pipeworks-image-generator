@@ -110,7 +110,9 @@ class TestInitializeUIState:
             MockPB.assert_called_once()
 
     def test_initialize_loads_model(self, test_config):
-        """Test that model loading is attempted."""
+        """Test that model loading is attempted (when not in offline mode)."""
+        import os
+
         state = UIState()
 
         with (
@@ -121,6 +123,7 @@ class TestInitializeUIState:
             patch("pipeworks.ui.state.FavoritesDB"),
             patch("pipeworks.ui.state.CatalogManager"),
             patch("pipeworks.ui.state.config", test_config),
+            patch.dict(os.environ, {"HF_HUB_OFFLINE": "0"}),  # Ensure not in offline mode
         ):
             mock_adapter = Mock()
             mock_registry.instantiate.return_value = mock_adapter
@@ -152,7 +155,9 @@ class TestInitializeUIState:
             assert result.model_adapter is mock_adapter
 
     def test_initialize_loads_tokenizer(self, test_config):
-        """Test that tokenizer loading is attempted."""
+        """Test that tokenizer loading is attempted (when not in offline mode)."""
+        import os
+
         state = UIState()
 
         with (
@@ -163,6 +168,7 @@ class TestInitializeUIState:
             patch("pipeworks.ui.state.FavoritesDB"),
             patch("pipeworks.ui.state.CatalogManager"),
             patch("pipeworks.ui.state.config", test_config),
+            patch.dict(os.environ, {"HF_HUB_OFFLINE": "0"}),  # Ensure not in offline mode
         ):
             mock_registry.instantiate.return_value = Mock()
             mock_tok = Mock()

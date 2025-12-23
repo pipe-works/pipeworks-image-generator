@@ -53,14 +53,17 @@ See Also
 import logging
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import torch
-from diffusers import ZImagePipeline
 from PIL import Image
 
 from pipeworks.core.config import PipeworksConfig
 from pipeworks.core.model_adapters import ModelAdapterBase, model_registry
 from pipeworks.plugins.base import PluginBase
+
+if TYPE_CHECKING:
+    from diffusers import ZImagePipeline
 
 logger = logging.getLogger(__name__)
 
@@ -183,6 +186,9 @@ class ZImageTurboAdapter(ModelAdapterBase):
         logger.info(f"Loading Z-Image-Turbo model {self.model_id}...")
 
         try:
+            # Import diffusers only when actually loading the model (lazy import)
+            from diffusers import ZImagePipeline
+
             # Map dtype string to torch dtype enum
             # bfloat16 is recommended for best quality/performance balance
             dtype_map = {

@@ -56,26 +56,37 @@ def initialize_ui_state(state: UIState | None = None, model_name: str | None = N
     try:
         # Initialize model adapter
         if state.model_adapter is None:
+            import os
+
             logger.info(f"Initializing model adapter: {state.current_model_name}")
             state.model_adapter = model_registry.instantiate(
                 state.current_model_name, config, plugins=[]
             )
-            # Pre-load model
-            try:
-                state.model_adapter.load_model()
-                logger.info("Model pre-loaded successfully")
-            except Exception as e:
-                logger.error(f"Failed to pre-load model: {e}")
-                logger.warning("Model will be loaded on first generation attempt")
+            # Pre-load model (skip in offline mode)
+            if os.environ.get("HF_HUB_OFFLINE") != "1":
+                try:
+                    state.model_adapter.load_model()
+                    logger.info("Model pre-loaded successfully")
+                except Exception as e:
+                    logger.error(f"Failed to pre-load model: {e}")
+                    logger.warning("Model will be loaded on first generation attempt")
+            else:
+                logger.info("Skipping model pre-load (HF_HUB_OFFLINE=1)")
 
         # Initialize tokenizer analyzer
         if state.tokenizer_analyzer is None:
+            import os
+
             logger.info("Initializing TokenizerAnalyzer")
             state.tokenizer_analyzer = TokenizerAnalyzer(
                 model_id=config.model_id, cache_dir=config.models_dir
             )
-            state.tokenizer_analyzer.load()
-            logger.info("TokenizerAnalyzer loaded successfully")
+            # Skip loading in offline mode (for tests or when HF is unavailable)
+            if os.environ.get("HF_HUB_OFFLINE") != "1":
+                state.tokenizer_analyzer.load()
+                logger.info("TokenizerAnalyzer loaded successfully")
+            else:
+                logger.info("Skipping TokenizerAnalyzer load (HF_HUB_OFFLINE=1)")
 
         # Initialize prompt builder
         if state.prompt_builder is None:
