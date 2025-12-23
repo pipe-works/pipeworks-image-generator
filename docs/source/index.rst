@@ -56,13 +56,13 @@ Basic Usage
 
 .. code-block:: python
 
-   from pipeworks import ImageGenerator
+   from pipeworks import model_registry, config
 
-   # Initialize generator
-   generator = ImageGenerator()
+   # Initialize adapter
+   adapter = model_registry.instantiate("Z-Image-Turbo", config)
 
    # Generate image
-   image = generator.generate(
+   image = adapter.generate(
        prompt="a pale purple goblin in a dark tavern",
        width=1024,
        height=1024,

@@ -45,7 +45,7 @@ The configuration automatically creates required directories on initialization:
 Z-Image-Turbo Constraints
 --------------------------
 Important constraints for Z-Image-Turbo model:
-- guidance_scale MUST be 0.0 (enforced in pipeline.py)
+- guidance_scale MUST be 0.0 (enforced in adapters/zimage_turbo.py)
 - Recommended num_inference_steps: 9 (results in 8 DiT forwards)
 - Optimal dtype: bfloat16 (best quality/performance balance)
 - Device: cuda preferred, falls back to cpu
@@ -180,7 +180,7 @@ class PipeworksConfig(BaseSettings):
         description="Default model adapter to use (Z-Image-Turbo, Qwen-Image-Edit, etc.)",
     )
 
-    # Legacy model settings (for backward compatibility with ImageGenerator)
+    # Z-Image-Turbo model settings
     model_id: str = Field(
         default="Tongyi-MAI/Z-Image-Turbo",
         description="[LEGACY] HuggingFace model ID for image generation",

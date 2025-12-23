@@ -156,7 +156,7 @@ class WorkflowBase(ABC):
     def generator(self) -> "ModelAdapterBase":
         """Backward compatibility property.
 
-        Returns the model adapter (which has similar interface to old ImageGenerator).
+        Returns the model adapter.
 
         .. deprecated:: 1.0.0
            Use :attr:`model_adapter` instead.

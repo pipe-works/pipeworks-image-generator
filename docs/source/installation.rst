@@ -72,10 +72,10 @@ Verify your installation:
 
 .. code-block:: python
 
-   from pipeworks import ImageGenerator
+   from pipeworks import model_registry, config
 
    # This should print version info
-   generator = ImageGenerator()
+   adapter = model_registry.instantiate("Z-Image-Turbo", config)
    print("Pipeworks installed successfully!")
 
 Troubleshooting

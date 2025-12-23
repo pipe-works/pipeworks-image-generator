@@ -4,7 +4,6 @@ This module provides the core components for the Pipeworks Image Generator:
 
 - **Model Adapters**: Flexible multi-model support system
 - **model_registry**: Registry for discovering and instantiating model adapters
-- **ImageGenerator**: Legacy pipeline wrapper (use model adapters instead)
 - **PipeworksConfig**: Configuration management using Pydantic Settings
 - **config**: Global configuration instance (loads from environment variables)
 
@@ -26,47 +25,53 @@ The core module follows a layered architecture:
    - Plugin lifecycle integration
    - Registry pattern for model discovery
 
-3. **Legacy Pipeline Layer** (pipeline.py):
-   - Original Z-Image-Turbo wrapper (deprecated in favor of adapters)
-   - Maintained for backward compatibility
-
-4. **Support Utilities**:
+3. **Support Utilities**:
    - prompt_builder.py: File-based prompt construction
    - tokenizer.py: Token analysis for prompts
    - gallery_browser.py: Image browsing and metadata display
    - favorites_db.py: SQLite-based favorites tracking
    - catalog_manager.py: Archive management for favorited images
+   - character_conditions.py: Procedural character generation
+   - facial_conditions.py: Facial signal generation (experimental)
 
 Usage Example
 -------------
-Using model adapters (recommended):
+Text-to-image generation:
 
     from pipeworks.core import model_registry, config
 
-    # Text-to-image generation
+    # Instantiate Z-Image-Turbo adapter
     adapter = model_registry.instantiate("Z-Image-Turbo", config)
+
+    # Generate and save image
     image, path = adapter.generate_and_save(
-        prompt="a beautiful landscape",
+        prompt="a serene mountain landscape at sunset",
+        width=1024,
+        height=1024,
+        num_inference_steps=9,
         seed=42
     )
+    print(f"Saved to: {path}")
 
-    # Image editing
+Image editing:
+
+    from pipeworks.core import model_registry, config
+    from PIL import Image
+
+    # Instantiate Qwen-Image-Edit adapter
     editor = model_registry.instantiate("Qwen-Image-Edit", config)
+
+    # Load base image
+    base_image = Image.open("character.png")
+
+    # Edit and save
     edited, path = editor.generate_and_save(
         input_image=base_image,
-        instruction="change sky to sunset",
+        instruction="change the sky to sunset colors",
+        num_inference_steps=40,
         seed=42
     )
-
-Legacy usage (backward compatible):
-
-    from pipeworks.core import ImageGenerator
-
-    generator = ImageGenerator()
-    image, path = generator.generate_and_save(
-        prompt="a beautiful landscape",
-        seed=42
-    )
+    print(f"Saved to: {path}")
 
 See Also
 --------
@@ -80,12 +85,12 @@ See Also
 from pipeworks.core.adapters import QwenImageEditAdapter, ZImageTurboAdapter  # noqa: F401
 from pipeworks.core.config import PipeworksConfig, config
 from pipeworks.core.model_adapters import ModelAdapterBase, model_registry
-from pipeworks.core.pipeline import ImageGenerator
 
 __all__ = [
-    "ImageGenerator",  # Legacy
     "ModelAdapterBase",
     "model_registry",
     "PipeworksConfig",
     "config",
+    "ZImageTurboAdapter",
+    "QwenImageEditAdapter",
 ]

@@ -98,19 +98,29 @@ The project uses GitHub Actions for CI on `main` and `develop` branches:
 src/pipeworks/
 ├── core/              # Core generation engine
 │   ├── config.py      # Pydantic configuration (env-based)
-│   ├── pipeline.py    # ImageGenerator class (Z-Image-Turbo wrapper)
+│   ├── model_adapters.py  # Multi-model adapter system + registry
+│   ├── adapters/      # Model-specific implementations
+│   │   ├── zimage_turbo.py  # Z-Image-Turbo text-to-image adapter
+│   │   └── qwen_image_edit.py # Qwen-Image-Edit editing adapter
 │   ├── prompt_builder.py  # File-based prompt construction
-│   └── tokenizer.py   # Tokenization analysis utilities
+│   ├── tokenizer.py   # Tokenization analysis utilities
+│   ├── character_conditions.py  # Procedural character generation
+│   ├── facial_conditions.py     # Facial signal generation
+│   ├── gallery_browser.py  # Gallery browsing and filtering
+│   ├── favorites_db.py     # SQLite favorites database
+│   └── catalog_manager.py  # Archive management
 ├── plugins/           # Plugin system
 │   ├── base.py        # PluginBase + PluginRegistry
 │   └── save_metadata.py  # Built-in metadata export plugin
-├── workflows/         # Workflow system (future expansion)
+├── workflows/         # Workflow system
 │   ├── base.py        # WorkflowBase + WorkflowRegistry
-│   └── *.py           # Specific workflow implementations
+│   ├── character.py   # Character generation workflow
+│   ├── game_asset.py  # Game asset workflow
+│   └── city_map.py    # City/map generation workflow
 └── ui/                # Gradio web interface
     ├── app.py         # Main UI layout and event wiring
     ├── components.py  # Reusable Gradio component builders
-    ├── handlers.py    # Event handler functions
+    ├── handlers/      # Event handler business logic (5 modules)
     ├── models.py      # Pydantic models for UI state
     ├── state.py       # UI state management
     ├── validation.py  # Input validation logic
@@ -185,18 +195,18 @@ This separation makes the codebase more testable and maintainable.
 
 ### Critical Implementation Details
 
-#### ImageGenerator Lifecycle
+#### Model Adapter Lifecycle
 ```python
-from pipeworks import ImageGenerator
+from pipeworks import model_registry, config
 
-# Initialize (doesn't load model yet)
-generator = ImageGenerator()
+# Initialize adapter (doesn't load model yet)
+adapter = model_registry.instantiate("Z-Image-Turbo", config)
 
 # Load model (lazy loading)
-generator.load_model()  # Called automatically on first generate()
+adapter.load_model()  # Called automatically on first generate()
 
 # Generate image
-image = generator.generate(
+image = adapter.generate(
     prompt="...",
     width=1024,
     height=1024,
@@ -205,23 +215,24 @@ image = generator.generate(
 )
 
 # Generate and save (runs plugin hooks)
-image, path = generator.generate_and_save(prompt="...", seed=42)
+image, path = adapter.generate_and_save(prompt="...", seed=42)
 
 # Cleanup
-generator.unload_model()
+adapter.unload_model()
 ```
 
 **Plugin Injection:**
 ```python
 # Pass plugins during initialization
+from pipeworks import model_registry, config
 from pipeworks.plugins.base import plugin_registry
 
 metadata_plugin = plugin_registry.instantiate("Save Metadata")
-generator = ImageGenerator(plugins=[metadata_plugin])
+adapter = model_registry.instantiate("Z-Image-Turbo", config, plugins=[metadata_plugin])
 ```
 
 #### Z-Image-Turbo Specifics
-- **Guidance Scale**: Must be 0.0 for Turbo models (enforced in pipeline.py)
+- **Guidance Scale**: Must be 0.0 for Turbo models (enforced in adapters/zimage_turbo.py)
 - **Optimal Steps**: 9 inference steps (config default)
 - **Dtype**: bfloat16 recommended (config default)
 - **Device**: cuda preferred, falls back to cpu
@@ -355,7 +366,7 @@ PIPEWORKS_MY_SETTING=default_value
 
 ## Important Constraints
 
-1. **Z-Image-Turbo requires guidance_scale=0.0** - This is enforced in pipeline.py with a warning
+1. **Z-Image-Turbo requires guidance_scale=0.0** - This is enforced in adapters/zimage_turbo.py with a warning
 2. **Models directory is large** (50GB+) - Always in `.gitignore`
 3. **UI state must be returned** from handlers to maintain session consistency
 4. **Plugin hooks are optional** - Not all plugins need to implement all hooks

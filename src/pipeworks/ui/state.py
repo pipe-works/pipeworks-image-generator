@@ -68,8 +68,6 @@ def initialize_ui_state(state: UIState | None = None, model_name: str | None = N
                 logger.error(f"Failed to pre-load model: {e}")
                 logger.warning("Model will be loaded on first generation attempt")
 
-        # Maintain backward compatibility: set generator as alias to model_adapter
-        state.generator = state.model_adapter
 
         # Initialize tokenizer analyzer
         if state.tokenizer_analyzer is None:
@@ -134,10 +132,6 @@ def update_generator_plugins(state: UIState) -> UIState:
     # Update model adapter's plugin list
     state.model_adapter.plugins = enabled_plugins
     logger.info(f"Updated model adapter with {len(enabled_plugins)} active plugins")
-
-    # Maintain backward compatibility
-    if state.generator is not None:
-        state.generator.plugins = enabled_plugins
 
     return state
 

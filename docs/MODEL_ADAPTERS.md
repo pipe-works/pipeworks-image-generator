@@ -360,46 +360,6 @@ Model adapters should call these plugin hooks in `generate_and_save()`:
 3. **on_before_save(image, path, params)**: Before saving (can modify image/path)
 4. **on_after_save(image, path, params)**: After saving (e.g., metadata export)
 
-## Migration from Legacy ImageGenerator
-
-### Old Code (Legacy)
-
-```python
-from pipeworks.core import ImageGenerator, config
-
-generator = ImageGenerator(config)
-image, path = generator.generate_and_save(
-    prompt="test",
-    seed=42
-)
-```
-
-### New Code (Model Adapters)
-
-```python
-from pipeworks.core import model_registry, config
-
-adapter = model_registry.instantiate("Z-Image-Turbo", config)
-image, path = adapter.generate_and_save(
-    prompt="test",
-    seed=42
-)
-```
-
-### Backward Compatibility
-
-The `ImageGenerator` class is still available for backward compatibility, but internally it now uses the Z-Image-Turbo adapter. New code should use the model adapter system directly.
-
-```python
-# This still works but is deprecated
-from pipeworks.core import ImageGenerator
-generator = ImageGenerator(config)
-
-# Prefer this instead
-from pipeworks.core import model_registry
-adapter = model_registry.instantiate("Z-Image-Turbo", config)
-```
-
 ## Available Models
 
 ### Z-Image-Turbo

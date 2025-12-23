@@ -89,13 +89,13 @@ Integration with Image Generation
 
 .. code-block:: python
 
-   from pipeworks import ImageGenerator
+   from pipeworks import model_registry, config
    from pipeworks.core.character_conditions import (
        generate_condition,
        condition_to_prompt
    )
 
-   generator = ImageGenerator()
+   adapter = model_registry.instantiate("Z-Image-Turbo", config)
 
    # Generate character condition
    condition = generate_condition(seed=42)
@@ -103,7 +103,7 @@ Integration with Image Generation
 
    # Use in prompt
    full_prompt = f"{condition_text}, goblin warrior in dark tavern"
-   image = generator.generate(prompt=full_prompt, seed=42)
+   image = adapter.generate(prompt=full_prompt, seed=42)
 
 Dynamic Conditions
 ^^^^^^^^^^^^^^^^^

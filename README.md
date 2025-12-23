@@ -117,32 +117,54 @@ The web interface provides two main tabs:
 
 ### Programmatic Usage
 
-#### Basic Generation
+#### Basic Text-to-Image Generation
 ```python
-from pipeworks import ImageGenerator
+from pipeworks import model_registry, config
 
-# Initialize generator
-generator = ImageGenerator()
+# Instantiate Z-Image-Turbo adapter
+adapter = model_registry.instantiate("Z-Image-Turbo", config)
 
 # Generate image
-image = generator.generate(
+image = adapter.generate(
     prompt="A serene mountain landscape at sunset",
     width=1024,
     height=1024,
+    num_inference_steps=9,
     seed=42,
 )
 
 # Generate and save
-image, path = generator.generate_and_save(
+image, path = adapter.generate_and_save(
     prompt="A cute cat sleeping on a cozy blanket",
     seed=12345,
 )
 print(f"Saved to: {path}")
 ```
 
+#### Image Editing with Qwen
+```python
+from pipeworks import model_registry, config
+from PIL import Image
+
+# Instantiate Qwen-Image-Edit adapter
+editor = model_registry.instantiate("Qwen-Image-Edit", config)
+
+# Load base image
+base_image = Image.open("character.png")
+
+# Edit and save
+edited, path = editor.generate_and_save(
+    input_image=base_image,
+    instruction="change the character's hair color to blue",
+    num_inference_steps=40,
+    seed=42
+)
+print(f"Saved to: {path}")
+```
+
 #### Using Plugins
 ```python
-from pipeworks import ImageGenerator
+from pipeworks import model_registry, config
 from pipeworks.plugins.base import plugin_registry
 
 # Instantiate a plugin
@@ -152,11 +174,11 @@ metadata_plugin = plugin_registry.instantiate(
     pretty_format=True
 )
 
-# Create generator with plugin
-generator = ImageGenerator(plugins=[metadata_plugin])
+# Create adapter with plugin
+adapter = model_registry.instantiate("Z-Image-Turbo", config, plugins=[metadata_plugin])
 
 # Generate - plugin hooks will run automatically
-image, path = generator.generate_and_save(
+image, path = adapter.generate_and_save(
     prompt="A beautiful landscape",
     seed=42
 )
@@ -191,6 +213,7 @@ print(f"Generated prompt: {prompt}")
 
 #### Using Workflows
 ```python
+from pipeworks import model_registry, config
 from pipeworks.workflows.base import workflow_registry
 
 # List available workflows
@@ -206,9 +229,9 @@ prompt = character_workflow.build_prompt(
     style="fantasy"
 )
 
-# Use with generator
-generator = ImageGenerator()
-image = generator.generate(prompt=prompt, seed=42)
+# Use with adapter
+adapter = model_registry.instantiate("Z-Image-Turbo", config)
+image = adapter.generate(prompt=prompt, seed=42)
 ```
 
 ## Architecture
@@ -218,9 +241,14 @@ pipeworks-image-generator/
 ├── src/pipeworks/
 │   ├── core/                    # Core generation engine
 │   │   ├── config.py            # Pydantic configuration (env-based)
-│   │   ├── pipeline.py          # ImageGenerator class (Z-Image-Turbo wrapper)
+│   │   ├── model_adapters.py   # Multi-model adapter system + registry
+│   │   ├── adapters/            # Model-specific implementations
+│   │   │   ├── zimage_turbo.py  # Z-Image-Turbo text-to-image adapter
+│   │   │   └── qwen_image_edit.py # Qwen-Image-Edit editing adapter
 │   │   ├── prompt_builder.py   # File-based prompt construction
 │   │   ├── tokenizer.py         # Tokenization analysis utilities
+│   │   ├── character_conditions.py # Procedural character generation
+│   │   ├── facial_conditions.py    # Facial signal generation
 │   │   ├── gallery_browser.py  # Gallery browsing and filtering
 │   │   ├── favorites_db.py     # SQLite favorites database
 │   │   └── catalog_manager.py  # Archive management
@@ -250,12 +278,13 @@ pipeworks-image-generator/
 
 ### Key Architectural Patterns
 
-1. **Configuration System**: Pydantic Settings with environment variable loading (`PIPEWORKS_*` prefix)
-2. **Plugin Architecture**: Extensible hooks at four lifecycle points (start, complete, before_save, after_save)
-3. **Workflow System**: Encapsulates generation strategies for specific content types
-4. **UI State Management**: Session-based state using Gradio's `gr.State` with Pydantic models
-5. **Prompt Builder**: File-based prompt construction with multiple selection modes and caching
-6. **Separation of Concerns**: UI layout (app.py), business logic (handlers/), data models (models.py), validation (validation.py)
+1. **Multi-Model Adapter System**: Unified interface for different AI models (text-to-image, image-editing) via `ModelAdapterBase` and `model_registry`
+2. **Configuration System**: Pydantic Settings with environment variable loading (`PIPEWORKS_*` prefix)
+3. **Plugin Architecture**: Extensible hooks at four lifecycle points (start, complete, before_save, after_save)
+4. **Workflow System**: Encapsulates generation strategies for specific content types
+5. **UI State Management**: Session-based state using Gradio's `gr.State` with Pydantic models
+6. **Prompt Builder**: File-based prompt construction with multiple selection modes and caching
+7. **Separation of Concerns**: UI layout (app.py), business logic (handlers/), data models (models.py), validation (validation.py)
 
 ## How the Model Works: A Beginner's Guide
 
@@ -321,7 +350,7 @@ tokens = tokenizer.encode("a cute cat")
 - More steps ≠ better quality for Turbo models
 - Turbo models are optimized for this specific step count
 
-**In the code** (`core/pipeline.py` line 317-324):
+**In the code** (`core/adapters/zimage_turbo.py`):
 ```python
 output = self.pipe(
     prompt=prompt,
@@ -350,18 +379,19 @@ When you run Pipeworks, here's what happens behind the scenes:
 
 #### Stage 1: Initialization (Instant)
 ```python
-generator = ImageGenerator()
+from pipeworks import model_registry, config
+adapter = model_registry.instantiate("Z-Image-Turbo", config)
 ```
-- Creates the generator object
+- Creates the adapter object
 - Loads configuration from environment variables
 - **Model is NOT loaded yet** (lazy loading for efficiency)
 
 #### Stage 2: Model Download & Loading (First run: 5-10 minutes, Subsequent: 10-30 seconds)
 ```python
-generator.load_model()  # Called automatically on first generate()
+adapter.load_model()  # Called automatically on first generate()
 ```
 
-**What gets loaded** (`core/pipeline.py` line 217-224):
+**What gets loaded** (`core/adapters/zimage_turbo.py`):
 1. **Pipeline from HuggingFace Hub** (~12GB download)
    - Tokenizer weights
    - Text encoder weights
@@ -408,7 +438,7 @@ image = generator.generate(prompt="a cat", seed=42)
 1. **`guidance_scale` MUST be 0.0**
    - Regular models use guidance_scale (1.0-20.0) to strengthen prompt adherence
    - Turbo models are distilled to work WITHOUT guidance
-   - Pipeworks automatically enforces this (`pipeline.py` line 298-303)
+   - Pipeworks automatically enforces this (`core/adapters/zimage_turbo.py`)
 
 2. **Optimal steps: 9**
    - Results in 8 DiT forward passes (optimal for distillation)
@@ -461,11 +491,11 @@ PIPEWORKS_TORCH_DTYPE=float32
 **Why it matters**:
 ```python
 # These will generate the SAME image:
-image1 = generator.generate(prompt="a cat", seed=42, width=1024)
-image2 = generator.generate(prompt="a cat", seed=42, width=1024)
+image1 = adapter.generate(prompt="a cat", seed=42, width=1024)
+image2 = adapter.generate(prompt="a cat", seed=42, width=1024)
 
 # This will generate a DIFFERENT image:
-image3 = generator.generate(prompt="a cat", seed=123, width=1024)
+image3 = adapter.generate(prompt="a cat", seed=123, width=1024)
 ```
 
 **Use cases**:
@@ -473,7 +503,7 @@ image3 = generator.generate(prompt="a cat", seed=123, width=1024)
 - Share reproducible results with others
 - Debug generation issues
 
-**In the code** (`pipeline.py` line 312-313):
+**In the code** (`core/adapters/zimage_turbo.py`):
 ```python
 generator = torch.Generator(device).manual_seed(seed)
 # Ensures deterministic noise initialization

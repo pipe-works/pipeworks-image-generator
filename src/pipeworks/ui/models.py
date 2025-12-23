@@ -125,8 +125,6 @@ class UIState:
         Current model adapter instance (ModelAdapterBase)
     current_model_name : str
         Name of the currently selected model adapter
-    generator : Any | None
-        [DEPRECATED] Legacy ImageGenerator instance (for backward compatibility)
     tokenizer_analyzer : Any | None
         TokenizerAnalyzer instance for prompt analysis
     prompt_builder : Any | None
@@ -141,12 +139,9 @@ class UIState:
         CatalogManager instance for archiving favorites
     """
 
-    # Model adapter (new architecture)
+    # Model adapter
     model_adapter: Any | None = None  # ModelAdapterBase instance
     current_model_name: str = "Z-Image-Turbo"  # Currently selected model
-
-    # Legacy generator (for backward compatibility)
-    generator: Any | None = None  # ImageGenerator instance (deprecated)
 
     # Core components
     tokenizer_analyzer: Any | None = None  # TokenizerAnalyzer instance

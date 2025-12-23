@@ -369,7 +369,7 @@ def generate_image(
 
                     # For multi-image, pass as list; for single image, can pass as single or list
                     if len(loaded_images) == 1:
-                        image, save_path = state.generator.generate_and_save(
+                        image, save_path = state.model_adapter.generate_and_save(
                             input_image=loaded_images[0],
                             instruction=current_instruction,
                             num_inference_steps=num_steps,
@@ -377,7 +377,7 @@ def generate_image(
                         )
                     else:
                         # Multi-image composition
-                        image, save_path = state.generator.generate_and_save(
+                        image, save_path = state.model_adapter.generate_and_save(
                             input_image=loaded_images,
                             instruction=current_instruction,
                             num_inference_steps=num_steps,
@@ -385,7 +385,7 @@ def generate_image(
                         )
                 else:
                     # Text-to-image workflow
-                    image, save_path = state.generator.generate_and_save(
+                    image, save_path = state.model_adapter.generate_and_save(
                         prompt=current_prompt,
                         width=width,
                         height=height,
@@ -400,7 +400,7 @@ def generate_image(
                 logger.info(f"Image {image_num}/{params.total_images} complete: {save_path}")
 
         # Create info text
-        active_plugin_names = [p.name for p in state.generator.plugins if p.enabled]
+        active_plugin_names = [p.name for p in state.model_adapter.plugins if p.enabled]
         plugins_info = (
             f"\n**Active Plugins:** {', '.join(active_plugin_names)}" if active_plugin_names else ""
         )
