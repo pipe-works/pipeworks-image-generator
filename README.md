@@ -1,5 +1,12 @@
 # Pipeworks Image Generator
 
+[![Test and Lint](https://github.com/aa-parky/pipeworks-image-generator/actions/workflows/ci.yml/badge.svg)](https://github.com/aa-parky/pipeworks-image-generator/actions/workflows/ci.yml)
+[![codecov](https://app.codecov.io/gh/aa-parky/pipeworks-image-generator/branch/main/graph/badge.svg)](https://app.codecov.io/gh/aa-parky/pipeworks-image-generator)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+
 Programmatic image generation with Z-Image-Turbo and an extensible plugin system.
 
 ## Overview
