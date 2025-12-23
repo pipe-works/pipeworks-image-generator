@@ -515,30 +515,30 @@ def create_generation_tab(ui_state):
         Now includes condition text concatenation for Start 2 and Start 3.
         """
         # Split values into segment groups
-        # (9 values each: text, path, file, mode, line, range_end, count, dynamic,
-        # sequential_start_line)
-        start_1_values = list(values[0:9])
+        # (11 values each: text, path, file, mode, line, range_end, count, dynamic,
+        # sequential_start_line, text_order, delimiter)
+        start_1_values = list(values[0:11])
 
-        # Start 2 with conditions (3 condition values + 9 segment values)
-        condition_type_2_val = values[9]
-        condition_text_2_val = values[10]
-        # Skip condition_dynamic_2 (index 11) - only used during generation, not preview
-        start_2_values = list(values[12:21])
+        # Start 2 with conditions (3 condition values + 11 segment values)
+        condition_type_2_val = values[11]
+        condition_text_2_val = values[12]
+        # Skip condition_dynamic_2 (index 13) - only used during generation, not preview
+        start_2_values = list(values[14:25])
 
-        # Start 3 with conditions (3 condition values + 9 segment values)
-        condition_type_3_val = values[21]
-        condition_text_3_val = values[22]
-        # Skip condition_dynamic_3 (index 23) - only used during generation, not preview
-        start_3_values = list(values[24:33])
+        # Start 3 with conditions (3 condition values + 11 segment values)
+        condition_type_3_val = values[25]
+        condition_text_3_val = values[26]
+        # Skip condition_dynamic_3 (index 27) - only used during generation, not preview
+        start_3_values = list(values[28:39])
 
         # Remaining segments
-        mid_1_values = values[33:42]
-        mid_2_values = values[42:51]
-        mid_3_values = values[51:60]
-        end_1_values = values[60:69]
-        end_2_values = values[69:78]
-        end_3_values = values[78:87]
-        state = values[87]
+        mid_1_values = values[39:50]
+        mid_2_values = values[50:61]
+        mid_3_values = values[61:72]
+        end_1_values = values[72:83]
+        end_2_values = values[83:94]
+        end_3_values = values[94:105]
+        state = values[105]
 
         # Concatenate condition text with Start 2 text if condition is enabled
         # Show the condition in the prompt preview (even if dynamic - it will be
@@ -705,31 +705,31 @@ def create_generation_tab(ui_state):
         use_random_seed = values[11]
 
         # Segment values
-        # (9 values each: text, path, file, mode, line, range_end, count, dynamic,
-        # sequential_start_line)
+        # (11 values each: text, path, file, mode, line, range_end, count, dynamic,
+        # sequential_start_line, text_order, delimiter)
         # Start 1 (no conditions)
-        start_1_values = list(values[12:21])
+        start_1_values = list(values[12:23])
 
-        # Start 2 with conditions (3 condition values + 9 segment values)
-        condition_type_2_val = values[21]
-        condition_text_2_val = values[22]
-        condition_dynamic_2_val = values[23]
-        start_2_values = list(values[24:33])
+        # Start 2 with conditions (3 condition values + 11 segment values)
+        condition_type_2_val = values[23]
+        condition_text_2_val = values[24]
+        condition_dynamic_2_val = values[25]
+        start_2_values = list(values[26:37])
 
-        # Start 3 with conditions (3 condition values + 9 segment values)
-        condition_type_3_val = values[33]
-        condition_text_3_val = values[34]
-        condition_dynamic_3_val = values[35]
-        start_3_values = list(values[36:45])
+        # Start 3 with conditions (3 condition values + 11 segment values)
+        condition_type_3_val = values[37]
+        condition_text_3_val = values[38]
+        condition_dynamic_3_val = values[39]
+        start_3_values = list(values[40:51])
 
         # Remaining segments
-        mid_1_values = values[45:54]
-        mid_2_values = values[54:63]
-        mid_3_values = values[63:72]
-        end_1_values = values[72:81]
-        end_2_values = values[81:90]
-        end_3_values = values[90:99]
-        state = values[99]
+        mid_1_values = values[51:62]
+        mid_2_values = values[62:73]
+        mid_3_values = values[73:84]
+        end_1_values = values[84:95]
+        end_2_values = values[95:106]
+        end_3_values = values[106:117]
+        state = values[117]
 
         # Concatenate condition text with Start 2 text if condition is enabled
         # BUT only if NOT dynamic (dynamic conditions are regenerated per-run inside generate_image)
