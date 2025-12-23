@@ -1,0 +1,31 @@
+Cottage
+Farmhouse
+Barn
+Storehouse
+Granary
+Bakery
+Smithy
+Carpenter’s workshop
+Weaver’s hut
+Tanner’s shed
+Mill
+Wellhouse
+Chapel
+Shrine
+Meeting hall
+Tavern
+Inn
+Stable
+Livestock pen
+Smokehouse
+Root cellar
+Guard hut
+Watch post
+Healer’s hut
+Herbalist’s hut
+Market shelter
+Storage shed
+Boat shed
+Fisher’s hut
+Pathside shelter
+Communal fire pit structure

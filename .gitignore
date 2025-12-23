@@ -220,12 +220,12 @@ models/
 *.ckpt
 
 # Input assets
-inputs/
-!inputs/.gitkeep
+/src/inputs/
+!/src/inputs/.gitkeep
 
 # Generated outputs
-outputs/
-!outputs/.gitkeep
+/src/outputs/
+!/src/outputs/.gitkeep
 
 # Gradio
 gradio_cached_examples/
