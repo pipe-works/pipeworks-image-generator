@@ -594,16 +594,31 @@ See `.env.example` for all available options.
 # Install with dev dependencies
 pip install -e ".[dev]"
 
-# Run tests (when implemented)
+# Install pre-commit hooks (IMPORTANT: Do this after cloning!)
+# This enables automatic code formatting and linting on every commit
+pre-commit install
+
+# (Optional) Run pre-commit on all files to verify setup
+pre-commit run --all-files
+
+# Run tests
 pytest
 
-# Format code
+# Format code manually (or let pre-commit do it automatically)
 black src/
 ruff check src/
 
 # Type checking
 mypy src/
 ```
+
+**Note**: Pre-commit hooks are NOT automatically installed when you clone the repository. You must run `pre-commit install` after cloning to enable automatic formatting, linting, and testing on every commit. This prevents committing code that doesn't meet quality standards.
+
+**What pre-commit will do**:
+- Auto-fix code formatting (Black, Ruff)
+- Check for large files, merge conflicts, YAML/TOML syntax
+- Run fast unit tests before commit
+- Reject commits that fail quality checkz
 
 ## System Requirements
 
