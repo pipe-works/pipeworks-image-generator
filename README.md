@@ -618,7 +618,7 @@ mypy src/
 - Auto-fix code formatting (Black, Ruff)
 - Check for large files, merge conflicts, YAML/TOML syntax
 - Run fast unit tests before commit
-- Reject commits that fail quality checkz
+- Reject commits that fail quality checks
 
 ## System Requirements
 
