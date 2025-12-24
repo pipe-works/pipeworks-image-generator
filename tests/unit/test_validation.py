@@ -247,12 +247,12 @@ class TestValidatePromptContent:
 
     def test_long_prompt_within_limit_passes(self):
         """Test that prompt at max length passes."""
-        long_prompt = "a" * 1000  # Default max length
+        long_prompt = "a" * 100000  # Default max length
         validate_prompt_content(long_prompt)  # Should not raise
 
     def test_prompt_too_long_raises(self):
         """Test that prompt exceeding max length raises ValidationError."""
-        long_prompt = "a" * 1001  # Over default max length
+        long_prompt = "a" * 100001  # Over default max length
 
         with pytest.raises(ValidationError, match="Prompt is too long"):
             validate_prompt_content(long_prompt)

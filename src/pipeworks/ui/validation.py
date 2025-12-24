@@ -156,12 +156,18 @@ def validate_segments(segments: tuple[SegmentConfig, ...], base_dir: Path, promp
             )
 
 
-def validate_prompt_content(prompt: str, max_length: int = 1000) -> None:
+def validate_prompt_content(prompt: str, max_length: int = 100000) -> None:
     """Validate prompt text content.
+
+    Note:
+        The max_length is intentionally very high (100,000 characters) because
+        character count is a poor proxy for token count. For example, a 1067
+        character prompt may only be 195 tokens. The actual token limit is
+        enforced by the model itself (typically 77-256 tokens depending on model).
 
     Args:
         prompt: Prompt text to validate
-        max_length: Maximum allowed prompt length
+        max_length: Maximum allowed prompt length (default: 100,000 characters)
 
     Raises:
         ValidationError: If prompt is too long or contains invalid content
