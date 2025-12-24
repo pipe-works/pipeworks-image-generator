@@ -74,7 +74,12 @@ class TestRefreshGallery:
         assert initialized_state.gallery_images == []
 
         # Refresh
-        images, state = refresh_gallery("", initialized_state)
+        gallery_update, state = refresh_gallery("", initialized_state)
+
+        # Should return gr.update() dict
+        assert isinstance(gallery_update, dict)
+        assert "value" in gallery_update
+        images = gallery_update["value"]
 
         # Should now have 3 images
         assert len(images) == 3
@@ -87,7 +92,7 @@ class TestRefreshGallery:
         initialized_state.gallery_selected_index = 1
 
         # Refresh
-        images, state = refresh_gallery("", initialized_state)
+        gallery_update, state = refresh_gallery("", initialized_state)
 
         # Selected index should be None after refresh
         assert state.gallery_selected_index is None
@@ -97,30 +102,30 @@ class TestRefreshGallery:
         outputs_dir = temp_dir / "outputs"
 
         # Initial refresh
-        images, state = refresh_gallery("", initialized_state)
-        assert len(images) == 3
+        gallery_update, state = refresh_gallery("", initialized_state)
+        assert len(gallery_update["value"]) == 3
 
         # Add a new image
         (outputs_dir / "image4.png").touch()
 
         # Refresh again
-        images, state = refresh_gallery("", state)
-        assert len(images) == 4
+        gallery_update, state = refresh_gallery("", state)
+        assert len(gallery_update["value"]) == 4
 
     def test_refresh_gallery_detects_removed_images(self, initialized_state, temp_dir):
         """Test that refresh_gallery detects removed images."""
         outputs_dir = temp_dir / "outputs"
 
         # Initial refresh
-        images, state = refresh_gallery("", initialized_state)
-        assert len(images) == 3
+        gallery_update, state = refresh_gallery("", initialized_state)
+        assert len(gallery_update["value"]) == 3
 
         # Remove an image
         (outputs_dir / "image1.png").unlink()
 
         # Refresh again
-        images, state = refresh_gallery("", state)
-        assert len(images) == 2
+        gallery_update, state = refresh_gallery("", state)
+        assert len(gallery_update["value"]) == 2
 
     def test_refresh_gallery_with_subdirectory(self, initialized_state, temp_dir):
         """Test refresh_gallery in a subdirectory."""
@@ -130,7 +135,8 @@ class TestRefreshGallery:
         (subdir / "subimage.png").touch()
 
         # Refresh in subdirectory
-        images, state = refresh_gallery("subfolder", initialized_state)
+        gallery_update, state = refresh_gallery("subfolder", initialized_state)
+        images = gallery_update["value"]
 
         assert len(images) == 1
         assert "subimage.png" in images[0]
@@ -143,14 +149,12 @@ class TestRefreshGallery:
         state.gallery_browser = None
         state.initialized = False
 
-        images, state = refresh_gallery("", state)
+        gallery_update, state = refresh_gallery("", state)
 
-        # Should return empty list when gallery_browser is None after initialization
-        assert images == []
+        # Should return gr.update() dict (may be empty)
+        assert isinstance(gallery_update, dict)
         # After calling handler, state will be initialized but gallery_browser may still be None
         # if initialization failed (which is expected when config is not set up properly)
-        # So we just check that images is empty
-        assert len(images) == 0
 
     def test_refresh_gallery_preserves_other_state(self, initialized_state):
         """Test that refresh_gallery preserves other state attributes."""
@@ -158,7 +162,7 @@ class TestRefreshGallery:
         initialized_state.gallery_filter = "favorites"
         initialized_state.gallery_root = "catalog"
 
-        images, state = refresh_gallery("", initialized_state)
+        gallery_update, state = refresh_gallery("", initialized_state)
 
         # Other attributes should be preserved
         assert state.gallery_filter == "favorites"
@@ -443,7 +447,10 @@ class TestInitializeGalleryBrowser:
         outputs_dir = temp_dir / "outputs"
 
         # Initial call should scan and find 3 images
-        dropdown, path, images, state = initialize_gallery_browser(initialized_state)
+        dropdown, path, gallery_update, state = initialize_gallery_browser(initialized_state)
+        assert isinstance(gallery_update, dict)
+        assert "value" in gallery_update
+        images = gallery_update["value"]
         assert len(images) == 3
         assert state.gallery_initialized is True
 
@@ -451,7 +458,8 @@ class TestInitializeGalleryBrowser:
         (outputs_dir / "image4.png").touch()
 
         # Call again - should rescan and find 4 images (not return cached 3)
-        dropdown, path, images, state = initialize_gallery_browser(state)
+        dropdown, path, gallery_update, state = initialize_gallery_browser(state)
+        images = gallery_update["value"]
         assert len(images) == 4, "Should rescan and find new image"
 
     def test_initialize_preserves_current_path(self, initialized_state, temp_dir):
@@ -467,7 +475,8 @@ class TestInitializeGalleryBrowser:
         initialized_state.gallery_current_path = "subfolder"
 
         # Initialize should use current path
-        dropdown, path, images, state = initialize_gallery_browser(initialized_state)
+        dropdown, path, gallery_update, state = initialize_gallery_browser(initialized_state)
+        images = gallery_update["value"]
         assert path == "subfolder"
         assert len(images) == 1
         assert "subimage.png" in images[0]
@@ -486,7 +495,8 @@ class TestGalleryHandlerIntegration:
         outputs_dir = temp_dir / "outputs"
 
         # Step 1: Refresh gallery
-        images, state = refresh_gallery("", initialized_state)
+        gallery_update, state = refresh_gallery("", initialized_state)
+        images = gallery_update["value"]
         assert len(images) == 3
         assert state.gallery_selected_index is None
 
@@ -504,7 +514,8 @@ class TestGalleryHandlerIntegration:
         outputs_dir = temp_dir / "outputs"
 
         # Refresh to populate
-        images, state = refresh_gallery("", initialized_state)
+        gallery_update, state = refresh_gallery("", initialized_state)
+        images = gallery_update["value"]
         state.gallery_images = images
 
         # Select image
@@ -515,7 +526,8 @@ class TestGalleryHandlerIntegration:
         assert button_label == "⭐ Unfavorite"
 
         # Refresh (should clear selection)
-        images, state = refresh_gallery("", state)
+        gallery_update, state = refresh_gallery("", state)
+        images = gallery_update["value"]
         assert state.gallery_selected_index is None
 
         # Image should still be favorited
@@ -527,7 +539,8 @@ class TestGalleryHandlerIntegration:
         outputs_dir = temp_dir / "outputs"
 
         # Initial state
-        images, state = refresh_gallery("", initialized_state)
+        gallery_update, state = refresh_gallery("", initialized_state)
+        images = gallery_update["value"]
         original_count = len(images)
 
         # Add new image
@@ -535,7 +548,8 @@ class TestGalleryHandlerIntegration:
         new_image.touch()
 
         # Refresh
-        images, state = refresh_gallery("", state)
+        gallery_update, state = refresh_gallery("", state)
+        images = gallery_update["value"]
         assert len(images) == original_count + 1
 
         # Mark new image as favorite

@@ -105,13 +105,22 @@ def select_gallery_image(
         # Get selected index from event
         selected_index = evt.index
 
+        logger.info(
+            f"Image selected: index={selected_index}, " f"total_images={len(state.gallery_images)}"
+        )
+
         # Check if we have images cached
         if not state.gallery_images or selected_index >= len(state.gallery_images):
+            logger.warning(
+                f"Invalid selection: index={selected_index}, " f"images={len(state.gallery_images)}"
+            )
             return "", "*No image selected*", "☆ Favorite", state
 
         # Get image path
         image_path = state.gallery_images[selected_index]
         image_name = Path(image_path).name
+
+        logger.info(f"Selected image: {image_name} at {image_path}")
 
         # Store selected index in state
         state.gallery_selected_index = selected_index
@@ -128,9 +137,11 @@ def select_gallery_image(
         if "JSON" in show_json:
             json_data = state.gallery_browser.read_json_metadata(image_path)
             metadata_md = state.gallery_browser.format_metadata_json(json_data, image_name)
+            logger.info(f"Loaded JSON metadata for {image_name}: {len(str(json_data))} chars")
         else:
             txt_content = state.gallery_browser.read_txt_metadata(image_path)
             metadata_md = state.gallery_browser.format_metadata_txt(txt_content, image_name)
+            logger.info(f"Loaded TXT metadata for {image_name}: {len(txt_content or '')} chars")
 
         return image_path, metadata_md, favorite_button_label, state
 
@@ -139,7 +150,7 @@ def select_gallery_image(
         return "", f"*Error loading image: {str(e)}*", "☆ Favorite", state
 
 
-def refresh_gallery(current_path: str, state: UIState) -> tuple[list[str], UIState]:
+def refresh_gallery(current_path: str, state: UIState) -> tuple[dict[str, Any], UIState]:
     """Refresh image list in current path.
 
     Args:
@@ -147,7 +158,7 @@ def refresh_gallery(current_path: str, state: UIState) -> tuple[list[str], UISta
         state: UI state
 
     Returns:
-        Tuple of (gallery_images, updated_state)
+        Tuple of (gallery_update, updated_state)
     """
     try:
         # Initialize state if needed
@@ -155,20 +166,24 @@ def refresh_gallery(current_path: str, state: UIState) -> tuple[list[str], UISta
 
         # Check if gallery_browser is available
         if state.gallery_browser is None:
-            return [], state
+            logger.warning("Gallery browser not available during refresh")
+            return gr.update(), state
 
         # Scan for images
         images = state.gallery_browser.scan_images(current_path)
         state.gallery_images = images
 
+        logger.info(f"Refreshed gallery: found {len(images)} images at {current_path or 'root'}")
+
         # Reset selected index to prevent stale state after refresh
         state.gallery_selected_index = None
 
-        return images, state
+        # Use gr.update() to explicitly update the Gallery component
+        return gr.update(value=images), state
 
     except Exception as e:
         logger.error(f"Error refreshing gallery: {e}", exc_info=True)
-        return [], state
+        return gr.update(), state
 
 
 def toggle_metadata_format(show_json: str, state: UIState) -> tuple[str, UIState]:
@@ -265,11 +280,18 @@ def initialize_gallery_browser(state: UIState) -> tuple[dict[str, Any], str, lis
             f"Gallery browser tab selected: {len(images)} images, "
             f"{len(folders)} folders at {path_display}"
         )
-        return gr.update(choices=choices, value="-- Select folder --"), current_path, images, state
+
+        # Use gr.update() to explicitly update the Gallery component
+        return (
+            gr.update(choices=choices, value="-- Select folder --"),
+            current_path,
+            gr.update(value=images),
+            state,
+        )
 
     except Exception as e:
         logger.error(f"Error initializing gallery browser: {e}", exc_info=True)
-        return gr.update(choices=["(Error)"]), "", [], state
+        return gr.update(choices=["(Error)"]), "", gr.update(), state
 
 
 def toggle_favorite(state: UIState) -> tuple[str, str, UIState]:
