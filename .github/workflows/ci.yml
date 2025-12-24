@@ -50,9 +50,9 @@ jobs:
 
     - name: Run tests with pytest
       run: |
-        # Only run unit tests (skip integration tests that may download models)
+        # Run all tests except those requiring model downloads
         # Coverage options are configured in pytest.ini
-        pytest tests/unit/ -m "not slow"
+        pytest tests/ -m "not requires_model and not slow"
       env:
         # Prevent any accidental model downloads
         PIPEWORKS_MODELS_DIR: /tmp/models
