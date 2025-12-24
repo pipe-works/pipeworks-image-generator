@@ -218,6 +218,10 @@ def toggle_metadata_format(show_json: str, state: UIState) -> tuple[str, UIState
 def initialize_gallery_browser(state: UIState) -> tuple[dict[str, Any], str, list[str], UIState]:
     """Initialize gallery browser on tab load.
 
+    This function is called every time the Gallery Browser tab is selected.
+    It always rescans the directory to ensure the gallery shows the latest images,
+    especially important after generating new images on the Generate tab.
+
     Args:
         state: UI state
 
@@ -228,39 +232,39 @@ def initialize_gallery_browser(state: UIState) -> tuple[dict[str, Any], str, lis
         # Initialize state if needed
         state = initialize_ui_state(state)
 
-        # Skip if already initialized to prevent infinite loop
-        if state.gallery_initialized:
-            return (
-                gr.update(),
-                state.gallery_current_path,
-                state.gallery_images,
-                state,
-            )
-
-        # Mark as initialized
-        state.gallery_initialized = True
-
-        # Start at root of outputs directory
-        current_path = ""
-        state.gallery_current_path = current_path
+        # Always rescan to show latest images (removed cache check that caused stale images)
+        # If this is the first initialization, use root path
+        if not state.gallery_initialized:
+            state.gallery_initialized = True
+            current_path = ""
+            state.gallery_current_path = current_path
+        else:
+            # Use current path from state
+            current_path = state.gallery_current_path
 
         # Check if gallery_browser is available
         if state.gallery_browser is None:
             return gr.update(choices=["(Error)"]), "", [], state
 
-        # Get folders and images at root
+        # Get folders and images at current path
         folders, _ = state.gallery_browser.get_items_in_path(current_path)
 
         # Build dropdown choices
         choices = ["-- Select folder --"]  # Neutral first choice
+        if current_path:  # Add parent navigation if not at root
+            choices.append("📁 ..")
         for folder in folders:
             choices.append(f"📁 {folder}")
 
-        # Scan for images at root
+        # Always scan for images to get latest state
         images = state.gallery_browser.scan_images(current_path)
         state.gallery_images = images
 
-        logger.info(f"Initialized gallery: {len(images)} images, {len(folders)} folders at root")
+        path_display = current_path or "root"
+        logger.info(
+            f"Gallery browser tab selected: {len(images)} images, "
+            f"{len(folders)} folders at {path_display}"
+        )
         return gr.update(choices=choices, value="-- Select folder --"), current_path, images, state
 
     except Exception as e:

@@ -429,6 +429,51 @@ class TestApplyGalleryFilter:
 
 
 # ============================================================================
+# initialize_gallery_browser Tests
+# ============================================================================
+
+
+class TestInitializeGalleryBrowser:
+    """Tests for initialize_gallery_browser handler."""
+
+    def test_initialize_always_rescans(self, initialized_state, temp_dir):
+        """Test that initialize_gallery_browser always rescans even if already initialized."""
+        from pipeworks.ui.handlers.gallery import initialize_gallery_browser
+
+        outputs_dir = temp_dir / "outputs"
+
+        # Initial call should scan and find 3 images
+        dropdown, path, images, state = initialize_gallery_browser(initialized_state)
+        assert len(images) == 3
+        assert state.gallery_initialized is True
+
+        # Add a new image
+        (outputs_dir / "image4.png").touch()
+
+        # Call again - should rescan and find 4 images (not return cached 3)
+        dropdown, path, images, state = initialize_gallery_browser(state)
+        assert len(images) == 4, "Should rescan and find new image"
+
+    def test_initialize_preserves_current_path(self, initialized_state, temp_dir):
+        """Test that initialize_gallery_browser preserves current path on re-initialization."""
+        from pipeworks.ui.handlers.gallery import initialize_gallery_browser
+
+        outputs_dir = temp_dir / "outputs"
+        subdir = outputs_dir / "subfolder"
+        subdir.mkdir()
+        (subdir / "subimage.png").touch()
+
+        # Navigate to subfolder
+        initialized_state.gallery_current_path = "subfolder"
+
+        # Initialize should use current path
+        dropdown, path, images, state = initialize_gallery_browser(initialized_state)
+        assert path == "subfolder"
+        assert len(images) == 1
+        assert "subimage.png" in images[0]
+
+
+# ============================================================================
 # Integration Tests
 # ============================================================================
 
