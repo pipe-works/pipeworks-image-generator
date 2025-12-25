@@ -46,16 +46,17 @@ class TestSegmentUI:
         segment = SegmentUI("Test", ["(None)"])
         outputs = segment.get_output_components()
 
-        assert len(outputs) == 4  # title, path_display, file, path_state
+        assert len(outputs) == 5  # title, path_display, file, line_count_display, path_state
 
     def test_get_navigation_components(self, gradio_blocks):
         """Test that get_navigation_components returns correct tuple."""
         segment = SegmentUI("Test", ["(None)"])
-        file, path_state, path_display = segment.get_navigation_components()
+        file, path_state, path_display, line_count_display = segment.get_navigation_components()
 
         assert file is segment.file
         assert path_state is segment.path_state
         assert path_display is segment.path_display
+        assert line_count_display is segment.line_count_display
 
     def test_get_mode_visibility_outputs(self, gradio_blocks):
         """Test that get_mode_visibility_outputs returns correct tuple."""
@@ -150,30 +151,31 @@ class TestSegmentUI:
         assert "Test" in title
         assert "color" not in title  # No color styling
 
-    def test_get_all_components_returns_all_13_components(self, gradio_blocks):
-        """Test that get_all_components returns all 13 components."""
+    def test_get_all_components_returns_all_14_components(self, gradio_blocks):
+        """Test that get_all_components returns all 14 components."""
         segment = SegmentUI("Test", ["(None)"])
         all_components = segment.get_all_components()
 
-        # Should return all 13 components:
-        # title, text, path_display, file, path_state, mode, dynamic,
+        # Should return all 14 components:
+        # title, text, path_display, file, line_count_display, path_state, mode, dynamic,
         # text_order, delimiter, line, range_end, count, sequential_start_line
-        assert len(all_components) == 13
+        assert len(all_components) == 14
 
         # Verify they're the actual component attributes
         assert all_components[0] is segment.title
         assert all_components[1] is segment.text
         assert all_components[2] is segment.path_display
         assert all_components[3] is segment.file
-        assert all_components[4] is segment.path_state
-        assert all_components[5] is segment.mode
-        assert all_components[6] is segment.dynamic
-        assert all_components[7] is segment.text_order
-        assert all_components[8] is segment.delimiter
-        assert all_components[9] is segment.line
-        assert all_components[10] is segment.range_end
-        assert all_components[11] is segment.count
-        assert all_components[12] is segment.sequential_start_line
+        assert all_components[4] is segment.line_count_display
+        assert all_components[5] is segment.path_state
+        assert all_components[6] is segment.mode
+        assert all_components[7] is segment.dynamic
+        assert all_components[8] is segment.text_order
+        assert all_components[9] is segment.delimiter
+        assert all_components[10] is segment.line
+        assert all_components[11] is segment.range_end
+        assert all_components[12] is segment.count
+        assert all_components[13] is segment.sequential_start_line
 
 
 class TestUpdateModeVisibility:
@@ -314,12 +316,13 @@ class TestConditionSegmentUI:
         assert len(inputs) == 11  # Same as base SegmentUI
 
         outputs = segment.get_output_components()
-        assert len(outputs) == 4  # Same as base SegmentUI
+        assert len(outputs) == 5  # Same as base SegmentUI (includes line_count_display)
 
-        file, path_state, path_display = segment.get_navigation_components()
+        file, path_state, path_display, line_count_display = segment.get_navigation_components()
         assert file is segment.file
         assert path_state is segment.path_state
         assert path_display is segment.path_display
+        assert line_count_display is segment.line_count_display
 
         (
             line,
