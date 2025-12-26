@@ -77,7 +77,7 @@ class SegmentUI:
                 self.delimiter = gr.Dropdown(
                     label="Delimiter",
                     choices=DELIMITER_OPTIONS,
-                    value=", ",
+                    value=" ",
                     info="How to join text and file",
                 )
 
@@ -392,7 +392,7 @@ class ConditionSegmentUI(SegmentUI):
                 self.delimiter = gr.Dropdown(
                     label="Delimiter",
                     choices=DELIMITER_OPTIONS,
-                    value=", ",
+                    value=" ",
                     info="How to join text and file",
                 )
 

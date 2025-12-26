@@ -390,7 +390,7 @@ class PromptBuilder:
         line_number = start_line + run_index
         return self.get_specific_line(file_path, line_number)
 
-    def get_line_range(self, file_path: str, start: int, end: int, delimiter: str = ", ") -> str:
+    def get_line_range(self, file_path: str, start: int, end: int, delimiter: str = " ") -> str:
         """
         Get a range of lines from a text file (1-indexed, inclusive).
 
@@ -398,7 +398,7 @@ class PromptBuilder:
             file_path: Relative path from inputs_dir
             start: Start line number (1-indexed)
             end: End line number (1-indexed, inclusive)
-            delimiter: Delimiter for joining lines (default: ", ")
+            delimiter: Delimiter for joining lines (default: " " single space)
 
         Returns:
             Lines joined with delimiter, or empty string if range is invalid
@@ -414,13 +414,13 @@ class PromptBuilder:
         selected_lines = lines[start - 1 : end]
         return delimiter.join(selected_lines)
 
-    def get_all_lines(self, file_path: str, delimiter: str = ", ") -> str:
+    def get_all_lines(self, file_path: str, delimiter: str = " ") -> str:
         """
         Get all lines from a text file.
 
         Args:
             file_path: Relative path from inputs_dir
-            delimiter: Delimiter for joining lines (default: ", ")
+            delimiter: Delimiter for joining lines (default: " " single space)
 
         Returns:
             All lines joined with delimiter
@@ -428,14 +428,14 @@ class PromptBuilder:
         lines = self.read_file_lines(file_path)
         return delimiter.join(lines)
 
-    def get_random_lines(self, file_path: str, count: int, delimiter: str = ", ") -> str:
+    def get_random_lines(self, file_path: str, count: int, delimiter: str = " ") -> str:
         """
         Get multiple random lines from a text file (without replacement).
 
         Args:
             file_path: Relative path from inputs_dir
             count: Number of random lines to select
-            delimiter: Delimiter for joining lines (default: ", ")
+            delimiter: Delimiter for joining lines (default: " " single space)
 
         Returns:
             Random lines joined with delimiter
@@ -489,7 +489,7 @@ class PromptBuilder:
 
         return text
 
-    def build_prompt(self, segments: list[tuple[str, str]], delimiter: str = ", ") -> str:
+    def build_prompt(self, segments: list[tuple[str, str]], delimiter: str = " ") -> str:
         """Build a prompt from a list of segments.
 
         This is the main orchestration method that combines multiple prompt
@@ -510,7 +510,7 @@ class PromptBuilder:
                      - 'file_range': Line range (format: "filepath|start|end")
                      - 'file_all': All lines from file
                      - 'file_random_multi': N random lines (format: "filepath|count")
-            delimiter: Delimiter for joining segments (default: ", ")
+            delimiter: Delimiter for joining segments (default: " " single space)
 
         Returns:
             Combined prompt string with segments joined by the delimiter

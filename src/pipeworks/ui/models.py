@@ -27,7 +27,7 @@ class SegmentConfig:
 
     # Text order and delimiter controls
     text_order: str = "text_first"  # "text_first" or "file_first"
-    delimiter: str = ", "  # Delimiter for joining text + file content
+    delimiter: str = " "  # Delimiter for joining text + file content (default: single space)
 
     # Character/Facial condition generation (for Start segments)
     condition_type: str = "None"  # "None", "Character", "Facial", or "Both"
@@ -228,9 +228,10 @@ TEXT_ORDER_OPTIONS = [
 
 # Delimiter options for joining text segments
 DELIMITER_OPTIONS = [
-    ", ",  # Comma-space (default, natural for tags/keywords)
+    " ",  # Single space (minimal separation, default)
+    ", ",  # Comma-space (natural for tags/keywords)
     ". ",  # Period-space (natural for sentences)
-    " ",  # Single space (minimal separation)
+    "",  # No delimiter (content only)
     ".",  # Period only (tight sentence joining)
     ",",  # Comma only (tight tag joining)
 ]

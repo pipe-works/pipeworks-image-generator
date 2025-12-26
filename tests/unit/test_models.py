@@ -105,7 +105,7 @@ class TestSegmentConfig:
     def test_delimiter_default_value(self):
         """Test delimiter has correct default value."""
         segment = SegmentConfig()
-        assert segment.delimiter == ", "
+        assert segment.delimiter == " "  # Default is now single space
 
     def test_custom_text_order_and_delimiter(self):
         """Test custom text_order and delimiter values can be set."""
@@ -518,9 +518,10 @@ class TestConstants:
     def test_delimiter_options(self):
         """Test DELIMITER_OPTIONS contains expected values."""
         assert isinstance(DELIMITER_OPTIONS, list)
-        assert len(DELIMITER_OPTIONS) == 5
-        assert ", " in DELIMITER_OPTIONS  # Default
+        assert len(DELIMITER_OPTIONS) == 6  # Now includes empty string option
+        assert " " in DELIMITER_OPTIONS  # Default (single space)
+        assert ", " in DELIMITER_OPTIONS
         assert ". " in DELIMITER_OPTIONS
-        assert " " in DELIMITER_OPTIONS
+        assert "" in DELIMITER_OPTIONS  # Empty delimiter option
         assert "." in DELIMITER_OPTIONS
         assert "," in DELIMITER_OPTIONS

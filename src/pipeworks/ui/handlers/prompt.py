@@ -214,6 +214,7 @@ def build_combined_prompt(
             full_path = state.prompt_builder.get_full_path(segment.path, segment.file)
 
             # Resolve file content based on mode
+            # Use segment.delimiter for joining multiple lines within files
             file_content = ""
             if segment.mode == "Random Line":
                 file_content = state.prompt_builder.get_random_line(full_path)
@@ -221,12 +222,16 @@ def build_combined_prompt(
                 file_content = state.prompt_builder.get_specific_line(full_path, segment.line)
             elif segment.mode == "Line Range":
                 file_content = state.prompt_builder.get_line_range(
-                    full_path, segment.line, segment.range_end
+                    full_path, segment.line, segment.range_end, delimiter=segment.delimiter
                 )
             elif segment.mode == "All Lines":
-                file_content = state.prompt_builder.get_all_lines(full_path)
+                file_content = state.prompt_builder.get_all_lines(
+                    full_path, delimiter=segment.delimiter
+                )
             elif segment.mode == "Random Multiple":
-                file_content = state.prompt_builder.get_random_lines(full_path, segment.count)
+                file_content = state.prompt_builder.get_random_lines(
+                    full_path, segment.count, delimiter=segment.delimiter
+                )
             elif segment.mode == "Sequential":
                 file_content = state.prompt_builder.get_sequential_line(
                     full_path, segment.sequential_start_line, run_index

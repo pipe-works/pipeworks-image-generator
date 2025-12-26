@@ -396,7 +396,8 @@ class TestPromptBuilderLineSelection:
 
         result = pb.get_line_range("test.txt", 2, 4)
 
-        assert result == "line 2, line 3, line 4"
+        # Default delimiter is now single space
+        assert result == "line 2 line 3 line 4"
 
     def test_get_line_range_single_line(self, test_inputs_dir):
         """Test getting range with same start and end."""
@@ -412,7 +413,8 @@ class TestPromptBuilderLineSelection:
 
         result = pb.get_line_range("test.txt", 1, 5)
 
-        assert result == "line 1, line 2, line 3, line 4, line 5"
+        # Default delimiter is now single space
+        assert result == "line 1 line 2 line 3 line 4 line 5"
 
     def test_get_line_range_clamped(self, test_inputs_dir):
         """Test that line range is clamped to valid range."""
@@ -421,8 +423,8 @@ class TestPromptBuilderLineSelection:
         # Request range beyond file length
         result = pb.get_line_range("test.txt", 3, 999)
 
-        # Should clamp to available lines
-        assert result == "line 3, line 4, line 5"
+        # Should clamp to available lines (default delimiter is single space)
+        assert result == "line 3 line 4 line 5"
 
     def test_get_line_range_reversed(self, test_inputs_dir):
         """Test that reversed range is handled correctly."""
@@ -440,7 +442,8 @@ class TestPromptBuilderLineSelection:
 
         result = pb.get_all_lines("test.txt")
 
-        assert result == "line 1, line 2, line 3, line 4, line 5"
+        # Default delimiter is now single space
+        assert result == "line 1 line 2 line 3 line 4 line 5"
 
     def test_get_all_lines_empty_file(self, temp_dir):
         """Test getting all lines from empty file."""
@@ -460,13 +463,19 @@ class TestPromptBuilderLineSelection:
 
         result = pb.get_random_lines("test.txt", 3)
 
-        # Should have 3 lines joined with commas
-        parts = [part.strip() for part in result.split(",")]
-        assert len(parts) == 3
-        # All parts should be valid lines
-        assert all(part in ["line 1", "line 2", "line 3", "line 4", "line 5"] for part in parts)
-        # Should not have duplicates (sampling without replacement)
-        assert len(parts) == len(set(parts))
+        # Result should contain 3 lines joined with space delimiter
+        # Each line contains "line X" so we check for presence
+        # We can't split by space since lines themselves contain spaces
+        assert "line" in result
+        # Check that result is not empty
+        assert len(result) > 0
+        # Verify it's using space delimiter by checking for expected pattern
+        # With 3 lines like "line 1", "line 2", "line 3", joined by space:
+        # Result could be "line 1 line 2 line 3"
+        valid_lines = ["line 1", "line 2", "line 3", "line 4", "line 5"]
+        # Count how many valid lines appear in result
+        count = sum(1 for line in valid_lines if line in result)
+        assert count == 3  # Should have exactly 3 lines
 
     def test_get_random_lines_more_than_available(self, test_inputs_dir):
         """Test getting more random lines than available."""
@@ -475,9 +484,11 @@ class TestPromptBuilderLineSelection:
         # Request more lines than file has
         result = pb.get_random_lines("test.txt", 999)
 
-        # Should return all available lines
-        parts = [part.strip() for part in result.split(",")]
-        assert len(parts) == 5
+        # Should return all available lines (joined with spaces - default delimiter)
+        # Count how many valid lines appear in result
+        valid_lines = ["line 1", "line 2", "line 3", "line 4", "line 5"]
+        count = sum(1 for line in valid_lines if line in result)
+        assert count == 5  # Should have all 5 lines
 
     def test_get_random_lines_empty_file(self, temp_dir):
         """Test getting random lines from empty file."""
@@ -560,10 +571,11 @@ class TestPromptBuilderBuildPrompt:
 
         result = pb.build_prompt(segments)
 
-        # file_random_multi joins lines with commas
-        parts = [part.strip() for part in result.split(",")]
-        assert len(parts) <= 3
-        assert all(part in ["line 1", "line 2", "line 3", "line 4", "line 5"] for part in parts)
+        # file_random_multi joins lines with spaces (default delimiter)
+        # Count how many valid lines appear in result
+        valid_lines = ["line 1", "line 2", "line 3", "line 4", "line 5"]
+        count = sum(1 for line in valid_lines if line in result)
+        assert count == 3  # Should have exactly 3 lines
 
     def test_build_prompt_with_file_sequential(self, test_inputs_dir):
         """Test building prompt with sequential line."""
@@ -619,7 +631,8 @@ class TestPromptBuilderBuildPrompt:
 
         result = pb.build_prompt(segments)
 
-        assert result == "Hello, World"
+        # Default delimiter is now single space
+        assert result == "Hello World"
 
     def test_build_prompt_invalid_file(self, test_inputs_dir):
         """Test that invalid file path logs error and returns empty."""
@@ -720,18 +733,31 @@ class TestPromptBuilderBuildPrompt:
         assert result == "A | B | C"
 
     def test_build_prompt_double_punctuation_text_segment_fixed(self, test_inputs_dir):
-        """Test that text segments with trailing commas no longer cause double punctuation."""
+        """Test that text segments with trailing delimiters are handled correctly."""
         pb = PromptBuilder(test_inputs_dir)
 
+        # With default space delimiter, trailing spaces are stripped
         segments = [
-            ("text", "a beautiful landscape,"),  # User text ends with comma
+            ("text", "a beautiful landscape "),  # User text ends with space
             ("text", "photorealistic"),
             ("text", "golden hour lighting"),
         ]
 
         result = pb.build_prompt(segments)
 
-        # Should strip trailing comma to avoid double punctuation
+        # Should strip trailing space to avoid double spaces (default delimiter is " ")
+        assert result == "a beautiful landscape photorealistic golden hour lighting"
+
+        # Test with comma delimiter
+        segments = [
+            ("text", "a beautiful landscape,"),  # User text ends with comma
+            ("text", "photorealistic"),
+            ("text", "golden hour lighting"),
+        ]
+
+        result = pb.build_prompt(segments, delimiter=", ")
+
+        # Should strip trailing comma to avoid double commas
         assert result == "a beautiful landscape, photorealistic, golden hour lighting"
 
     def test_build_prompt_double_punctuation_mixed_segments_fixed(self, test_inputs_dir):
@@ -742,13 +768,14 @@ class TestPromptBuilderBuildPrompt:
         test_file = test_inputs_dir / "with_comma.txt"
         test_file.write_text("style 1,\nstyle 2,\nstyle 3,")
 
+        # Test with comma delimiter
         segments = [
             ("text", "a wizard,"),  # Trailing comma
             ("file_specific", "with_comma.txt|1"),  # File content has trailing comma
             ("text", "magical"),
         ]
 
-        result = pb.build_prompt(segments)
+        result = pb.build_prompt(segments, delimiter=", ")
 
         # Should strip trailing commas to prevent double punctuation
         assert result == "a wizard, style 1, magical"
@@ -757,11 +784,15 @@ class TestPromptBuilderBuildPrompt:
         """Test that get_line_range now supports custom delimiter."""
         pb = PromptBuilder(test_inputs_dir)
 
-        # Default delimiter
+        # Default delimiter (single space)
         result = pb.get_line_range("test.txt", 1, 3)
+        assert result == "line 1 line 2 line 3"
+
+        # Custom delimiter (comma-space)
+        result = pb.get_line_range("test.txt", 1, 3, delimiter=", ")
         assert result == "line 1, line 2, line 3"
 
-        # Custom delimiter
+        # Custom delimiter (pipe)
         result = pb.get_line_range("test.txt", 1, 3, delimiter=" | ")
         assert result == "line 1 | line 2 | line 3"
 
@@ -769,11 +800,15 @@ class TestPromptBuilderBuildPrompt:
         """Test that get_all_lines now supports custom delimiter."""
         pb = PromptBuilder(test_inputs_dir)
 
-        # Default delimiter
+        # Default delimiter (single space)
         result = pb.get_all_lines("test.txt")
+        assert result == "line 1 line 2 line 3 line 4 line 5"
+
+        # Custom delimiter (comma-space)
+        result = pb.get_all_lines("test.txt", delimiter=", ")
         assert result == "line 1, line 2, line 3, line 4, line 5"
 
-        # Custom delimiter
+        # Custom delimiter (dash)
         result = pb.get_all_lines("test.txt", delimiter=" - ")
         assert result == "line 1 - line 2 - line 3 - line 4 - line 5"
 
@@ -785,14 +820,24 @@ class TestPromptBuilderBuildPrompt:
         test_file = test_inputs_dir / "small.txt"
         test_file.write_text("A\nB\nC")
 
-        # Default delimiter
+        # Default delimiter (single space)
         result = pb.get_random_lines("small.txt", 3)
+        # Result will contain spaces between items
+        assert "A" in result
+        assert "B" in result
+        assert "C" in result
+        # Since it's random order, just check that spaces are used
+        parts = result.split(" ")
+        assert len(parts) == 3
+
+        # Custom delimiter (comma-space)
+        result = pb.get_random_lines("small.txt", 3, delimiter=", ")
         assert ", " in result
         assert "A" in result
         assert "B" in result
         assert "C" in result
 
-        # Custom delimiter
+        # Custom delimiter (ampersand)
         result = pb.get_random_lines("small.txt", 3, delimiter=" & ")
         assert " & " in result
         assert "A" in result
@@ -850,3 +895,44 @@ class TestPromptBuilderBuildPrompt:
         # Test empty inputs
         assert pb._strip_trailing_delimiter("", ", ") == ""
         assert pb._strip_trailing_delimiter("text", "") == "text"
+
+    def test_empty_delimiter_behavior(self, test_inputs_dir):
+        """Test that empty delimiter concatenates content without separation."""
+        pb = PromptBuilder(test_inputs_dir)
+
+        # Test with build_prompt - empty delimiter should concatenate
+        segments = [
+            ("text", "Hello"),
+            ("text", "World"),
+        ]
+
+        result = pb.build_prompt(segments, delimiter="")
+
+        assert result == "HelloWorld"
+
+        # Test with get_line_range - empty delimiter
+        result = pb.get_line_range("test.txt", 1, 3, delimiter="")
+
+        assert result == "line 1line 2line 3"
+
+        # Test with get_all_lines - empty delimiter
+        result = pb.get_all_lines("test.txt", delimiter="")
+
+        assert result == "line 1line 2line 3line 4line 5"
+
+    def test_default_space_delimiter_prevents_word_collision(self, test_inputs_dir):
+        """Test that default space delimiter prevents words from running together."""
+        pb = PromptBuilder(test_inputs_dir)
+
+        segments = [
+            ("text", "beautiful"),
+            ("text", "landscape"),
+            ("text", "photograph"),
+        ]
+
+        result = pb.build_prompt(segments)
+
+        # Default delimiter is single space, so words are separated
+        assert result == "beautiful landscape photograph"
+        # Ensure no word collision
+        assert "beautifullandscape" not in result
