@@ -499,7 +499,7 @@ def create_generation_tab(ui_state):
         max_segments = segment_manager_state_value.get("max_segments", 10)
 
         if len(visible_indices) >= max_segments:
-            return (
+            return (  # type: ignore[return-value]
                 segment_manager_state_value,
                 f"**Total: {len(visible_indices)} segment(s)** "
                 f"(Maximum {max_segments} reached)",
@@ -524,7 +524,7 @@ def create_generation_tab(ui_state):
         # Update status message
         status = f"**Total: {len(updated_visible)} segment(s)**"
 
-        return updated_state, status, *visibility_updates, ui_state_value
+        return (updated_state, status, *visibility_updates, ui_state_value)  # type: ignore[return-value]
 
     def remove_segment_click_handler(
         segment_manager_state_value: dict[str, Any], ui_state_value: UIState
@@ -559,7 +559,7 @@ def create_generation_tab(ui_state):
         min_segments = segment_manager_state_value.get("min_segments", 1)
 
         if len(visible_indices) <= min_segments:
-            return (
+            return (  # type: ignore[return-value]
                 segment_manager_state_value,
                 f"**Total: {len(visible_indices)} segment(s)** "
                 f"(Minimum {min_segments} required)",
@@ -583,7 +583,7 @@ def create_generation_tab(ui_state):
         # Update status message
         status = f"**Total: {len(updated_visible)} segment(s)**"
 
-        return updated_state, status, *visibility_updates, ui_state_value
+        return (updated_state, status, *visibility_updates, ui_state_value)  # type: ignore[return-value]
 
     # Wire up add/remove button handlers
     add_segment_btn.click(
