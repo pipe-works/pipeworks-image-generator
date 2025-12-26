@@ -52,7 +52,7 @@ repos:
       - id: pytest-check
         name: pytest
         entry: pytest
-        args: [tests/unit/test_adapters.py, tests/unit/test_models.py, tests/unit/test_validation.py, --tb=short, --no-cov, -q, --maxfail=5]
+        args: [tests/unit/, --tb=short, --no-cov, -q, --maxfail=5, -m, "not requires_model and not slow"]
         language: system
         pass_filenames: false
         always_run: true

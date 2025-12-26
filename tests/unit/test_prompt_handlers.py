@@ -42,21 +42,23 @@ class TestAddSegmentLogic:
         start_1 = SegmentConfig(text="wizard")
         result = build_combined_prompt(start_1, *empty_segments[1:], state=mock_state)
 
-        # Should call build_prompt with a text segment
+        # Should call build_prompt with a text segment with delimiter appended
         mock_state.prompt_builder.build_prompt.assert_called_once()
         segments = mock_state.prompt_builder.build_prompt.call_args[0][0]
         assert len(segments) == 1
-        assert segments[0] == ("text", "wizard")
+        # Default delimiter is "Space ( )" which maps to " "
+        assert segments[0] == ("text", "wizard ")
 
     def test_file_only_segment(self, mock_state, empty_segments):
         """Test segment with only file (no text)."""
         start_1 = SegmentConfig(file="test.txt", mode="Random Line")
         result = build_combined_prompt(start_1, *empty_segments[1:], state=mock_state)
 
-        # Should call build_prompt with a file_random segment
+        # Should call build_prompt with resolved file content as text segment
         segments = mock_state.prompt_builder.build_prompt.call_args[0][0]
         assert len(segments) == 1
-        assert segments[0][0] == "file_random"
+        # File content is resolved and delimiter appended (default is space)
+        assert segments[0] == ("text", "random content ")
 
     def test_text_first_order(self, mock_state, empty_segments):
         """Test text_first order combines text before file content."""
@@ -65,14 +67,15 @@ class TestAddSegmentLogic:
             file="test.txt",
             mode="Random Line",
             text_order="text_first",
-            delimiter=", ",
+            delimiter="Comma-Space (, )",  # Use label format
         )
         result = build_combined_prompt(start_1, *empty_segments[1:], state=mock_state)
 
-        # Should combine text + delimiter + file_content
+        # Should combine text + space + file_content, then append delimiter at end
         segments = mock_state.prompt_builder.build_prompt.call_args[0][0]
         assert len(segments) == 1
-        assert segments[0] == ("text", "wizard, random content")
+        # Hardcoded space between text and file, delimiter at end
+        assert segments[0] == ("text", "wizard random content, ")
 
     def test_file_first_order(self, mock_state, empty_segments):
         """Test file_first order combines file content before text."""
@@ -81,14 +84,15 @@ class TestAddSegmentLogic:
             file="test.txt",
             mode="Random Line",
             text_order="file_first",
-            delimiter=", ",
+            delimiter="Comma-Space (, )",  # Use label format
         )
         result = build_combined_prompt(start_1, *empty_segments[1:], state=mock_state)
 
-        # Should combine file_content + delimiter + text
+        # Should combine file_content + space + text, then append delimiter at end
         segments = mock_state.prompt_builder.build_prompt.call_args[0][0]
         assert len(segments) == 1
-        assert segments[0] == ("text", "random content, wizard")
+        # Hardcoded space between file and text, delimiter at end
+        assert segments[0] == ("text", "random content wizard, ")
 
     def test_custom_delimiter_period_space(self, mock_state, empty_segments):
         """Test custom delimiter '. ' (period-space)."""
@@ -97,12 +101,13 @@ class TestAddSegmentLogic:
             file="test.txt",
             mode="Random Line",
             text_order="text_first",
-            delimiter=". ",
+            delimiter="Period-Space (. )",  # Use label format
         )
         result = build_combined_prompt(start_1, *empty_segments[1:], state=mock_state)
 
         segments = mock_state.prompt_builder.build_prompt.call_args[0][0]
-        assert segments[0] == ("text", "a wizard. random content")
+        # Hardcoded space between text and file, delimiter at end
+        assert segments[0] == ("text", "a wizard random content. ")
 
     def test_custom_delimiter_space_only(self, mock_state, empty_segments):
         """Test custom delimiter ' ' (single space)."""
@@ -111,12 +116,13 @@ class TestAddSegmentLogic:
             file="test.txt",
             mode="Random Line",
             text_order="text_first",
-            delimiter=" ",
+            delimiter="Space ( )",  # Use label format
         )
         result = build_combined_prompt(start_1, *empty_segments[1:], state=mock_state)
 
         segments = mock_state.prompt_builder.build_prompt.call_args[0][0]
-        assert segments[0] == ("text", "wizard random content")
+        # Hardcoded space between text and file, space delimiter at end
+        assert segments[0] == ("text", "wizard random content ")
 
     def test_custom_delimiter_comma_only(self, mock_state, empty_segments):
         """Test custom delimiter ',' (comma only)."""
@@ -125,12 +131,13 @@ class TestAddSegmentLogic:
             file="test.txt",
             mode="Random Line",
             text_order="text_first",
-            delimiter=",",
+            delimiter="Comma (,)",  # Use label format
         )
         result = build_combined_prompt(start_1, *empty_segments[1:], state=mock_state)
 
         segments = mock_state.prompt_builder.build_prompt.call_args[0][0]
-        assert segments[0] == ("text", "wizard,random content")
+        # Hardcoded space between text and file, comma at end
+        assert segments[0] == ("text", "wizard random content,")
 
     def test_custom_delimiter_period_only(self, mock_state, empty_segments):
         """Test custom delimiter '.' (period only)."""
@@ -139,12 +146,13 @@ class TestAddSegmentLogic:
             file="test.txt",
             mode="Random Line",
             text_order="text_first",
-            delimiter=".",
+            delimiter="Period (.)",  # Use label format
         )
         result = build_combined_prompt(start_1, *empty_segments[1:], state=mock_state)
 
         segments = mock_state.prompt_builder.build_prompt.call_args[0][0]
-        assert segments[0] == ("text", "wizard.random content")
+        # Hardcoded space between text and file, period at end
+        assert segments[0] == ("text", "wizard random content.")
 
     def test_empty_segment(self, mock_state, empty_segments):
         """Test segment with no text and no file is skipped."""
@@ -172,14 +180,14 @@ class TestAddSegmentLogic:
             file="test.txt",
             mode="Random Line",
             text_order="text_first",
-            delimiter=", ",
+            delimiter="Comma-Space (, )",  # Use label format
         )
         result = build_combined_prompt(start_1, *empty_segments[1:], state=mock_state)
 
-        # Should fall back to text only
+        # Should fall back to text only with delimiter appended
         segments = mock_state.prompt_builder.build_prompt.call_args[0][0]
         assert len(segments) == 1
-        assert segments[0] == ("text", "wizard")
+        assert segments[0] == ("text", "wizard, ")
 
     def test_specific_line_mode_with_both_text_and_file(self, mock_state, empty_segments):
         """Test Specific Line mode with both text and file."""
@@ -189,7 +197,7 @@ class TestAddSegmentLogic:
             mode="Specific Line",
             line=5,
             text_order="text_first",
-            delimiter=", ",
+            delimiter="Comma-Space (, )",  # Use label format
         )
         result = build_combined_prompt(start_1, *empty_segments[1:], state=mock_state)
 
@@ -198,7 +206,8 @@ class TestAddSegmentLogic:
             "/full/path/file.txt", 5
         )
         segments = mock_state.prompt_builder.build_prompt.call_args[0][0]
-        assert segments[0] == ("text", "wizard, specific content")
+        # Hardcoded space between text and file, delimiter at end
+        assert segments[0] == ("text", "wizard specific content, ")
 
     def test_line_range_mode_with_both_text_and_file(self, mock_state, empty_segments):
         """Test Line Range mode with both text and file."""
@@ -209,16 +218,17 @@ class TestAddSegmentLogic:
             line=1,
             range_end=5,
             text_order="text_first",
-            delimiter=", ",
+            delimiter="Comma-Space (, )",  # Use label format
         )
         result = build_combined_prompt(start_1, *empty_segments[1:], state=mock_state)
 
-        # Should call get_line_range
+        # Should call get_line_range with delimiter for joining lines
         mock_state.prompt_builder.get_line_range.assert_called_once_with(
-            "/full/path/file.txt", 1, 5
+            "/full/path/file.txt", 1, 5, delimiter=", "
         )
         segments = mock_state.prompt_builder.build_prompt.call_args[0][0]
-        assert segments[0] == ("text", "wizard, range content")
+        # Hardcoded space between text and file, delimiter at end
+        assert segments[0] == ("text", "wizard range content, ")
 
     def test_all_lines_mode_with_both_text_and_file(self, mock_state, empty_segments):
         """Test All Lines mode with both text and file."""
@@ -227,14 +237,17 @@ class TestAddSegmentLogic:
             file="test.txt",
             mode="All Lines",
             text_order="text_first",
-            delimiter=", ",
+            delimiter="Comma-Space (, )",  # Use label format
         )
         result = build_combined_prompt(start_1, *empty_segments[1:], state=mock_state)
 
-        # Should call get_all_lines
-        mock_state.prompt_builder.get_all_lines.assert_called_once_with("/full/path/file.txt")
+        # Should call get_all_lines with delimiter for joining lines
+        mock_state.prompt_builder.get_all_lines.assert_called_once_with(
+            "/full/path/file.txt", delimiter=", "
+        )
         segments = mock_state.prompt_builder.build_prompt.call_args[0][0]
-        assert segments[0] == ("text", "wizard, all content")
+        # Hardcoded space between text and file, delimiter at end
+        assert segments[0] == ("text", "wizard all content, ")
 
     def test_random_multiple_mode_with_both_text_and_file(self, mock_state, empty_segments):
         """Test Random Multiple mode with both text and file."""
@@ -244,14 +257,17 @@ class TestAddSegmentLogic:
             mode="Random Multiple",
             count=3,
             text_order="text_first",
-            delimiter=", ",
+            delimiter="Comma-Space (, )",  # Use label format
         )
         result = build_combined_prompt(start_1, *empty_segments[1:], state=mock_state)
 
-        # Should call get_random_lines
-        mock_state.prompt_builder.get_random_lines.assert_called_once_with("/full/path/file.txt", 3)
+        # Should call get_random_lines with delimiter for joining lines
+        mock_state.prompt_builder.get_random_lines.assert_called_once_with(
+            "/full/path/file.txt", 3, delimiter=", "
+        )
         segments = mock_state.prompt_builder.build_prompt.call_args[0][0]
-        assert segments[0] == ("text", "wizard, multi content")
+        # Hardcoded space between text and file, delimiter at end
+        assert segments[0] == ("text", "wizard multi content, ")
 
     def test_sequential_mode_with_both_text_and_file(self, mock_state, empty_segments):
         """Test Sequential mode with both text and file."""
@@ -261,7 +277,7 @@ class TestAddSegmentLogic:
             mode="Sequential",
             sequential_start_line=10,
             text_order="text_first",
-            delimiter=", ",
+            delimiter="Comma-Space (, )",  # Use label format
         )
         result = build_combined_prompt(start_1, *empty_segments[1:], state=mock_state, run_index=2)
 
@@ -270,7 +286,8 @@ class TestAddSegmentLogic:
             "/full/path/file.txt", 10, 2
         )
         segments = mock_state.prompt_builder.build_prompt.call_args[0][0]
-        assert segments[0] == ("text", "wizard, sequential content")
+        # Hardcoded space between text and file, delimiter at end
+        assert segments[0] == ("text", "wizard sequential content, ")
 
     def test_multiple_segments_combined(self, mock_state, empty_segments):
         """Test multiple segments with different settings."""
@@ -279,7 +296,7 @@ class TestAddSegmentLogic:
             file="test.txt",
             mode="Random Line",
             text_order="text_first",
-            delimiter=". ",
+            delimiter="Period-Space (. )",  # Use label format
         )
         start_2 = SegmentConfig(text="castle")
         start_3 = SegmentConfig(file="colors.txt", mode="Random Line")
@@ -290,9 +307,10 @@ class TestAddSegmentLogic:
 
         segments = mock_state.prompt_builder.build_prompt.call_args[0][0]
         assert len(segments) == 3
-        assert segments[0] == ("text", "wizard. random content")
-        assert segments[1] == ("text", "castle")
-        assert segments[2][0] == "file_random"
+        # All segments are text type with delimiters appended
+        assert segments[0] == ("text", "wizard random content. ")
+        assert segments[1] == ("text", "castle ")  # Default space delimiter
+        assert segments[2] == ("text", "random content ")  # File resolved to text
 
     def test_text_strips_whitespace(self, mock_state, empty_segments):
         """Test that text whitespace is stripped."""
@@ -300,7 +318,8 @@ class TestAddSegmentLogic:
         result = build_combined_prompt(start_1, *empty_segments[1:], state=mock_state)
 
         segments = mock_state.prompt_builder.build_prompt.call_args[0][0]
-        assert segments[0] == ("text", "wizard")
+        # Text is stripped, then delimiter appended
+        assert segments[0] == ("text", "wizard ")
 
     def test_combined_text_strips_whitespace(self, mock_state, empty_segments):
         """Test that whitespace is stripped in combined segments."""
@@ -309,12 +328,13 @@ class TestAddSegmentLogic:
             file="test.txt",
             mode="Random Line",
             text_order="text_first",
-            delimiter=", ",
+            delimiter="Comma-Space (, )",  # Use label format
         )
         result = build_combined_prompt(start_1, *empty_segments[1:], state=mock_state)
 
         segments = mock_state.prompt_builder.build_prompt.call_args[0][0]
-        assert segments[0] == ("text", "wizard, random content")
+        # Text is stripped, hardcoded space between text and file, delimiter at end
+        assert segments[0] == ("text", "wizard random content, ")
 
 
 class TestNavigateFileSelection:
