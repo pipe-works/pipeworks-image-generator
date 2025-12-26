@@ -542,10 +542,17 @@ class PromptBuilder:
                 continue
 
             if segment_type == "text":
-                # Direct user text input - strip trailing delimiter to avoid double punctuation
-                part = self._strip_trailing_delimiter(content.strip(), delimiter)
-                if part:
-                    parts.append(part)
+                # Direct user text input
+                # If delimiter is empty, segments already have delimiters appended
+                if delimiter == "":
+                    # Don't strip! Delimiters are intentionally appended by handler
+                    if content:
+                        parts.append(content)
+                else:
+                    # Legacy behavior: strip trailing delimiter to avoid double punctuation
+                    part = self._strip_trailing_delimiter(content.strip(), delimiter)
+                    if part:
+                        parts.append(part)
 
             elif segment_type == "file_random":
                 # Random line from file - provides variation

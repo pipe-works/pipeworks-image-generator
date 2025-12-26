@@ -162,12 +162,15 @@ def build_combined_prompt(
     def add_segment(segment: SegmentConfig):
         """Add a segment to the prompt, respecting text_order and delimiter.
 
+        The segment's delimiter is appended at the END of the segment's content,
+        not used to join with other segments.
+
         Handles four scenarios:
         1. No content: Skip
-        2. Only text: Add text directly
-        3. Only file: Add file as lazy tuple (unchanged from current)
+        2. Only text: Add text directly with delimiter appended
+        3. Only file: Add file as lazy tuple with delimiter info
         4. Both text and file: Resolve file content early, combine with text using
-           delimiter and text_order, add as single text segment
+           delimiter and text_order, add as single text segment with delimiter appended
 
         Args:
             segment: SegmentConfig with text, file, and settings
@@ -175,46 +178,26 @@ def build_combined_prompt(
         has_text = segment.text and segment.text.strip()
         has_file = segment.is_configured()
 
+        # Get the actual delimiter value from the label
+        delimiter_value = segment.get_delimiter_value()
+
         # Case 1: No content - skip
         if not has_text and not has_file:
             return
 
-        # Case 2: Only text - add directly
+        # Case 2: Only text - add directly with delimiter appended at end
         if has_text and not has_file:
-            segments.append(("text", segment.text.strip()))
+            content_with_delimiter = segment.text.strip() + delimiter_value
+            segments.append(("text", content_with_delimiter))
             return
 
-        # Case 3: Only file - add as lazy tuple (unchanged from current)
+        # Case 3: Only file - resolve file content and append delimiter at end
         if has_file and not has_text:
             if state.prompt_builder is None:
                 return
             full_path = state.prompt_builder.get_full_path(segment.path, segment.file)
 
-            if segment.mode == "Random Line":
-                segments.append(("file_random", full_path))
-            elif segment.mode == "Specific Line":
-                segments.append(("file_specific", f"{full_path}|{segment.line}"))
-            elif segment.mode == "Line Range":
-                segments.append(("file_range", f"{full_path}|{segment.line}|{segment.range_end}"))
-            elif segment.mode == "All Lines":
-                segments.append(("file_all", full_path))
-            elif segment.mode == "Random Multiple":
-                segments.append(("file_random_multi", f"{full_path}|{segment.count}"))
-            elif segment.mode == "Sequential":
-                segments.append(
-                    ("file_sequential", f"{full_path}|{segment.sequential_start_line}|{run_index}")
-                )
-            return
-
-        # Case 4: Both text and file - resolve file early and combine
-        if has_text and has_file:
-            if state.prompt_builder is None:
-                segments.append(("text", segment.text.strip()))
-                return
-            full_path = state.prompt_builder.get_full_path(segment.path, segment.file)
-
             # Resolve file content based on mode
-            # Use segment.delimiter for joining multiple lines within files
             file_content = ""
             if segment.mode == "Random Line":
                 file_content = state.prompt_builder.get_random_line(full_path)
@@ -222,15 +205,57 @@ def build_combined_prompt(
                 file_content = state.prompt_builder.get_specific_line(full_path, segment.line)
             elif segment.mode == "Line Range":
                 file_content = state.prompt_builder.get_line_range(
-                    full_path, segment.line, segment.range_end, delimiter=segment.delimiter
+                    full_path, segment.line, segment.range_end, delimiter=delimiter_value
                 )
             elif segment.mode == "All Lines":
                 file_content = state.prompt_builder.get_all_lines(
-                    full_path, delimiter=segment.delimiter
+                    full_path, delimiter=delimiter_value
                 )
             elif segment.mode == "Random Multiple":
                 file_content = state.prompt_builder.get_random_lines(
-                    full_path, segment.count, delimiter=segment.delimiter
+                    full_path, segment.count, delimiter=delimiter_value
+                )
+            elif segment.mode == "Sequential":
+                file_content = state.prompt_builder.get_sequential_line(
+                    full_path, segment.sequential_start_line, run_index
+                )
+
+            # If file read failed, skip this segment
+            if not file_content:
+                return
+
+            # Append delimiter at the END of the file content
+            content_with_delimiter = file_content + delimiter_value
+            segments.append(("text", content_with_delimiter))
+            return
+
+        # Case 4: Both text and file - resolve file early and combine
+        # Append delimiter at the END of the combined content
+        if has_text and has_file:
+            if state.prompt_builder is None:
+                content_with_delimiter = segment.text.strip() + delimiter_value
+                segments.append(("text", content_with_delimiter))
+                return
+            full_path = state.prompt_builder.get_full_path(segment.path, segment.file)
+
+            # Resolve file content based on mode
+            # Use delimiter_value for joining multiple lines within files
+            file_content = ""
+            if segment.mode == "Random Line":
+                file_content = state.prompt_builder.get_random_line(full_path)
+            elif segment.mode == "Specific Line":
+                file_content = state.prompt_builder.get_specific_line(full_path, segment.line)
+            elif segment.mode == "Line Range":
+                file_content = state.prompt_builder.get_line_range(
+                    full_path, segment.line, segment.range_end, delimiter=delimiter_value
+                )
+            elif segment.mode == "All Lines":
+                file_content = state.prompt_builder.get_all_lines(
+                    full_path, delimiter=delimiter_value
+                )
+            elif segment.mode == "Random Multiple":
+                file_content = state.prompt_builder.get_random_lines(
+                    full_path, segment.count, delimiter=delimiter_value
                 )
             elif segment.mode == "Sequential":
                 file_content = state.prompt_builder.get_sequential_line(
@@ -239,17 +264,20 @@ def build_combined_prompt(
 
             # If file read failed, fall back to text only
             if not file_content:
-                segments.append(("text", segment.text.strip()))
+                content_with_delimiter = segment.text.strip() + delimiter_value
+                segments.append(("text", content_with_delimiter))
                 return
 
             # Combine text and file based on text_order
+            # The delimiter is placed ONLY at the end of the segment, not between text and file
             if segment.text_order == "text_first":
-                combined = f"{segment.text.strip()}{segment.delimiter}{file_content}"
+                combined = f"{segment.text.strip()} {file_content}"
             else:  # file_first
-                combined = f"{file_content}{segment.delimiter}{segment.text.strip()}"
+                combined = f"{file_content} {segment.text.strip()}"
 
-            # Add as single text segment
-            segments.append(("text", combined))
+            # Append delimiter at the END of the combined segment
+            combined_with_end_delimiter = combined + delimiter_value
+            segments.append(("text", combined_with_end_delimiter))
 
     # Add segments in order (Start 1-3, Mid 1-3, End 1-3)
     add_segment(start_1)
@@ -263,8 +291,9 @@ def build_combined_prompt(
     add_segment(end_3)
 
     # Build the final prompt
+    # NOTE: Each segment has delimiter appended, pass delimiter="" to concatenate
     try:
-        result = state.prompt_builder.build_prompt(segments)
+        result = state.prompt_builder.build_prompt(segments, delimiter="")
         return result if result else ""
     except Exception as e:
         logger.error(f"Error building prompt: {e}", exc_info=True)

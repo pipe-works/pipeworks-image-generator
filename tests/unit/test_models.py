@@ -105,23 +105,45 @@ class TestSegmentConfig:
     def test_delimiter_default_value(self):
         """Test delimiter has correct default value."""
         segment = SegmentConfig()
-        assert segment.delimiter == " "  # Default is now single space
+        assert segment.delimiter == "Space ( )"  # Default is now "Space ( )" label
 
     def test_custom_text_order_and_delimiter(self):
         """Test custom text_order and delimiter values can be set."""
-        segment = SegmentConfig(text_order="file_first", delimiter=". ")
+        segment = SegmentConfig(text_order="file_first", delimiter="Period-Space (. )")
         assert segment.text_order == "file_first"
-        assert segment.delimiter == ". "
+        assert segment.delimiter == "Period-Space (. )"
 
     def test_backward_compatibility_with_new_fields(self):
         """Test that existing methods still work with new fields."""
         # Test has_content() with new fields
-        segment = SegmentConfig(text="test", text_order="file_first", delimiter=". ")
+        segment = SegmentConfig(text="test", text_order="file_first", delimiter="Period-Space (. )")
         assert segment.has_content() is True
 
         # Test is_configured() with new fields
-        segment2 = SegmentConfig(file="test.txt", text_order="file_first", delimiter=". ")
+        segment2 = SegmentConfig(
+            file="test.txt", text_order="file_first", delimiter="Period-Space (. )"
+        )
         assert segment2.is_configured() is True
+
+    def test_get_delimiter_value(self):
+        """Test get_delimiter_value() converts label to value correctly."""
+        # Test default delimiter
+        segment = SegmentConfig()
+        assert segment.get_delimiter_value() == " "
+
+        # Test various delimiter labels
+        segment_comma = SegmentConfig(delimiter="Comma (,)")
+        assert segment_comma.get_delimiter_value() == ","
+
+        segment_period_space = SegmentConfig(delimiter="Period-Space (. )")
+        assert segment_period_space.get_delimiter_value() == ". "
+
+        segment_none = SegmentConfig(delimiter="None (no separator)")
+        assert segment_none.get_delimiter_value() == ""
+
+        # Test unknown delimiter falls back to space
+        segment_unknown = SegmentConfig(delimiter="unknown")
+        assert segment_unknown.get_delimiter_value() == " "
 
 
 class TestGenerationParams:
@@ -516,12 +538,27 @@ class TestConstants:
         assert "file_first" in TEXT_ORDER_OPTIONS
 
     def test_delimiter_options(self):
-        """Test DELIMITER_OPTIONS contains expected values."""
+        """Test DELIMITER_OPTIONS contains expected descriptive labels."""
         assert isinstance(DELIMITER_OPTIONS, list)
-        assert len(DELIMITER_OPTIONS) == 6  # Now includes empty string option
-        assert " " in DELIMITER_OPTIONS  # Default (single space)
-        assert ", " in DELIMITER_OPTIONS
-        assert ". " in DELIMITER_OPTIONS
-        assert "" in DELIMITER_OPTIONS  # Empty delimiter option
-        assert "." in DELIMITER_OPTIONS
-        assert "," in DELIMITER_OPTIONS
+        assert len(DELIMITER_OPTIONS) == 6  # Six delimiter options
+        assert "Space ( )" in DELIMITER_OPTIONS  # Default
+        assert "Comma-Space (, )" in DELIMITER_OPTIONS
+        assert "Period-Space (. )" in DELIMITER_OPTIONS
+        assert "None (no separator)" in DELIMITER_OPTIONS  # Empty delimiter
+        assert "Period (.)" in DELIMITER_OPTIONS
+        assert "Comma (,)" in DELIMITER_OPTIONS
+
+    def test_delimiter_map(self):
+        """Test DELIMITER_MAP correctly maps labels to values."""
+        from pipeworks.ui.models import DELIMITER_MAP
+
+        assert isinstance(DELIMITER_MAP, dict)
+        assert len(DELIMITER_MAP) == 6
+
+        # Test each mapping
+        assert DELIMITER_MAP["Space ( )"] == " "
+        assert DELIMITER_MAP["Comma-Space (, )"] == ", "
+        assert DELIMITER_MAP["Period-Space (. )"] == ". "
+        assert DELIMITER_MAP["None (no separator)"] == ""
+        assert DELIMITER_MAP["Period (.)"] == "."
+        assert DELIMITER_MAP["Comma (,)"] == ","

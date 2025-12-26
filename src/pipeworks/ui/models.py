@@ -27,7 +27,7 @@ class SegmentConfig:
 
     # Text order and delimiter controls
     text_order: str = "text_first"  # "text_first" or "file_first"
-    delimiter: str = " "  # Delimiter for joining text + file content (default: single space)
+    delimiter: str = "Space ( )"  # Delimiter label (default: "Space ( )")
 
     # Character/Facial condition generation (for Start segments)
     condition_type: str = "None"  # "None", "Character", "Facial", or "Both"
@@ -49,6 +49,14 @@ class SegmentConfig:
             True if segment has text or a configured file
         """
         return bool(self.text and self.text.strip()) or self.is_configured()
+
+    def get_delimiter_value(self) -> str:
+        """Get the actual delimiter value from the label.
+
+        Returns:
+            The delimiter string (e.g., " ", ", ", "", etc.)
+        """
+        return DELIMITER_MAP.get(self.delimiter, " ")
 
 
 @dataclass
@@ -226,12 +234,19 @@ TEXT_ORDER_OPTIONS = [
     "file_first",  # File/condition content before user text
 ]
 
-# Delimiter options for joining text segments
-DELIMITER_OPTIONS = [
-    " ",  # Single space (minimal separation, default)
-    ", ",  # Comma-space (natural for tags/keywords)
-    ". ",  # Period-space (natural for sentences)
-    "",  # No delimiter (content only)
-    ".",  # Period only (tight sentence joining)
-    ",",  # Comma only (tight tag joining)
-]
+# Delimiter label-to-value mapping
+# This prevents blank options in dropdown by using descriptive labels
+DELIMITER_MAP = {
+    "Space ( )": " ",  # Single space (minimal separation, default)
+    "Comma-Space (, )": ", ",  # Comma-space (natural for tags/keywords)
+    "Period-Space (. )": ". ",  # Period-space (natural for sentences)
+    "None (no separator)": "",  # No delimiter (content only)
+    "Period (.)": ".",  # Period only (tight sentence joining)
+    "Comma (,)": ",",  # Comma only (tight tag joining)
+}
+
+# Delimiter options for dropdowns (descriptive labels)
+DELIMITER_OPTIONS = list(DELIMITER_MAP.keys())
+
+# Default delimiter label
+DEFAULT_DELIMITER_LABEL = "Space ( )"

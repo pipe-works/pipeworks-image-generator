@@ -6,6 +6,7 @@ import gradio as gr
 
 from .models import (
     CONDITION_TYPES,
+    DEFAULT_DELIMITER_LABEL,
     DELIMITER_OPTIONS,
     SEGMENT_MODES,
     TEXT_ORDER_OPTIONS,
@@ -77,7 +78,7 @@ class SegmentUI:
                 self.delimiter = gr.Dropdown(
                     label="Delimiter",
                     choices=DELIMITER_OPTIONS,
-                    value=" ",
+                    value=DEFAULT_DELIMITER_LABEL,
                     info="How to join text and file",
                 )
 
@@ -392,7 +393,7 @@ class ConditionSegmentUI(SegmentUI):
                 self.delimiter = gr.Dropdown(
                     label="Delimiter",
                     choices=DELIMITER_OPTIONS,
-                    value=" ",
+                    value=DEFAULT_DELIMITER_LABEL,
                     info="How to join text and file",
                 )
 
