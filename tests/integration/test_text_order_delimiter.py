@@ -41,12 +41,13 @@ class TestTextOrderFeature:
             file="test.txt",
             mode="Random Line",
             text_order="text_first",
-            delimiter=", ",
+            delimiter="Comma-Space (, )",  # Use label format
         )
 
         result = build_combined_prompt(start_1, *empty_segments[1:], state=initialized_state)
 
-        assert result == "wizard, robed"
+        # New behavior: space between text and file, delimiter at end
+        assert result == "wizard robed, "
 
     def test_file_first_order(self, initialized_state, test_inputs_dir, empty_segments):
         """Test file_first order places file content before text."""
@@ -59,20 +60,24 @@ class TestTextOrderFeature:
             file="test.txt",
             mode="Random Line",
             text_order="file_first",
-            delimiter=", ",
+            delimiter="Comma-Space (, )",  # Use label format
         )
 
         result = build_combined_prompt(start_1, *empty_segments[1:], state=initialized_state)
 
-        assert result == "robed, wizard"
+        # New behavior: space between file and text, delimiter at end
+        assert result == "robed wizard, "
 
     def test_text_only_unchanged(self, initialized_state, empty_segments):
         """Test text-only segments work unchanged."""
-        start_1 = SegmentConfig(text="wizard", text_order="text_first", delimiter=", ")
+        start_1 = SegmentConfig(
+            text="wizard", text_order="text_first", delimiter="Comma-Space (, )"
+        )
 
         result = build_combined_prompt(start_1, *empty_segments[1:], state=initialized_state)
 
-        assert result == "wizard"
+        # New behavior: delimiter appended to text
+        assert result == "wizard, "
 
     def test_file_only_unchanged(self, initialized_state, test_inputs_dir, empty_segments):
         """Test file-only segments work unchanged."""
@@ -80,12 +85,16 @@ class TestTextOrderFeature:
         test_file.write_text("robed")
 
         start_1 = SegmentConfig(
-            file="test.txt", mode="Random Line", text_order="text_first", delimiter=", "
+            file="test.txt",
+            mode="Random Line",
+            text_order="text_first",
+            delimiter="Comma-Space (, )",
         )
 
         result = build_combined_prompt(start_1, *empty_segments[1:], state=initialized_state)
 
-        assert result == "robed"
+        # New behavior: delimiter appended to file content
+        assert result == "robed, "
 
 
 class TestDelimiterFeature:
@@ -103,12 +112,12 @@ class TestDelimiterFeature:
             file="test.txt",
             mode="Random Line",
             text_order="text_first",
-            delimiter=", ",  # Default
+            delimiter="Comma-Space (, )",  # Default
         )
 
         result = build_combined_prompt(start_1, *empty_segments[1:], state=initialized_state)
 
-        assert result == "wizard, robed"
+        assert result == "wizard robed, "
 
     def test_delimiter_period_space(self, initialized_state, test_inputs_dir, empty_segments):
         """Test delimiter '. ' (period-space) for sentences."""
@@ -120,12 +129,12 @@ class TestDelimiterFeature:
             file="test.txt",
             mode="Random Line",
             text_order="text_first",
-            delimiter=". ",
+            delimiter="Period-Space (. )",
         )
 
         result = build_combined_prompt(start_1, *empty_segments[1:], state=initialized_state)
 
-        assert result == "A wizard. wearing robes"
+        assert result == "A wizard wearing robes. "
 
     def test_delimiter_single_space(self, initialized_state, test_inputs_dir, empty_segments):
         """Test delimiter ' ' (single space)."""
@@ -137,12 +146,12 @@ class TestDelimiterFeature:
             file="test.txt",
             mode="Random Line",
             text_order="text_first",
-            delimiter=" ",
+            delimiter="Space ( )",
         )
 
         result = build_combined_prompt(start_1, *empty_segments[1:], state=initialized_state)
 
-        assert result == "wizard robed"
+        assert result == "wizard robed "
 
     def test_delimiter_comma_only(self, initialized_state, test_inputs_dir, empty_segments):
         """Test delimiter ',' (comma only)."""
@@ -154,12 +163,12 @@ class TestDelimiterFeature:
             file="test.txt",
             mode="Random Line",
             text_order="text_first",
-            delimiter=",",
+            delimiter="Comma (,)",
         )
 
         result = build_combined_prompt(start_1, *empty_segments[1:], state=initialized_state)
 
-        assert result == "wizard,robed"
+        assert result == "wizard robed,"
 
     def test_delimiter_period_only(self, initialized_state, test_inputs_dir, empty_segments):
         """Test delimiter '.' (period only)."""
@@ -171,12 +180,12 @@ class TestDelimiterFeature:
             file="test.txt",
             mode="Random Line",
             text_order="text_first",
-            delimiter=".",
+            delimiter="Period (.)",
         )
 
         result = build_combined_prompt(start_1, *empty_segments[1:], state=initialized_state)
 
-        assert result == "wizard.robed"
+        assert result == "wizard robed."
 
 
 class TestMultipleSegments:
@@ -195,7 +204,7 @@ class TestMultipleSegments:
             file="file1.txt",
             mode="Random Line",
             text_order="text_first",
-            delimiter=". ",  # Period-space
+            delimiter="Period-Space (. )",  # Period-space
         )
 
         start_2 = SegmentConfig(
@@ -203,16 +212,16 @@ class TestMultipleSegments:
             file="file2.txt",
             mode="Random Line",
             text_order="text_first",
-            delimiter=", ",  # Comma-space
+            delimiter="Comma-Space (, )",  # Comma-space
         )
 
         result = build_combined_prompt(
             start_1, start_2, *empty_segments[2:], state=initialized_state
         )
 
-        # Intra-segment: uses each segment's delimiter
-        # Inter-segment: always uses ", "
-        assert result == "wizard. robed, castle, old"
+        # New behavior: space between text and file, delimiter appended
+        # Segment 1: "wizard robed. " Segment 2: "castle old, "
+        assert result == "wizard robed. castle old, "
 
     def test_mixed_text_order_per_segment(self, initialized_state, test_inputs_dir, empty_segments):
         """Test that each segment can have its own text_order."""
@@ -223,23 +232,24 @@ class TestMultipleSegments:
             text="wizard",
             file="file1.txt",
             mode="Random Line",
-            text_order="text_first",  # wizard, robed
-            delimiter=", ",
+            text_order="text_first",  # wizard robed
+            delimiter="Comma-Space (, )",
         )
 
         start_2 = SegmentConfig(
             text="castle",
             file="file2.txt",
             mode="Random Line",
-            text_order="file_first",  # ancient, castle
-            delimiter=", ",
+            text_order="file_first",  # ancient castle
+            delimiter="Comma-Space (, )",
         )
 
         result = build_combined_prompt(
             start_1, start_2, *empty_segments[2:], state=initialized_state
         )
 
-        assert result == "wizard, robed, ancient, castle"
+        # New behavior: space within segments, delimiter at end
+        assert result == "wizard robed, ancient castle, "
 
 
 class TestBackwardCompatibility:
@@ -248,23 +258,23 @@ class TestBackwardCompatibility:
     def test_defaults_match_original_behavior(
         self, initialized_state, test_inputs_dir, empty_segments
     ):
-        """Test that default values preserve original behavior."""
+        """Test that default values work correctly."""
         test_file = test_inputs_dir / "test.txt"
         test_file.write_text("robed")
 
-        # Using defaults (text_first, ", ")
+        # Using defaults (text_first, "Space ( )")
         start_1 = SegmentConfig(
             text="wizard",
             file="test.txt",
             mode="Random Line",
             # text_order defaults to "text_first"
-            # delimiter defaults to ", "
+            # delimiter defaults to "Space ( )"
         )
 
         result = build_combined_prompt(start_1, *empty_segments[1:], state=initialized_state)
 
-        # Should match original behavior: text first, comma-space delimiter
-        assert result == "wizard, robed"
+        # New behavior: text first, space between, space delimiter at end
+        assert result == "wizard robed "
 
     def test_empty_segments_still_skipped(self, initialized_state, empty_segments):
         """Test that empty segments are still skipped."""
@@ -285,13 +295,13 @@ class TestEdgeCases:
             file="nonexistent.txt",
             mode="Random Line",
             text_order="text_first",
-            delimiter=", ",
+            delimiter="Comma-Space (, )",
         )
 
         result = build_combined_prompt(start_1, *empty_segments[1:], state=initialized_state)
 
-        # Should fall back to text only
-        assert result == "wizard"
+        # Should fall back to text only with delimiter
+        assert result == "wizard, "
 
     def test_whitespace_stripped(self, initialized_state, test_inputs_dir, empty_segments):
         """Test that whitespace is properly stripped."""
@@ -303,13 +313,13 @@ class TestEdgeCases:
             file="test.txt",
             mode="Random Line",
             text_order="text_first",
-            delimiter=", ",
+            delimiter="Comma-Space (, )",
         )
 
         result = build_combined_prompt(start_1, *empty_segments[1:], state=initialized_state)
 
-        # Whitespace should be stripped from both text and file content
-        assert result == "wizard, robed"
+        # Whitespace stripped, then combined with space and delimiter
+        assert result == "wizard robed, "
 
     def test_all_file_modes_work_with_text_and_delimiter(
         self, initialized_state, test_inputs_dir, empty_segments
@@ -318,21 +328,28 @@ class TestEdgeCases:
         test_file = test_inputs_dir / "test.txt"
         test_file.write_text("line1\nline2\nline3")
 
-        # Test Specific Line
+        # Test Specific Line - delimiter goes at END, not between text and file
         cfg = SegmentConfig(
-            text="prefix", file="test.txt", mode="Specific Line", line=2, delimiter=": "
+            text="prefix", file="test.txt", mode="Specific Line", line=2, delimiter="Comma (,)"
         )
         result = build_combined_prompt(cfg, *empty_segments[1:], state=initialized_state)
-        assert result == "prefix: line2"
+        assert result == "prefix line2,"
 
-        # Test Line Range
+        # Test Line Range - delimiter used within file lines AND at end
         cfg = SegmentConfig(
-            text="prefix", file="test.txt", mode="Line Range", line=1, range_end=2, delimiter=": "
+            text="prefix",
+            file="test.txt",
+            mode="Line Range",
+            line=1,
+            range_end=2,
+            delimiter="Comma (,)",
         )
         result = build_combined_prompt(cfg, *empty_segments[1:], state=initialized_state)
-        assert result == "prefix: line1, line2"
+        assert result == "prefix line1,line2,"
 
-        # Test All Lines
-        cfg = SegmentConfig(text="prefix", file="test.txt", mode="All Lines", delimiter=": ")
+        # Test All Lines - delimiter used within file lines AND at end
+        cfg = SegmentConfig(
+            text="prefix", file="test.txt", mode="All Lines", delimiter="Comma (,)"
+        )
         result = build_combined_prompt(cfg, *empty_segments[1:], state=initialized_state)
-        assert result == "prefix: line1, line2, line3"
+        assert result == "prefix line1,line2,line3,"

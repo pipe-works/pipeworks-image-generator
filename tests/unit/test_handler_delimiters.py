@@ -128,9 +128,10 @@ class TestSegmentConcatenation:
         seg1 = SegmentConfig(text="A", delimiter="Comma (,)")
         seg2 = SegmentConfig(text="B", delimiter="Period (.)")
         seg3 = SegmentConfig(text="C", delimiter="None (no separator)")
+        empty = SegmentConfig()  # Empty
 
         result = build_combined_prompt(
-            seg1, seg2, seg3, seg3, seg3, seg3, seg3, seg3, seg3, test_state
+            seg1, seg2, seg3, empty, empty, empty, empty, empty, empty, test_state
         )
 
         # Should be: "A," + "B." + "C" (no delimiter on last one)
@@ -158,9 +159,10 @@ class TestEmptyDelimiter:
         seg1 = SegmentConfig(text="word1", delimiter="None (no separator)")
         seg2 = SegmentConfig(text="word2", delimiter="Comma (,)")
         seg3 = SegmentConfig(text="word3", delimiter="None (no separator)")
+        empty = SegmentConfig()  # Empty
 
         result = build_combined_prompt(
-            seg1, seg2, seg3, seg3, seg3, seg3, seg3, seg3, seg3, test_state
+            seg1, seg2, seg3, empty, empty, empty, empty, empty, empty, test_state
         )
 
         # Should be: "word1" + "word2," + "word3"
@@ -213,9 +215,10 @@ class TestRealWorldScenarios:
         seg1 = SegmentConfig(text="beautiful landscape", delimiter="Comma-Space (, )")
         seg2 = SegmentConfig(text="sunset", delimiter="Comma-Space (, )")
         seg3 = SegmentConfig(text="8k uhd", delimiter="None (no separator)")
+        empty = SegmentConfig()  # Empty
 
         result = build_combined_prompt(
-            seg1, seg2, seg3, seg3, seg3, seg3, seg3, seg3, seg3, test_state
+            seg1, seg2, seg3, empty, empty, empty, empty, empty, empty, test_state
         )
 
         # Should create: "beautiful landscape, sunset, 8k uhd"
@@ -226,9 +229,10 @@ class TestRealWorldScenarios:
         seg1 = SegmentConfig(text="A wizard in robes", delimiter="Period-Space (. )")
         seg2 = SegmentConfig(text="Standing in forest", delimiter="Period-Space (. )")
         seg3 = SegmentConfig(text="Magical atmosphere", delimiter="None (no separator)")
+        empty = SegmentConfig()  # Empty
 
         result = build_combined_prompt(
-            seg1, seg2, seg3, seg3, seg3, seg3, seg3, seg3, seg3, test_state
+            seg1, seg2, seg3, empty, empty, empty, empty, empty, empty, test_state
         )
 
         # Should create: "A wizard in robes. Standing in forest. Magical atmosphere"
