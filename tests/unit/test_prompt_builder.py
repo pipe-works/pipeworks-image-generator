@@ -695,14 +695,158 @@ class TestPromptBuilderBuildPrompt:
         assert result == "nested line 1"
 
     def test_build_prompt_custom_delimiter(self, test_inputs_dir):
-        """Test that delimiter parameter exists (even if not used yet)."""
+        """Test that delimiter parameter is now used correctly."""
         pb = PromptBuilder(test_inputs_dir)
 
         segments = [("text", "A"), ("text", "B")]
 
-        # The delimiter parameter exists but is currently unused
-        # Just verify the call doesn't fail
+        # The delimiter parameter should now be used
         result = pb.build_prompt(segments, delimiter=" | ")
 
-        # Currently still uses ", " separator (hardcoded)
+        # Should use the custom delimiter
+        assert result == "A | B"
+        assert " | " in result
+
+    def test_build_prompt_delimiter_parameter_used(self, test_inputs_dir):
+        """Test that custom delimiter parameter is now correctly used."""
+        pb = PromptBuilder(test_inputs_dir)
+
+        segments = [("text", "A"), ("text", "B"), ("text", "C")]
+
+        # Pass a custom delimiter
+        result = pb.build_prompt(segments, delimiter=" | ")
+
+        # Should now use the custom delimiter
+        assert result == "A | B | C"
+
+    def test_build_prompt_double_punctuation_text_segment_fixed(self, test_inputs_dir):
+        """Test that text segments with trailing commas no longer cause double punctuation."""
+        pb = PromptBuilder(test_inputs_dir)
+
+        segments = [
+            ("text", "a beautiful landscape,"),  # User text ends with comma
+            ("text", "photorealistic"),
+            ("text", "golden hour lighting"),
+        ]
+
+        result = pb.build_prompt(segments)
+
+        # Should strip trailing comma to avoid double punctuation
+        assert result == "a beautiful landscape, photorealistic, golden hour lighting"
+
+    def test_build_prompt_double_punctuation_mixed_segments_fixed(self, test_inputs_dir):
+        """Test that double punctuation is prevented with mixed text and file segments."""
+        pb = PromptBuilder(test_inputs_dir)
+
+        # Create a file with content that has trailing comma
+        test_file = test_inputs_dir / "with_comma.txt"
+        test_file.write_text("style 1,\nstyle 2,\nstyle 3,")
+
+        segments = [
+            ("text", "a wizard,"),  # Trailing comma
+            ("file_specific", "with_comma.txt|1"),  # File content has trailing comma
+            ("text", "magical"),
+        ]
+
+        result = pb.build_prompt(segments)
+
+        # Should strip trailing commas to prevent double punctuation
+        assert result == "a wizard, style 1, magical"
+
+    def test_get_line_range_custom_delimiter(self, test_inputs_dir):
+        """Test that get_line_range now supports custom delimiter."""
+        pb = PromptBuilder(test_inputs_dir)
+
+        # Default delimiter
+        result = pb.get_line_range("test.txt", 1, 3)
+        assert result == "line 1, line 2, line 3"
+
+        # Custom delimiter
+        result = pb.get_line_range("test.txt", 1, 3, delimiter=" | ")
+        assert result == "line 1 | line 2 | line 3"
+
+    def test_get_all_lines_custom_delimiter(self, test_inputs_dir):
+        """Test that get_all_lines now supports custom delimiter."""
+        pb = PromptBuilder(test_inputs_dir)
+
+        # Default delimiter
+        result = pb.get_all_lines("test.txt")
+        assert result == "line 1, line 2, line 3, line 4, line 5"
+
+        # Custom delimiter
+        result = pb.get_all_lines("test.txt", delimiter=" - ")
+        assert result == "line 1 - line 2 - line 3 - line 4 - line 5"
+
+    def test_get_random_lines_custom_delimiter(self, test_inputs_dir):
+        """Test that get_random_lines now supports custom delimiter."""
+        pb = PromptBuilder(test_inputs_dir)
+
+        # Create a small file to ensure deterministic results
+        test_file = test_inputs_dir / "small.txt"
+        test_file.write_text("A\nB\nC")
+
+        # Default delimiter
+        result = pb.get_random_lines("small.txt", 3)
         assert ", " in result
+        assert "A" in result
+        assert "B" in result
+        assert "C" in result
+
+        # Custom delimiter
+        result = pb.get_random_lines("small.txt", 3, delimiter=" & ")
+        assert " & " in result
+        assert "A" in result
+        assert "B" in result
+        assert "C" in result
+
+    def test_build_prompt_custom_delimiter_with_trailing_punctuation(self, test_inputs_dir):
+        """Test that custom delimiter strips correctly to avoid double punctuation."""
+        pb = PromptBuilder(test_inputs_dir)
+
+        segments = [
+            ("text", "first|"),  # Trailing pipe
+            ("text", "second"),
+            ("text", "third|"),  # Trailing pipe
+        ]
+
+        result = pb.build_prompt(segments, delimiter=" | ")
+
+        # Should strip trailing pipes to prevent "first| | second"
+        assert result == "first | second | third"
+
+    def test_build_prompt_mixed_trailing_delimiters(self, test_inputs_dir):
+        """Test handling of various trailing delimiter formats."""
+        pb = PromptBuilder(test_inputs_dir)
+
+        segments = [
+            ("text", "alpha,"),  # Just comma
+            ("text", "beta, "),  # Comma with space
+            ("text", "gamma"),  # No trailing comma
+        ]
+
+        result = pb.build_prompt(segments, delimiter=", ")
+
+        # Should handle all cases correctly
+        assert result == "alpha, beta, gamma"
+
+    def test_strip_trailing_delimiter_helper(self, test_inputs_dir):
+        """Test the _strip_trailing_delimiter helper method."""
+        pb = PromptBuilder(test_inputs_dir)
+
+        # Test with comma-space delimiter
+        assert pb._strip_trailing_delimiter("hello,", ", ") == "hello"
+        assert pb._strip_trailing_delimiter("hello, ", ", ") == "hello"
+        assert pb._strip_trailing_delimiter("hello", ", ") == "hello"
+
+        # Test with pipe delimiter
+        assert pb._strip_trailing_delimiter("test|", " | ") == "test"
+        assert pb._strip_trailing_delimiter("test | ", " | ") == "test"
+        assert pb._strip_trailing_delimiter("test", " | ") == "test"
+
+        # Test with dash delimiter
+        assert pb._strip_trailing_delimiter("word-", " - ") == "word"
+        assert pb._strip_trailing_delimiter("word - ", " - ") == "word"
+
+        # Test empty inputs
+        assert pb._strip_trailing_delimiter("", ", ") == ""
+        assert pb._strip_trailing_delimiter("text", "") == "text"

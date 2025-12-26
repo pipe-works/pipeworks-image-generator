@@ -390,7 +390,7 @@ class PromptBuilder:
         line_number = start_line + run_index
         return self.get_specific_line(file_path, line_number)
 
-    def get_line_range(self, file_path: str, start: int, end: int) -> str:
+    def get_line_range(self, file_path: str, start: int, end: int, delimiter: str = ", ") -> str:
         """
         Get a range of lines from a text file (1-indexed, inclusive).
 
@@ -398,9 +398,10 @@ class PromptBuilder:
             file_path: Relative path from inputs_dir
             start: Start line number (1-indexed)
             end: End line number (1-indexed, inclusive)
+            delimiter: Delimiter for joining lines (default: ", ")
 
         Returns:
-            Lines joined with commas, or empty string if range is invalid
+            Lines joined with delimiter, or empty string if range is invalid
         """
         lines = self.read_file_lines(file_path)
         if not lines:
@@ -411,31 +412,33 @@ class PromptBuilder:
         end = max(start, min(end, len(lines)))
 
         selected_lines = lines[start - 1 : end]
-        return ", ".join(selected_lines)
+        return delimiter.join(selected_lines)
 
-    def get_all_lines(self, file_path: str) -> str:
+    def get_all_lines(self, file_path: str, delimiter: str = ", ") -> str:
         """
         Get all lines from a text file.
 
         Args:
             file_path: Relative path from inputs_dir
+            delimiter: Delimiter for joining lines (default: ", ")
 
         Returns:
-            All lines joined with commas
+            All lines joined with delimiter
         """
         lines = self.read_file_lines(file_path)
-        return ", ".join(lines)
+        return delimiter.join(lines)
 
-    def get_random_lines(self, file_path: str, count: int) -> str:
+    def get_random_lines(self, file_path: str, count: int, delimiter: str = ", ") -> str:
         """
         Get multiple random lines from a text file (without replacement).
 
         Args:
             file_path: Relative path from inputs_dir
             count: Number of random lines to select
+            delimiter: Delimiter for joining lines (default: ", ")
 
         Returns:
-            Random lines joined with commas
+            Random lines joined with delimiter
         """
         lines = self.read_file_lines(file_path)
         if not lines:
@@ -444,7 +447,47 @@ class PromptBuilder:
         # Don't try to select more lines than available
         count = min(count, len(lines))
         selected = random.sample(lines, count)
-        return ", ".join(selected)
+        return delimiter.join(selected)
+
+    def _strip_trailing_delimiter(self, text: str, delimiter: str) -> str:
+        """
+        Strip trailing delimiter from text to avoid double punctuation.
+
+        This method removes trailing occurrences of the delimiter (with or without
+        trailing whitespace) to prevent double punctuation when joining segments.
+
+        Args:
+            text: Text to process
+            delimiter: Delimiter to strip from the end
+
+        Returns:
+            Text with trailing delimiter removed
+
+        Examples:
+            >>> pb._strip_trailing_delimiter("hello,", ", ")
+            'hello'
+            >>> pb._strip_trailing_delimiter("hello, ", ", ")
+            'hello'
+            >>> pb._strip_trailing_delimiter("hello|", " | ")
+            'hello'
+        """
+        if not text or not delimiter:
+            return text
+
+        # First, strip any trailing whitespace
+        text = text.rstrip()
+
+        # Strip the full delimiter if present (e.g., ", ")
+        if text.endswith(delimiter):
+            text = text[: -len(delimiter)].rstrip()
+            return text
+
+        # Strip just the delimiter without whitespace (e.g., "," from ", ")
+        delimiter_no_space = delimiter.strip()
+        if delimiter_no_space and text.endswith(delimiter_no_space):
+            text = text[: -len(delimiter_no_space)].rstrip()
+
+        return text
 
     def build_prompt(self, segments: list[tuple[str, str]], delimiter: str = ", ") -> str:
         """Build a prompt from a list of segments.
@@ -454,7 +497,9 @@ class PromptBuilder:
         direct text or a reference to file content with a specific selection mode.
 
         The method processes segments in order, extracts content based on the
-        segment type, and combines non-empty results with comma separators.
+        segment type, and combines non-empty results with the specified delimiter.
+        Trailing delimiters are automatically stripped from each segment to avoid
+        double punctuation.
 
         Args:
             segments: List of (segment_type, content) tuples
@@ -465,15 +510,14 @@ class PromptBuilder:
                      - 'file_range': Line range (format: "filepath|start|end")
                      - 'file_all': All lines from file
                      - 'file_random_multi': N random lines (format: "filepath|count")
-            delimiter: Delimiter for joining segments (default: ", ").
-                      Currently unused - inter-segment joining is hardcoded to ", ".
-                      Added for future extensibility.
+            delimiter: Delimiter for joining segments (default: ", ")
 
         Returns:
-            Combined prompt string with segments joined by ", "
+            Combined prompt string with segments joined by the delimiter
 
         Notes:
             - Empty segments are automatically skipped
+            - Trailing delimiters are stripped from each segment to prevent double punctuation
             - Invalid segment formats are logged as errors
             - File operations use the cached read_file_lines method
             - Results are deterministic except for random selections
@@ -498,14 +542,18 @@ class PromptBuilder:
                 continue
 
             if segment_type == "text":
-                # Direct user text input - use as-is
-                parts.append(content.strip())
+                # Direct user text input - strip trailing delimiter to avoid double punctuation
+                part = self._strip_trailing_delimiter(content.strip(), delimiter)
+                if part:
+                    parts.append(part)
 
             elif segment_type == "file_random":
                 # Random line from file - provides variation
                 result = self.get_random_line(content)
                 if result:
-                    parts.append(result)
+                    part = self._strip_trailing_delimiter(result, delimiter)
+                    if part:
+                        parts.append(part)
 
             elif segment_type == "file_specific":
                 # Specific line from file (format: "filepath|line_number")
@@ -514,7 +562,9 @@ class PromptBuilder:
                     filepath, line_num = content.split("|")
                     result = self.get_specific_line(filepath, int(line_num))
                     if result:
-                        parts.append(result)
+                        part = self._strip_trailing_delimiter(result, delimiter)
+                        if part:
+                            parts.append(part)
                 except ValueError:
                     logger.error(f"Invalid file_specific format: {content}")
 
@@ -523,26 +573,32 @@ class PromptBuilder:
                 # Useful for combining related modifiers
                 try:
                     filepath, start, end = content.split("|")
-                    result = self.get_line_range(filepath, int(start), int(end))
+                    result = self.get_line_range(filepath, int(start), int(end), delimiter)
                     if result:
-                        parts.append(result)
+                        part = self._strip_trailing_delimiter(result, delimiter)
+                        if part:
+                            parts.append(part)
                 except ValueError:
                     logger.error(f"Invalid file_range format: {content}")
 
             elif segment_type == "file_all":
                 # All lines from file - kitchen sink approach
-                result = self.get_all_lines(content)
+                result = self.get_all_lines(content, delimiter)
                 if result:
-                    parts.append(result)
+                    part = self._strip_trailing_delimiter(result, delimiter)
+                    if part:
+                        parts.append(part)
 
             elif segment_type == "file_random_multi":
                 # Multiple random lines (format: "filepath|count")
                 # Balance between variation and control
                 try:
                     filepath, count = content.split("|")
-                    result = self.get_random_lines(filepath, int(count))
+                    result = self.get_random_lines(filepath, int(count), delimiter)
                     if result:
-                        parts.append(result)
+                        part = self._strip_trailing_delimiter(result, delimiter)
+                        if part:
+                            parts.append(part)
                 except ValueError:
                     logger.error(f"Invalid file_random_multi format: {content}")
 
@@ -553,13 +609,15 @@ class PromptBuilder:
                     filepath, start_line, run_index = content.split("|")
                     result = self.get_sequential_line(filepath, int(start_line), int(run_index))
                     if result:
-                        parts.append(result)
+                        part = self._strip_trailing_delimiter(result, delimiter)
+                        if part:
+                            parts.append(part)
                 except ValueError:
                     logger.error(f"Invalid file_sequential format: {content}")
 
-        # Join all parts with comma-space separator
+        # Join all parts with the specified delimiter
         # This creates a natural prompt structure that works well with diffusion models
-        return ", ".join(parts)
+        return delimiter.join(parts)
 
     def get_file_info(self, file_path: str) -> dict:
         """
