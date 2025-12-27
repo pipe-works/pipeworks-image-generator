@@ -67,14 +67,15 @@ def initialize_ui_state(state: UIState | None = None, model_name: str | None = N
             # Pre-load model (skip in offline mode)
             if os.environ.get("HF_HUB_OFFLINE") != "1":
                 try:
-                    # Force GC and clear CUDA cache to prevent OOM on browser refresh
-                    # Browser refresh creates new State but old model may still be in memory
+                    # Optional cleanup before model load (belt-and-suspenders approach)
+                    # NOTE: The real fix for browser refresh OOM is class-level model sharing
+                    # in the adapter (see ZImageTurboAdapter._shared_pipe)
                     import gc
 
                     import torch
 
                     if torch.cuda.is_available():
-                        gc.collect()  # Force Python garbage collection to clean up old models
+                        gc.collect()  # Force Python garbage collection
                         torch.cuda.empty_cache()  # Clear CUDA memory cache
                         torch.cuda.synchronize()  # Wait for all CUDA operations to complete
                         logger.info(

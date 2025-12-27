@@ -219,6 +219,26 @@ class MockQwenImageEditPipeline:
 # ============================================================================
 
 
+@pytest.fixture(autouse=True)
+def cleanup_shared_state():
+    """Clean up class-level shared state before and after each test.
+
+    This fixture ensures test isolation by resetting the shared model state
+    that was introduced to prevent OOM on browser refresh.
+    """
+    # Clean up before test
+    ZImageTurboAdapter._shared_pipe = None
+    ZImageTurboAdapter._shared_model_id = None
+    ZImageTurboAdapter._instance_count = 0
+
+    yield
+
+    # Clean up after test
+    ZImageTurboAdapter._shared_pipe = None
+    ZImageTurboAdapter._shared_model_id = None
+    ZImageTurboAdapter._instance_count = 0
+
+
 @pytest.fixture
 def test_config(tmp_path):
     """Create a test configuration with temporary paths.
@@ -291,7 +311,7 @@ class TestZImageTurboAdapterLifecycle:
         zimage_adapter.load_model()
 
         assert zimage_adapter.is_loaded
-        assert zimage_adapter.pipe is not None
+        assert ZImageTurboAdapter._shared_pipe is not None
         mock_pipeline_class.from_pretrained.assert_called_once()
 
     @patch("diffusers.ZImagePipeline")
@@ -360,7 +380,7 @@ class TestZImageTurboAdapterLifecycle:
         zimage_adapter.unload_model()
 
         assert not zimage_adapter.is_loaded
-        assert zimage_adapter.pipe is None
+        assert ZImageTurboAdapter._shared_pipe is None
 
     def test_unload_model_when_not_loaded_safe(self, zimage_adapter):
         """Test that unloading when not loaded is safe."""

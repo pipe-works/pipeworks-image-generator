@@ -51,6 +51,7 @@ See Also
 """
 
 import logging
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -137,6 +138,14 @@ class ZImageTurboAdapter(ModelAdapterBase):
     model_type = "text-to-image"
     version = "1.0.0"
 
+    # Class-level shared model state (shared across all instances)
+    # This prevents multiple instances from loading the model multiple times
+    # which would cause OOM errors on browser refresh
+    _shared_pipe: "ZImagePipeline | None" = None
+    _shared_model_id: str | None = None
+    _instance_count: int = 0
+    _load_lock = threading.Lock()
+
     def __init__(self, config: PipeworksConfig, plugins: list[PluginBase] | None = None) -> None:
         """Initialize the Z-Image-Turbo adapter.
 
@@ -145,27 +154,31 @@ class ZImageTurboAdapter(ModelAdapterBase):
             plugins: List of plugin instances to use
         """
         super().__init__(config, plugins)
-        self.pipe: ZImagePipeline | None = None
-        self._model_loaded = False
 
         # Get model ID from config (should be in PIPEWORKS_ZIMAGE_MODEL_ID env var)
         self.model_id = getattr(config, "zimage_model_id", "Tongyi-MAI/Z-Image-Turbo")
-        logger.info(f"Configured Z-Image-Turbo with model: {self.model_id}")
+
+        # Increment instance count (for reference tracking)
+        with ZImageTurboAdapter._load_lock:
+            ZImageTurboAdapter._instance_count += 1
+            logger.info(
+                f"Configured Z-Image-Turbo with model: {self.model_id} "
+                f"(instance #{ZImageTurboAdapter._instance_count})"
+            )
 
     def load_model(self) -> None:
         """Load the Z-Image-Turbo model into memory.
 
-        This method downloads the model from HuggingFace (if not cached),
-        loads it into memory with the configured dtype, moves it to the
-        target device, and applies any configured optimizations.
+        This method uses a class-level shared pipeline to prevent multiple instances
+        from loading the same model multiple times. This is crucial for preventing
+        OOM errors when browser refresh creates new sessions.
 
         The loading process follows these steps:
-        1. Check if model is already loaded (skip if so)
-        2. Map dtype string to torch dtype enum
-        3. Load pipeline from HuggingFace (or local cache)
-        4. Move model to target device (CUDA/CPU)
-        5. Apply performance optimizations (attention slicing, compilation, etc.)
-        6. Mark model as loaded
+        1. Acquire lock to prevent race conditions
+        2. Check if shared pipeline already exists with the same model ID
+        3. If yes, reuse it; if no, load new model into shared pipeline
+        4. Apply performance optimizations
+        5. Mark model as loaded
 
         Raises
         ------
@@ -174,75 +187,101 @@ class ZImageTurboAdapter(ModelAdapterBase):
 
         Notes
         -----
-        - First load downloads ~12GB model files from HuggingFace
-        - Subsequent loads use cache in config.models_dir
-        - Model compilation (if enabled) adds 1-2 minutes to first load
-        - CUDA initialization happens on first generation, not during load
+        - First instance loads the model, subsequent instances reuse it
+        - All instances share the same GPU memory
+        - Model is only unloaded when all instances are cleaned up
+        - Thread-safe for concurrent session creation
         """
-        if self._model_loaded:
-            logger.info("Z-Image-Turbo model already loaded, skipping...")
-            return
+        with ZImageTurboAdapter._load_lock:
+            # Check if we already have a loaded model with the same model_id
+            if (
+                ZImageTurboAdapter._shared_pipe is not None
+                and ZImageTurboAdapter._shared_model_id == self.model_id
+            ):
+                logger.info(
+                    f"Reusing already-loaded Z-Image-Turbo model {self.model_id} "
+                    f"(shared by {ZImageTurboAdapter._instance_count} instances)"
+                )
+                return
 
-        logger.info(f"Loading Z-Image-Turbo model {self.model_id}...")
+            # Check if a different model is currently loaded
+            if (
+                ZImageTurboAdapter._shared_pipe is not None
+                and ZImageTurboAdapter._shared_model_id != self.model_id
+            ):
+                logger.warning(
+                    f"Different model already loaded ({ZImageTurboAdapter._shared_model_id}). "
+                    f"Unloading before loading {self.model_id}"
+                )
+                self._unload_shared_model()
 
-        try:
-            # Import diffusers only when actually loading the model (lazy import)
-            from diffusers import ZImagePipeline
+            logger.info(f"Loading Z-Image-Turbo model {self.model_id}...")
 
-            # Map dtype string to torch dtype enum
-            # bfloat16 is recommended for best quality/performance balance
-            dtype_map = {
-                "bfloat16": torch.bfloat16,
-                "float16": torch.float16,
-                "float32": torch.float32,
-            }
-            torch_dtype = dtype_map[self.config.torch_dtype]
+            try:
+                # Import diffusers only when actually loading the model (lazy import)
+                from diffusers import ZImagePipeline
 
-            # Load pipeline from HuggingFace Hub (or local cache)
-            # low_cpu_mem_usage=False ensures faster loading at cost of higher peak RAM
-            self.pipe = ZImagePipeline.from_pretrained(
-                self.model_id,
-                torch_dtype=torch_dtype,
-                low_cpu_mem_usage=False,
-                cache_dir=str(self.config.models_dir),
-            )
+                # Map dtype string to torch dtype enum
+                # bfloat16 is recommended for best quality/performance balance
+                dtype_map = {
+                    "bfloat16": torch.bfloat16,
+                    "float16": torch.float16,
+                    "float32": torch.float32,
+                }
+                torch_dtype = dtype_map[self.config.torch_dtype]
 
-            # Move model to target device (CUDA preferred for speed)
-            # If CPU offloading is enabled, model components are moved dynamically
-            assert self.pipe is not None, "Pipeline should be loaded at this point"
+                # Load pipeline from HuggingFace Hub (or local cache)
+                # low_cpu_mem_usage=False ensures faster loading at cost of higher peak RAM
+                ZImageTurboAdapter._shared_pipe = ZImagePipeline.from_pretrained(
+                    self.model_id,
+                    torch_dtype=torch_dtype,
+                    low_cpu_mem_usage=False,
+                    cache_dir=str(self.config.models_dir),
+                )
 
-            if not self.config.enable_model_cpu_offload:
-                # Standard approach: keep entire model on device
-                self.pipe.to(self.config.device)  # type: ignore[union-attr]
-            else:
-                # Memory-efficient approach: move layers to CPU when not in use
-                self.pipe.enable_model_cpu_offload()  # type: ignore[union-attr]
-                logger.info("Enabled model CPU offloading")
+                # Move model to target device (CUDA preferred for speed)
+                # If CPU offloading is enabled, model components are moved dynamically
+                assert (
+                    ZImageTurboAdapter._shared_pipe is not None
+                ), "Pipeline should be loaded at this point"
 
-            # Apply performance optimizations
-            # Attention slicing reduces VRAM usage at slight speed cost
-            if self.config.enable_attention_slicing:
-                self.pipe.enable_attention_slicing()  # type: ignore[union-attr]
-                logger.info("Enabled attention slicing")
+                if not self.config.enable_model_cpu_offload:
+                    # Standard approach: keep entire model on device
+                    ZImageTurboAdapter._shared_pipe.to(self.config.device)  # type: ignore[union-attr]
+                else:
+                    # Memory-efficient approach: move layers to CPU when not in use
+                    ZImageTurboAdapter._shared_pipe.enable_model_cpu_offload()  # type: ignore[union-attr]
+                    logger.info("Enabled model CPU offloading")
 
-            # Use alternative attention backend (e.g., Flash-Attention-2)
-            if self.config.attention_backend != "default":
-                self.pipe.transformer.set_attention_backend(self.config.attention_backend)  # type: ignore[union-attr]
-                logger.info(f"Set attention backend to: {self.config.attention_backend}")
+                # Apply performance optimizations
+                # Attention slicing reduces VRAM usage at slight speed cost
+                if self.config.enable_attention_slicing:
+                    ZImageTurboAdapter._shared_pipe.enable_attention_slicing()  # type: ignore[union-attr]
+                    logger.info("Enabled attention slicing")
 
-            # Compile model with torch.compile for faster inference
-            # First run is slower, subsequent runs are faster
-            if self.config.compile_model:
-                logger.info("Compiling model (this may take a while on first run)...")
-                self.pipe.transformer.compile()  # type: ignore[union-attr]
-                logger.info("Model compiled successfully")
+                # Use alternative attention backend (e.g., Flash-Attention-2)
+                if self.config.attention_backend != "default":
+                    ZImageTurboAdapter._shared_pipe.transformer.set_attention_backend(self.config.attention_backend)  # type: ignore[union-attr]
+                    logger.info(f"Set attention backend to: {self.config.attention_backend}")
 
-            self._model_loaded = True
-            logger.info("Z-Image-Turbo model loaded successfully!")
+                # Compile model with torch.compile for faster inference
+                # First run is slower, subsequent runs are faster
+                if self.config.compile_model:
+                    logger.info("Compiling model (this may take a while on first run)...")
+                    ZImageTurboAdapter._shared_pipe.transformer.compile()  # type: ignore[union-attr]
+                    logger.info("Model compiled successfully")
 
-        except Exception as e:
-            logger.error(f"Failed to load Z-Image-Turbo model: {e}")
-            raise
+                ZImageTurboAdapter._shared_model_id = self.model_id
+                logger.info(
+                    f"Z-Image-Turbo model loaded successfully! "
+                    f"(shared by {ZImageTurboAdapter._instance_count} instances)"
+                )
+
+            except Exception as e:
+                logger.error(f"Failed to load Z-Image-Turbo model: {e}")
+                ZImageTurboAdapter._shared_pipe = None
+                ZImageTurboAdapter._shared_model_id = None
+                raise
 
     def generate(self, **kwargs) -> Image.Image:
         """Generate an image from a text prompt.
@@ -271,7 +310,7 @@ class ZImageTurboAdapter(ModelAdapterBase):
         - guidance_scale is forced to 0.0 for Z-Image-Turbo compatibility
         - Same seed + prompt + params = same image (reproducible)
         """
-        if not self._model_loaded:
+        if not self.is_loaded:
             self.load_model()
 
         # Extract parameters from kwargs
@@ -307,9 +346,11 @@ class ZImageTurboAdapter(ModelAdapterBase):
             generator = torch.Generator(self.config.device).manual_seed(seed)
 
         try:
-            # Generate image
-            assert self.pipe is not None, "Pipeline should be loaded at this point"
-            output = self.pipe(  # type: ignore[operator]
+            # Generate image using shared pipeline
+            assert (
+                ZImageTurboAdapter._shared_pipe is not None
+            ), "Pipeline should be loaded at this point"
+            output = ZImageTurboAdapter._shared_pipe(  # type: ignore[operator]
                 prompt=prompt,
                 height=height,
                 width=width,
@@ -431,25 +472,52 @@ class ZImageTurboAdapter(ModelAdapterBase):
     def unload_model(self) -> None:
         """Unload the Z-Image-Turbo model from memory.
 
-        This method:
-        1. Deletes the pipeline instance
-        2. Clears CUDA cache if using GPU
-        3. Synchronizes CUDA operations
-        4. Resets the loaded flag
-        5. Logs unload success
+        This method uses reference counting to ensure the model is only unloaded
+        when no instances are using it. This is important for shared model state.
+
+        Notes
+        -----
+        - Model is only actually unloaded when instance count reaches 0
+        - This prevents unloading while other sessions are using the model
+        - Browser refresh scenarios are handled gracefully
         """
-        if self._model_loaded:
-            logger.info("Unloading Z-Image-Turbo model...")
-            del self.pipe
-            self.pipe = None
-            self._model_loaded = False
+        with ZImageTurboAdapter._load_lock:
+            if ZImageTurboAdapter._shared_pipe is None:
+                logger.debug("No model loaded to unload")
+                return
 
-            # Clear CUDA cache and synchronize
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-                torch.cuda.synchronize()  # Wait for GPU to finish freeing memory
+            # Decrement instance count for this unload
+            ZImageTurboAdapter._instance_count = max(0, ZImageTurboAdapter._instance_count - 1)
 
-            logger.info("Z-Image-Turbo model unloaded successfully")
+            logger.info(
+                f"Unload requested ({ZImageTurboAdapter._instance_count} instances still active)"
+            )
+
+            # Only actually unload if no instances are left
+            if ZImageTurboAdapter._instance_count == 0:
+                self._unload_shared_model()
+
+    @classmethod
+    def _unload_shared_model(cls) -> None:
+        """Actually unload the shared model from memory.
+
+        This is a class method that handles the physical unloading of the model.
+        Should only be called when reference count is 0 or when forcing a reload.
+        """
+        if cls._shared_pipe is None:
+            return
+
+        logger.info("Unloading Z-Image-Turbo shared model...")
+        del cls._shared_pipe
+        cls._shared_pipe = None
+        cls._shared_model_id = None
+
+        # Clear CUDA cache and synchronize
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()  # Wait for GPU to finish freeing memory
+
+        logger.info("Z-Image-Turbo model unloaded successfully")
 
     @property
     def is_loaded(self) -> bool:
@@ -459,8 +527,15 @@ class ZImageTurboAdapter(ModelAdapterBase):
         -------
         bool
             True if model is loaded, False otherwise
+
+        Notes
+        -----
+        This checks the class-level shared pipeline, not instance state.
         """
-        return self._model_loaded
+        return (
+            ZImageTurboAdapter._shared_pipe is not None
+            and ZImageTurboAdapter._shared_model_id == self.model_id
+        )
 
 
 # Register the adapter with the global model registry
