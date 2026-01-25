@@ -36,25 +36,29 @@ Pipeworks is a Python-based image generation framework designed for programmatic
 ### Installation
 
 1. Clone the repository:
+
 ```bash
 git clone https://github.com/yourusername/pipeworks-image-generator.git
 cd pipeworks-image-generator
 ```
 
-2. Create and activate a virtual environment:
+1. Create and activate a virtual environment:
+
 ```bash
 python -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 ```
 
-3. Install dependencies:
+1. Install dependencies:
+
 ```bash
 pip install -e .
 # Or install from requirements.txt:
 pip install -r requirements.txt
 ```
 
-4. (Optional) Configure environment:
+1. (Optional) Configure environment:
+
 ```bash
 cp .env.example .env
 # Edit .env with your preferences
@@ -63,6 +67,7 @@ cp .env.example .env
 ### Running the Application
 
 Launch the Gradio UI:
+
 ```bash
 pipeworks
 # Or directly:
@@ -78,6 +83,7 @@ The UI will be available at `http://0.0.0.0:7860` (accessible on your local netw
 The web interface provides two main tabs:
 
 #### Generate Tab
+
 1. **Basic Generation**:
    - Open the web interface (default: `http://localhost:7860`)
    - Enter your prompt in the text box
@@ -108,6 +114,7 @@ The web interface provides two main tabs:
    - Workflows provide optimized prompts for specific use cases
 
 #### Gallery Browser Tab
+
 1. **Browse Generated Images**:
    - View all images in `outputs/` or `catalog/` directories
    - Navigate folder structure
@@ -125,6 +132,7 @@ The web interface provides two main tabs:
 ### Programmatic Usage
 
 #### Basic Text-to-Image Generation
+
 ```python
 from pipeworks import model_registry, config
 
@@ -149,6 +157,7 @@ print(f"Saved to: {path}")
 ```
 
 #### Image Editing with Qwen
+
 ```python
 from pipeworks import model_registry, config
 from PIL import Image
@@ -170,6 +179,7 @@ print(f"Saved to: {path}")
 ```
 
 #### Using Plugins
+
 ```python
 from pipeworks import model_registry, config
 from pipeworks.plugins.base import plugin_registry
@@ -193,6 +203,7 @@ image, path = adapter.generate_and_save(
 ```
 
 #### Using Prompt Builder
+
 ```python
 from pipeworks.core.prompt_builder import PromptBuilder
 from pipeworks.ui.models import SegmentConfig
@@ -219,6 +230,7 @@ print(f"Generated prompt: {prompt}")
 ```
 
 #### Using Workflows
+
 ```python
 from pipeworks import model_registry, config
 from pipeworks.workflows.base import workflow_registry
@@ -243,7 +255,7 @@ image = adapter.generate(prompt=prompt, seed=42)
 
 ## Architecture
 
-```
+```bash
 pipeworks-image-generator/
 ├── src/pipeworks/
 │   ├── core/                    # Core generation engine
@@ -301,25 +313,29 @@ Understanding how Pipeworks loads and uses the Z-Image-Turbo model can help you 
 
 When you generate an image, several AI components work together in a pipeline:
 
-```
+```bash
 Your Prompt → Tokenizer → Text Encoder → Diffusion Transformer → VAE Decoder → Final Image
 ```
 
 Let's break down each component:
 
 ### 1. **Tokenizer** (Text → Numbers)
+
 **What it does**: Converts your text prompt into numbers that the AI can understand.
 
 **Example**:
+
 - Input: `"a cute cat sleeping"`
 - Output: `[320, 8472, 2368, 11029]` (token IDs)
 
 **Why it matters**:
+
 - Models have token limits (Z-Image-Turbo: 256 tokens)
 - Pipeworks includes a tokenizer analyzer to help you stay within limits
 - Each word/punctuation becomes one or more tokens
 
 **In the code** (`core/tokenizer.py`):
+
 ```python
 # The tokenizer breaks your prompt into pieces the model understands
 tokens = tokenizer.encode("a cute cat")
@@ -327,11 +343,13 @@ tokens = tokenizer.encode("a cute cat")
 ```
 
 ### 2. **Text Encoder** (Numbers → Understanding)
+
 **What it does**: Transforms token IDs into "embeddings" - mathematical representations that capture the *meaning* of your prompt.
 
 **Think of it like**: A dictionary that knows "cat" and "feline" are related concepts, or that "sleeping" implies a peaceful pose.
 
 **Why it matters**:
+
 - This is where the model "understands" what you're asking for
 - The quality of these embeddings directly affects image quality
 - Z-Image-Turbo uses advanced transformer-based encoding
@@ -339,25 +357,30 @@ tokens = tokenizer.encode("a cute cat")
 **Technical detail**: The encoder produces a 768-dimensional vector for each token. These vectors encode semantic relationships learned from billions of image-caption pairs.
 
 ### 3. **Diffusion Transformer (DiT)** (Understanding → Noisy Image → Clear Image)
+
 **What it does**: The "brain" of the model. Iteratively refines random noise into a coherent image guided by your prompt.
 
 **The process**:
+
 1. Starts with pure random noise (static)
 2. At each step, predicts "what this should look like" based on your prompt
 3. Gradually removes noise over 9 steps (for Turbo models)
 4. Each step moves closer to the final image
 
 **Why it's called "Turbo"**:
+
 - Traditional diffusion models need 50-100 steps
 - Z-Image-Turbo uses distillation to achieve high quality in just 9 steps
 - This is why generation is so fast (sub-second vs 30+ seconds)
 
 **Key parameter - `num_inference_steps`**:
+
 - Default: 9 steps (recommended for Turbo)
 - More steps ≠ better quality for Turbo models
 - Turbo models are optimized for this specific step count
 
 **In the code** (`core/adapters/zimage_turbo.py`):
+
 ```python
 output = self.pipe(
     prompt=prompt,
@@ -368,14 +391,17 @@ output = self.pipe(
 ```
 
 ### 4. **VAE Decoder** (Latent Space → Pixels)
+
 **What it does**: Converts the compressed "latent" representation into actual pixels you can see.
 
 **Think of it like**:
+
 - The DiT works with a compressed 64x64 representation
 - The VAE decoder upscales this to your target resolution (e.g., 1024x1024)
 - Like decompressing a ZIP file into the full content
 
 **Why it matters**:
+
 - This step determines final image sharpness and detail
 - The VAE is a neural network trained to reconstruct high-quality images
 - All diffusion models use this two-stage approach (latent space → pixel space) for efficiency
@@ -385,20 +411,24 @@ output = self.pipe(
 When you run Pipeworks, here's what happens behind the scenes:
 
 #### Stage 1: Initialization (Instant)
+
 ```python
 from pipeworks import model_registry, config
 adapter = model_registry.instantiate("Z-Image-Turbo", config)
 ```
+
 - Creates the adapter object
 - Loads configuration from environment variables
 - **Model is NOT loaded yet** (lazy loading for efficiency)
 
 #### Stage 2: Model Download & Loading (First run: 5-10 minutes, Subsequent: 10-30 seconds)
+
 ```python
 adapter.load_model()  # Called automatically on first generate()
 ```
 
 **What gets loaded** (`core/adapters/zimage_turbo.py`):
+
 1. **Pipeline from HuggingFace Hub** (~12GB download)
    - Tokenizer weights
    - Text encoder weights
@@ -415,22 +445,26 @@ adapter.load_model()  # Called automatically on first generate()
    - `float32`: 24GB VRAM, highest precision, slower
 
 #### Stage 3: Device Transfer & Optimization (10-30 seconds)
+
 ```python
 self.pipe.to(self.config.device)  # Move to GPU
 ```
 
 **Optimizations applied**:
+
 - **Attention Slicing** (optional): Reduces VRAM usage by processing attention in chunks
 - **CPU Offloading** (optional): Moves unused layers to RAM, saves VRAM
 - **Model Compilation** (optional): torch.compile speeds up inference (adds 1-2 min first run)
 - **Flash Attention** (optional): Faster attention mechanism if supported
 
 #### Stage 4: Generation (Sub-second to 3 seconds)
+
 ```python
 image = generator.generate(prompt="a cat", seed=42)
 ```
 
 **Per-generation process**:
+
 1. Tokenize prompt → token IDs
 2. Encode tokens → semantic embeddings
 3. Create random noise tensor (seeded for reproducibility)
@@ -458,6 +492,7 @@ image = generator.generate(prompt="a cat", seed=42)
 ### Memory Requirements
 
 **GPU VRAM breakdown** (for 1024x1024 generation):
+
 - Text Encoder: ~2GB
 - Diffusion Transformer (6B params): ~8GB
 - VAE Decoder: ~1GB
@@ -465,18 +500,21 @@ image = generator.generate(prompt="a cat", seed=42)
 - **Total: 13-14GB VRAM** (16GB recommended for headroom)
 
 **CPU RAM**:
+
 - Model loading peaks at ~20GB during initialization
 - Steady state: ~8GB
 
 ### Performance Tuning
 
 **For low VRAM (12-16GB)**:
+
 ```bash
 PIPEWORKS_ENABLE_ATTENTION_SLICING=true
 PIPEWORKS_TORCH_DTYPE=bfloat16
 ```
 
 **For maximum speed (16GB+ VRAM)**:
+
 ```bash
 PIPEWORKS_COMPILE_MODEL=true
 PIPEWORKS_ATTENTION_BACKEND=flash
@@ -484,6 +522,7 @@ PIPEWORKS_TORCH_DTYPE=bfloat16
 ```
 
 **For CPU-only (slow, testing only)**:
+
 ```bash
 PIPEWORKS_DEVICE=cpu
 PIPEWORKS_TORCH_DTYPE=float32
@@ -492,10 +531,12 @@ PIPEWORKS_TORCH_DTYPE=float32
 ### Reproducibility: The Role of Seeds
 
 **What is a seed?**
+
 - A seed is a starting number for the random number generator
 - Same seed + same prompt + same parameters = **identical image**
 
 **Why it matters**:
+
 ```python
 # These will generate the SAME image:
 image1 = adapter.generate(prompt="a cat", seed=42, width=1024)
@@ -506,11 +547,13 @@ image3 = adapter.generate(prompt="a cat", seed=123, width=1024)
 ```
 
 **Use cases**:
+
 - Iterate on a prompt while keeping the "pose/composition" the same
 - Share reproducible results with others
 - Debug generation issues
 
 **In the code** (`core/adapters/zimage_turbo.py`):
+
 ```python
 generator = torch.Generator(device).manual_seed(seed)
 # Ensures deterministic noise initialization
@@ -520,14 +563,12 @@ generator = torch.Generator(device).manual_seed(seed)
 
 Pipeworks allows plugins to hook into the generation pipeline at 4 points:
 
-```
 1. on_generate_start()    → Modify parameters before generation
 2. [GENERATION HAPPENS]
 3. on_generate_complete() → Modify image after generation
 4. on_before_save()       → Modify image/path before saving
 5. [IMAGE SAVED]
 6. on_after_save()        → Post-save actions (e.g., export metadata)
-```
 
 **Example**: The `Save Metadata` plugin uses `on_after_save()` to export a JSON file with all generation parameters alongside the image.
 
@@ -546,13 +587,13 @@ Configuration is managed via environment variables or `.env` file. All settings 
 
 Key settings:
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PIPEWORKS_MODEL_ID` | `Tongyi-MAI/Z-Image-Turbo` | HuggingFace model ID |
-| `PIPEWORKS_DEVICE` | `cuda` | Device for inference |
-| `PIPEWORKS_TORCH_DTYPE` | `bfloat16` | Model precision |
-| `PIPEWORKS_NUM_INFERENCE_STEPS` | `9` | Generation steps |
-| `PIPEWORKS_GRADIO_SERVER_PORT` | `7860` | UI server port |
+| Variable                        | Default                    | Description          |
+| ------------------------------- | -------------------------- | -------------------- |
+| `PIPEWORKS_MODEL_ID`            | `Tongyi-MAI/Z-Image-Turbo` | HuggingFace model ID |
+| `PIPEWORKS_DEVICE`              | `cuda`                     | Device for inference |
+| `PIPEWORKS_TORCH_DTYPE`         | `bfloat16`                 | Model precision      |
+| `PIPEWORKS_NUM_INFERENCE_STEPS` | `9`                        | Generation steps     |
+| `PIPEWORKS_GRADIO_SERVER_PORT`  | `7860`                     | UI server port       |
 
 See `.env.example` for all available options.
 
@@ -615,6 +656,7 @@ mypy src/
 **Note**: Pre-commit hooks are NOT automatically installed when you clone the repository. You must run `pre-commit install` after cloning to enable automatic formatting, linting, and testing on every commit. This prevents committing code that doesn't meet quality standards.
 
 **What pre-commit will do**:
+
 - Auto-fix code formatting (Black, Ruff)
 - Check for large files, merge conflicts, YAML/TOML syntax
 - Run fast unit tests before commit
@@ -623,24 +665,26 @@ mypy src/
 ## System Requirements
 
 ### Minimum
+
 - Python 3.12+
 - NVIDIA GPU with 16GB VRAM
 - 50GB disk space
 - 16GB RAM
 
 ### Recommended (tested configuration)
+
 - AMD Ryzen 9 9900X (or equivalent)
 - NVIDIA RTX 5090 (or RTX 4090)
 - 64GB+ RAM
 - 100GB+ SSD storage
 - Debian Trixie / Ubuntu 22.04+ / similar Linux
 
-
 ## Code Quality & Testing
 
 Pipeworks emphasizes maintainability and reliability:
 
 ### Testing
+
 - **Test Coverage**: 50%+ overall, 93-100% for core business logic
 - **Test Framework**: pytest with comprehensive fixtures
 - **Test Organization**:
@@ -649,12 +693,14 @@ Pipeworks emphasizes maintainability and reliability:
 - **Run tests**: `pytest` or `pytest -v` for verbose output
 
 ### Code Standards
+
 - **Formatting**: Black (line length: 100 characters)
 - **Linting**: Ruff (enforces PEP 8, modern Python patterns)
 - **Type Hints**: Full type annotations throughout codebase
 - **Target**: Python 3.12+ (modern syntax, type system)
 
 ### Continuous Integration
+
 - **GitHub Actions** CI pipeline on `main` and `develop` branches
 - **Checks**:
   - Test suite (Python 3.12 and 3.13)
@@ -703,12 +749,3 @@ Contributions are welcome! Please follow these guidelines:
 5. **Commits**: Use clear, descriptive commit messages
 
 See `CLAUDE.md` for detailed development guidelines.
-
-## Support
-
-For issues, questions, or contributions, please open an issue on GitHub.
-
-## License
-
-[Add your license here]
-# Test change
