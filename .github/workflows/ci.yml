@@ -11,7 +11,7 @@ jobs:
     uses: pipe-works/.github/.github/workflows/reusable-python-ci.yml@main
     with:
       python-version: '3.12'
-      additional-python-versions: '["3.13"]'
+      python-versions: '["3.12", "3.13"]'
       coverage-threshold: 50
       run-security: true
       run-docs: false
