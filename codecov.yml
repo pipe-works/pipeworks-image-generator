@@ -1,0 +1,33 @@
+# Codecov configuration for pipeworks-image-generator
+# https://docs.codecov.com/docs/codecovyml-reference
+
+coverage:
+  status:
+    project:
+      default:
+        target: 50%  # Overall project coverage target
+        threshold: 1%  # Allow 1% drop before failing
+        informational: false  # Block merge if below threshold
+    patch:
+      default:
+        target: 70%  # New code should have higher coverage
+        threshold: 5%  # Allow 5% drop for new code
+        informational: false
+
+  precision: 2
+  round: down
+  range: "50...100"  # 50% is yellow, 100% is bright green
+
+comment:
+  layout: "header, diff, flags, components"
+  behavior: default
+  require_changes: false
+  require_base: false
+  require_head: true
+
+ignore:
+  - "tests/"
+  - "examples/"
+  - "docs/"
+  - "**/app.py"  # UI glue code excluded per project standards
+  - "**/handlers/*.py"  # UI handlers excluded per project standards
