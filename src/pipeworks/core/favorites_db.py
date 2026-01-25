@@ -32,22 +32,18 @@ class FavoritesDB:
             cursor = conn.cursor()
 
             # Create favorites table
-            cursor.execute(
-                """
+            cursor.execute("""
                 CREATE TABLE IF NOT EXISTS favorites (
                     image_path TEXT PRIMARY KEY,
                     favorited_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
-                """
-            )
+                """)
 
             # Create index for faster queries sorted by date
-            cursor.execute(
-                """
+            cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_favorited_at
                 ON favorites(favorited_at DESC)
-                """
-            )
+                """)
 
             conn.commit()
 
@@ -202,11 +198,9 @@ class FavoritesDB:
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
-                cursor.execute(
-                    """
+                cursor.execute("""
                     SELECT image_path FROM favorites ORDER BY favorited_at DESC
-                    """
-                )
+                    """)
                 results = cursor.fetchall()
                 return [row[0] for row in results]
 

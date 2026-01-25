@@ -67,12 +67,10 @@ def create_ui() -> tuple[gr.Blocks, str]:
         # Session state - one instance per user
         ui_state = gr.State(UIState())
 
-        gr.Markdown(
-            """
+        gr.Markdown("""
             # Pipeworks Image Generator
             ### Multi-model AI image generation and editing
-            """
-        )
+            """)
 
         with gr.Tabs():
             with gr.Tab("Generate", id="generate_tab"):
@@ -401,15 +399,13 @@ def create_generation_tab(ui_state):
             )
 
     # Model info footer
-    gr.Markdown(
-        f"""
+    gr.Markdown(f"""
         ---
         **Model:** {config.model_id} | **Device:** {config.device} |
         **Dtype:** {config.torch_dtype}
 
         *Outputs saved to: {config.outputs_dir}*
-        """
-    )
+        """)
 
     # =========================================================================
     # Event handlers for dynamic segments
