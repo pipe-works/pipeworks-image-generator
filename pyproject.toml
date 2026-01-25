@@ -40,6 +40,11 @@ docs = [
     "linkify-it-py>=2.0.0",  # For automatic URL detection in Markdown
 ]
 
+[project.urls]
+Homepage = "https://github.com/pipe-works/pipeworks-image-generator"
+Repository = "https://github.com/pipe-works/pipeworks-image-generator.git"
+Issues = "https://github.com/pipe-works/pipeworks-image-generator/issues"
+
 [project.scripts]
 pipeworks = "pipeworks.ui.app:main"
 
