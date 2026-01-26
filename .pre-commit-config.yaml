@@ -1,72 +1,128 @@
-# Pre-commit hooks for automatic code formatting and linting
-# Install: pip install pre-commit && pre-commit install
-# Run manually: pre-commit run --all-files
+# Standard Pre-commit Configuration for pipe-works organization
+# Based on pipeworks_name_generation's comprehensive setup
+#
+# Installation:
+#   1. pip install pre-commit
+#   2. pre-commit install
+#
+# Manual run: pre-commit run --all-files
+# Update hooks: pre-commit autoupdate
 
 repos:
   # Ruff - Fast Python linter (replaces flake8, isort, etc.)
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.10
-    hooks:
-      # Run the linter
-      - id: ruff
-        args: [--fix, --exit-non-zero-on-fix]
+- repo: https://github.com/astral-sh/ruff-pre-commit
+  rev: v0.14.10
+  hooks:
+  - id: ruff
+    args: [--fix, --exit-non-zero-on-fix]
 
   # Black - Python code formatter
-  - repo: https://github.com/psf/black
-    rev: 26.1.0
-    hooks:
-      - id: black
-        language_version: python3.12
+  # IMPORTANT: Version pinned org-wide to prevent formatting drift
+- repo: https://github.com/psf/black
+  rev: 26.1.0
+  hooks:
+  - id: black
+    language_version: python3.12
+    args: [--line-length, '100']
 
-  # Additional useful hooks
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v6.0.0
-    hooks:
-      # Prevent committing large files
-      - id: check-added-large-files
-        args: ['--maxkb=1000']
-      # Check for merge conflict markers
-      - id: check-merge-conflict
-      # Check YAML syntax
-      - id: check-yaml
-      # Check TOML syntax
-      - id: check-toml
-      # Trim trailing whitespace
-      - id: trailing-whitespace
-      # Ensure files end with newline
-      - id: end-of-file-fixer
+  # General file formatting and checks
+- repo: https://github.com/pre-commit/pre-commit-hooks
+  rev: v6.0.0
+  hooks:
+      # File formatting
+  - id: trailing-whitespace
+    args: [--markdown-linebreak-ext=md]
+  - id: end-of-file-fixer
+  - id: mixed-line-ending
+    args: [--fix=lf]
 
-  # Type checking with mypy
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.19.1
-    hooks:
-      - id: mypy
-        args: [--ignore-missing-imports, --check-untyped-defs, --no-site-packages]
-        additional_dependencies: [gradio, pydantic]
-        files: ^src/pipeworks/ui/
+      # Code quality
+  - id: check-yaml
+  - id: check-toml
+  - id: check-json
+  - id: check-added-large-files
+    args: [--maxkb=500]
+  - id: check-case-conflict
+  - id: check-merge-conflict
+  - id: check-symlinks
+  - id: destroyed-symlinks
 
-  # Run tests before commit (prevents committing broken code)
+      # Python-specific
+  - id: check-ast
+  - id: check-builtin-literals
+  - id: check-docstring-first
+  - id: debug-statements
+  - id: name-tests-test
+    args: [--pytest-test-first]
+  - id: requirements-txt-fixer
+
+  # Check for common security issues in dependencies
+- repo: https://github.com/Lucas-C/pre-commit-hooks-safety
+  rev: v1.3.3
+  hooks:
+  - id: python-safety-dependencies-check
+    files: requirements.*\.txt$
+
+  # Python type checking with mypy
+- repo: https://github.com/pre-commit/mirrors-mypy
+  rev: v1.19.1
+  hooks:
+  - id: mypy
+    args: [--ignore-missing-imports, --check-untyped-defs, --no-site-packages]
+    additional_dependencies: [gradio, pydantic]
+    files: ^src/pipeworks/ui/
+
+  # Security checks with Bandit
+- repo: https://github.com/PyCQA/bandit
+  rev: 1.7.10
+  hooks:
+  - id: bandit
+    args: [-c, pyproject.toml]
+    additional_dependencies: ['bandit[toml]']
+
+  # Markdown linting
+- repo: https://github.com/igorshubovych/markdownlint-cli
+  rev: v0.43.0
+  hooks:
+  - id: markdownlint
+    args: [--fix]
+
+  # YAML formatting
+- repo: https://github.com/macisamuele/language-formatters-pre-commit-hooks
+  rev: v2.14.0
+  hooks:
+  - id: pretty-format-yaml
+    args: [--autofix, --indent, '2']
+
+  # Spell checking
+- repo: https://github.com/codespell-project/codespell
+  rev: v2.3.0
+  hooks:
+  - id: codespell
+    args:
+    - --ignore-words-list=nd,ND,hel,tha,zar,ba,ka,lo,te,ro,na,ra,zel,der
+    - --skip="*.pyc,*.git,*.egg-info,htmlcov,.pytest_cache,__pycache__"
+
+  # Run fast tests before commit (prevents committing broken code)
   # Note: Only runs fast core logic tests (models, validation, segments).
   # Excludes test_prompt_handlers.py (slow due to file I/O).
   # Run full suite manually with: pytest
   # Full suite runs automatically in CI
-  - repo: local
-    hooks:
-      - id: pytest-check
-        name: pytest
-        entry: pytest
-        args: [
-          tests/unit/test_models.py,
-          tests/unit/test_validation.py,
-          tests/unit/test_segment_plugins.py,
-          tests/unit/test_complete_segment_plugin.py,
-          tests/unit/test_segment_state.py,
-          --tb=short,
-          --no-cov,
-          -q,
-          --maxfail=3,
-          -x
-        ]
-        language: system
-        pass_filenames: false
-        types: [python]
+- repo: local
+  hooks:
+  - id: pytest-check
+    name: pytest (fast tests only)
+    entry: pytest
+    args: [tests/unit/test_models.py, tests/unit/test_validation.py, tests/unit/test_segment_plugins.py, tests/unit/test_complete_segment_plugin.py, tests/unit/test_segment_state.py, --tb=short, --no-cov, -q, --maxfail=3, -x]
+    language: system
+    pass_filenames: false
+    types: [python]
+
+# Configuration for pre-commit.ci (auto-update service)
+ci:
+  autofix_commit_msg: |
+    [pre-commit.ci] auto fixes from pre-commit hooks
+
+    for more information, see https://pre-commit.ci
+  autofix_prs: true
+  autoupdate_schedule: monthly
