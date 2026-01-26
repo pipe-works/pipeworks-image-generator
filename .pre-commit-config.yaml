@@ -9,23 +9,7 @@
 # Update hooks: pre-commit autoupdate
 
 repos:
-  # Ruff - Fast Python linter (replaces flake8, isort, etc.)
-- repo: https://github.com/astral-sh/ruff-pre-commit
-  rev: v0.14.10
-  hooks:
-  - id: ruff
-    args: [--fix, --exit-non-zero-on-fix]
-
-  # Black - Python code formatter
-  # IMPORTANT: Version pinned org-wide to prevent formatting drift
-- repo: https://github.com/psf/black
-  rev: 26.1.0
-  hooks:
-  - id: black
-    language_version: python3.12
-    args: [--line-length, '100']
-
-  # General file formatting and checks
+  # General file formatting and checks - RUN FIRST
 - repo: https://github.com/pre-commit/pre-commit-hooks
   rev: v6.0.0
   hooks:
@@ -56,12 +40,21 @@ repos:
     args: [--pytest-test-first]
   - id: requirements-txt-fixer
 
-  # Check for common security issues in dependencies
-- repo: https://github.com/Lucas-C/pre-commit-hooks-safety
-  rev: v1.3.3
+  # Python code formatting with Black - RUN AFTER file checks
+  # IMPORTANT: Version pinned org-wide to prevent formatting drift
+- repo: https://github.com/psf/black
+  rev: 26.1.0
   hooks:
-  - id: python-safety-dependencies-check
-    files: requirements.*\.txt$
+  - id: black
+    language_version: python3.12
+    args: [--line-length, '100']
+
+  # Python linting with Ruff - RUN AFTER formatting
+- repo: https://github.com/astral-sh/ruff-pre-commit
+  rev: v0.14.10
+  hooks:
+  - id: ruff
+    args: [--fix, --exit-non-zero-on-fix]
 
   # Python type checking with mypy
 - repo: https://github.com/pre-commit/mirrors-mypy
@@ -79,6 +72,13 @@ repos:
   - id: bandit
     args: [-c, pyproject.toml]
     additional_dependencies: ['bandit[toml]']
+
+  # Check for common security issues in dependencies
+- repo: https://github.com/Lucas-C/pre-commit-hooks-safety
+  rev: v1.3.3
+  hooks:
+  - id: python-safety-dependencies-check
+    files: requirements.*\.txt$
 
   # Markdown linting
 - repo: https://github.com/igorshubovych/markdownlint-cli
@@ -125,4 +125,8 @@ ci:
 
     for more information, see https://pre-commit.ci
   autofix_prs: true
+  autoupdate_branch: ''
+  autoupdate_commit_msg: '[pre-commit.ci] pre-commit autoupdate'
   autoupdate_schedule: monthly
+  skip: []
+  submodules: false
