@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main, develop]
 
+permissions:
+  contents: read
+  security-events: write
+
 jobs:
   ci:
     uses: pipe-works/.github/.github/workflows/reusable-python-ci.yml@main
@@ -16,5 +20,5 @@ jobs:
       run-security: true
       run-docs: true
       requires-models: true
-      pytest-markers: 'not requires_model and not slow'
+      pytest-markers: not requires_model and not slow
     secrets: inherit
