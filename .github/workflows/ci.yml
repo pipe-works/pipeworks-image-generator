@@ -18,7 +18,7 @@ jobs:
     with:
       python-version: '3.12'
       python-versions: '["3.12", "3.13"]'
-      coverage-threshold: 50
+      coverage-threshold: 80
       run-security: true
       run-docs: true
       requires-models: true
