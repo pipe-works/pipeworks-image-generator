@@ -1,0 +1,25 @@
+# Include essential project files
+include README.md
+include LICENSE
+include pyproject.toml
+
+# Include data files needed by the package
+recursive-include src *.py
+
+# Exclude unnecessary files
+global-exclude __pycache__
+global-exclude *.py[cod]
+global-exclude *.so
+global-exclude .DS_Store
+global-exclude *~
+global-exclude *.swp
+
+# Exclude test and development directories
+prune tests
+prune docs
+prune examples
+prune _working
+prune .pytest_cache
+prune .ruff_cache
+prune .mypy_cache
+prune htmlcov
