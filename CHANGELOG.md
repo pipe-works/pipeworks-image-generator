@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.1.1...pipeworks-image-generator-v0.1.2) (2026-01-27)
+
+
+### Bug Fixes
+
+* **packaging:** exclude __pycache__ from distribution ([#9](https://github.com/pipe-works/pipeworks-image-generator/issues/9)) ([dd15cac](https://github.com/pipe-works/pipeworks-image-generator/commit/dd15cac1f3feef17b0ead4c5050e9896d32de2bf))
+
 ## [0.1.1](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.1.0...pipeworks-image-generator-v0.1.1) (2026-01-26)
 
 
