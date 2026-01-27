@@ -49,8 +49,12 @@ Issues = "https://github.com/pipe-works/pipeworks-image-generator/issues"
 [project.scripts]
 pipeworks = "pipeworks.ui.app:main"
 
+[tool.setuptools]
+include-package-data = false
+
 [tool.setuptools.packages.find]
 where = ["src"]
+exclude = ["tests*", "docs*", "examples*", "*__pycache__*"]
 
 [tool.black]
 line-length = 100
