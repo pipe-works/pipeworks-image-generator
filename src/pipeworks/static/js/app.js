@@ -10,7 +10,9 @@
 const State = {
   config: null,
   selectedModel: null,
+  prependMode: "template",
   promptMode: "manual",
+  appendMode: "template",
   batchSize: 1,
   isGenerating: false,
   outputImages: [],
@@ -290,8 +292,9 @@ function buildGeneratePayload() {
 
   const payload = {
     model_id: State.selectedModel,
-    prepend_prompt_id: $("#sel-prepend").value,
+    prepend_mode: State.prependMode,
     prompt_mode: State.promptMode,
+    append_mode: State.appendMode,
     aspect_ratio_id: aspectId,
     width: ar.width,
     height: ar.height,
@@ -301,15 +304,28 @@ function buildGeneratePayload() {
     batch_size: State.batchSize,
   };
 
+  // Prepend: template or manual
+  if (State.prependMode === "manual") {
+    payload.manual_prepend = $("#txt-manual-prepend").value.trim();
+  } else {
+    payload.prepend_prompt_id = $("#sel-prepend").value;
+  }
+
+  // Main scene: manual or automated
   if (State.promptMode === "manual") {
     payload.manual_prompt = $("#txt-manual-prompt").value.trim() || "A scene";
   } else {
     payload.automated_prompt_id = $("#sel-auto-prompt").value;
   }
 
-  const appendId = $("#sel-append").value;
-  if (appendId && appendId !== "none") {
-    payload.append_prompt_id = appendId;
+  // Append: template or manual
+  if (State.appendMode === "manual") {
+    payload.manual_append = $("#txt-manual-append").value.trim();
+  } else {
+    const appendId = $("#sel-append").value;
+    if (appendId && appendId !== "none") {
+      payload.append_prompt_id = appendId;
+    }
   }
 
   if (model.supports_negative_prompt) {
@@ -326,8 +342,7 @@ async function generate() {
   if (State.isGenerating) return;
 
   // Validate required fields
-  const prependId = $("#sel-prepend").value;
-  if (!prependId) {
+  if (State.prependMode === "template" && !$("#sel-prepend").value) {
     toast("Prepend style is required", "warn");
     return;
   }
@@ -760,7 +775,26 @@ function wireEvents() {
   // Aspect ratio change
   $("#sel-aspect").addEventListener("change", onAspectChange);
 
-  // Prompt mode toggle
+  // Prepend mode toggle
+  $("#btn-prepend-template").addEventListener("click", () => {
+    State.prependMode = "template";
+    $("#btn-prepend-template").classList.add("is-active");
+    $("#btn-prepend-manual").classList.remove("is-active");
+    $("#prepend-template-wrap").style.display = "";
+    $("#prepend-manual-wrap").style.display = "none";
+    schedulePromptPreview();
+  });
+
+  $("#btn-prepend-manual").addEventListener("click", () => {
+    State.prependMode = "manual";
+    $("#btn-prepend-manual").classList.add("is-active");
+    $("#btn-prepend-template").classList.remove("is-active");
+    $("#prepend-manual-wrap").style.display = "";
+    $("#prepend-template-wrap").style.display = "none";
+    schedulePromptPreview();
+  });
+
+  // Main scene prompt mode toggle
   $("#btn-mode-manual").addEventListener("click", () => {
     State.promptMode = "manual";
     $("#btn-mode-manual").classList.add("is-active");
@@ -779,8 +813,29 @@ function wireEvents() {
     schedulePromptPreview();
   });
 
+  // Append mode toggle
+  $("#btn-append-template").addEventListener("click", () => {
+    State.appendMode = "template";
+    $("#btn-append-template").classList.add("is-active");
+    $("#btn-append-manual").classList.remove("is-active");
+    $("#append-template-wrap").style.display = "";
+    $("#append-manual-wrap").style.display = "none";
+    schedulePromptPreview();
+  });
+
+  $("#btn-append-manual").addEventListener("click", () => {
+    State.appendMode = "manual";
+    $("#btn-append-manual").classList.add("is-active");
+    $("#btn-append-template").classList.remove("is-active");
+    $("#append-manual-wrap").style.display = "";
+    $("#append-template-wrap").style.display = "none";
+    schedulePromptPreview();
+  });
+
   // Prompt inputs → live preview
+  $("#txt-manual-prepend").addEventListener("input", schedulePromptPreview);
   $("#txt-manual-prompt").addEventListener("input", schedulePromptPreview);
+  $("#txt-manual-append").addEventListener("input", schedulePromptPreview);
   $("#sel-prepend").addEventListener("change", schedulePromptPreview);
   $("#sel-auto-prompt").addEventListener("change", schedulePromptPreview);
   $("#sel-append").addEventListener("change", schedulePromptPreview);

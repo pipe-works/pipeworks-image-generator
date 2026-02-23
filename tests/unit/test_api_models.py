@@ -101,6 +101,66 @@ class TestGenerateRequest:
         assert req.batch_size == 4
         assert req.negative_prompt == "blurry"
 
+    def test_default_prepend_mode_is_template(self):
+        """Default prepend_mode should be 'template'."""
+        req = GenerateRequest(
+            model_id="test",
+            prompt_mode="manual",
+            aspect_ratio_id="1:1",
+            width=1024,
+            height=1024,
+            steps=4,
+            guidance=0.0,
+        )
+        assert req.prepend_mode == "template"
+        assert req.manual_prepend is None
+
+    def test_default_append_mode_is_template(self):
+        """Default append_mode should be 'template'."""
+        req = GenerateRequest(
+            model_id="test",
+            prompt_mode="manual",
+            aspect_ratio_id="1:1",
+            width=1024,
+            height=1024,
+            steps=4,
+            guidance=0.0,
+        )
+        assert req.append_mode == "template"
+        assert req.manual_append is None
+
+    def test_manual_prepend_mode(self):
+        """Manual prepend mode should accept free-text input."""
+        req = GenerateRequest(
+            model_id="test",
+            prepend_mode="manual",
+            manual_prepend="Custom oil painting style.",
+            prompt_mode="manual",
+            aspect_ratio_id="1:1",
+            width=1024,
+            height=1024,
+            steps=4,
+            guidance=0.0,
+        )
+        assert req.prepend_mode == "manual"
+        assert req.manual_prepend == "Custom oil painting style."
+
+    def test_manual_append_mode(self):
+        """Manual append mode should accept free-text input."""
+        req = GenerateRequest(
+            model_id="test",
+            prompt_mode="manual",
+            append_mode="manual",
+            manual_append="Cinematic lighting.",
+            aspect_ratio_id="1:1",
+            width=1024,
+            height=1024,
+            steps=4,
+            guidance=0.0,
+        )
+        assert req.append_mode == "manual"
+        assert req.manual_append == "Cinematic lighting."
+
     def test_serialisation_round_trip(self):
         """Model should serialise to dict and back without data loss."""
         req = GenerateRequest(
