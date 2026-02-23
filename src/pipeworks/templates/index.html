@@ -73,10 +73,24 @@
           <div class="ctrl-section">
             <div class="ctrl-section__heading">Prompt Composer</div>
 
-            <!-- Prepend (required) -->
-            <div class="ctrl-full">
-              <label class="control-label">Prepend Style <span class="u-accent">*</span></label>
+            <!-- Prepend style -->
+            <div>
+              <label class="control-label">Prepend Style</label>
+              <div class="prompt-mode-toggle">
+                <button class="btn btn--secondary btn--sm is-active" id="btn-prepend-template" data-mode="template">Template</button>
+                <button class="btn btn--secondary btn--sm" id="btn-prepend-manual" data-mode="manual">Manual</button>
+              </div>
+            </div>
+            <div id="prepend-template-wrap">
               <select class="select" id="sel-prepend" style="width:100%"></select>
+            </div>
+            <div id="prepend-manual-wrap" style="display:none">
+              <textarea
+                class="prompt-textarea"
+                id="txt-manual-prepend"
+                placeholder="Enter custom prepend style text…"
+                rows="3"
+              ></textarea>
             </div>
 
             <!-- Prompt mode toggle -->
@@ -105,10 +119,24 @@
               <select class="select" id="sel-auto-prompt" style="width:100%"></select>
             </div>
 
-            <!-- Append (optional) -->
-            <div class="ctrl-full">
+            <!-- Append modifier -->
+            <div>
               <label class="control-label">Append Modifier</label>
+              <div class="prompt-mode-toggle">
+                <button class="btn btn--secondary btn--sm is-active" id="btn-append-template" data-mode="template">Template</button>
+                <button class="btn btn--secondary btn--sm" id="btn-append-manual" data-mode="manual">Manual</button>
+              </div>
+            </div>
+            <div id="append-template-wrap">
               <select class="select" id="sel-append" style="width:100%"></select>
+            </div>
+            <div id="append-manual-wrap" style="display:none">
+              <textarea
+                class="prompt-textarea"
+                id="txt-manual-append"
+                placeholder="Enter custom append modifier text…"
+                rows="3"
+              ></textarea>
             </div>
 
             <!-- Negative prompt (conditional) -->

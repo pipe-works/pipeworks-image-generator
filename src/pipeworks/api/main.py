@@ -192,6 +192,103 @@ def _save_json(path: Path, data) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Prompt resolution helper.
+# ---------------------------------------------------------------------------
+
+
+def _resolve_prompt_parts(
+    req: GenerateRequest,
+    prompts: dict,
+    *,
+    strict: bool = False,
+) -> tuple[str, str, str]:
+    """Resolve prepend, main scene, and append values from a request.
+
+    Handles both template (preset lookup) and manual (free-text) modes for
+    the prepend and append sections, and manual/automated modes for the
+    main scene.
+
+    Args:
+        req: The validated generation request.
+        prompts: The loaded ``prompts.json`` data.
+        strict: If ``True``, raise :class:`HTTPException` on missing or
+            invalid prompt values (used by ``/api/generate``).  If ``False``,
+            silently fall back to empty strings (used by ``/api/prompt/compile``).
+
+    Returns:
+        Tuple of ``(prepend_value, main_scene, append_value)``.
+
+    Raises:
+        HTTPException: (only when ``strict=True``) 400 for missing manual
+            prompt, unknown automated prompt, or invalid prompt mode.
+    """
+    # --- Prepend resolution ------------------------------------------------
+    prepend_value = ""
+    if req.prepend_mode == "manual":
+        prepend_value = (req.manual_prepend or "").strip()
+    else:
+        if req.prepend_prompt_id and req.prepend_prompt_id != "none":
+            p = next(
+                (x for x in prompts.get("prepend_prompts", []) if x["id"] == req.prepend_prompt_id),
+                None,
+            )
+            if p:
+                prepend_value = p["value"]
+
+    # --- Main scene resolution ---------------------------------------------
+    main_scene = ""
+    if req.prompt_mode == "manual":
+        if strict and (not req.manual_prompt or not req.manual_prompt.strip()):
+            raise HTTPException(
+                status_code=400,
+                detail="manual_prompt is required in manual mode",
+            )
+        main_scene = (req.manual_prompt or "").strip()
+    elif req.prompt_mode == "automated":
+        if strict and not req.automated_prompt_id:
+            raise HTTPException(
+                status_code=400,
+                detail="automated_prompt_id is required in automated mode",
+            )
+        if req.automated_prompt_id:
+            ap = next(
+                (
+                    x
+                    for x in prompts.get("automated_prompts", [])
+                    if x["id"] == req.automated_prompt_id
+                ),
+                None,
+            )
+            if ap:
+                main_scene = ap["value"]
+            elif strict:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Unknown automated prompt: {req.automated_prompt_id}",
+                )
+    elif strict:
+        raise HTTPException(
+            status_code=400,
+            detail="prompt_mode must be 'manual' or 'automated'",
+        )
+
+    # --- Append resolution -------------------------------------------------
+    append_value = ""
+    if req.append_mode == "manual":
+        append_value = (req.manual_append or "").strip()
+    else:
+        if req.append_prompt_id and req.append_prompt_id != "none":
+            a = next(
+                (x for x in prompts.get("append_prompts", []) if x["id"] == req.append_prompt_id),
+                None,
+            )
+            if a:
+                append_value = a["value"]
+
+    return prepend_value, main_scene, append_value
+
+
+# ---------------------------------------------------------------------------
 # Routes.
 # ---------------------------------------------------------------------------
 
@@ -292,59 +389,8 @@ async def generate_images(req: GenerateRequest) -> dict:
             detail=f"Unknown model: {req.model_id}",
         )
 
-    # --- Resolve prompt parts ----------------------------------------------
-    # Prepend: style prefix (e.g. "In a classical oil painting style.")
-    prepend_value = ""
-    if req.prepend_prompt_id and req.prepend_prompt_id != "none":
-        p = next(
-            (x for x in prompts.get("prepend_prompts", []) if x["id"] == req.prepend_prompt_id),
-            None,
-        )
-        if p:
-            prepend_value = p["value"]
-
-    # Main scene: either manual free-text or an automated preset.
-    main_scene = ""
-    if req.prompt_mode == "manual":
-        if not req.manual_prompt or not req.manual_prompt.strip():
-            raise HTTPException(
-                status_code=400,
-                detail="manual_prompt is required in manual mode",
-            )
-        main_scene = req.manual_prompt.strip()
-    elif req.prompt_mode == "automated":
-        if not req.automated_prompt_id:
-            raise HTTPException(
-                status_code=400,
-                detail="automated_prompt_id is required in automated mode",
-            )
-        ap = next(
-            (x for x in prompts.get("automated_prompts", []) if x["id"] == req.automated_prompt_id),
-            None,
-        )
-        if not ap:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Unknown automated prompt: {req.automated_prompt_id}",
-            )
-        main_scene = ap["value"]
-    else:
-        raise HTTPException(
-            status_code=400,
-            detail="prompt_mode must be 'manual' or 'automated'",
-        )
-
-    # Append: post-processing modifier (e.g. "cinematic colour grade").
-    append_value = ""
-    if req.append_prompt_id and req.append_prompt_id != "none":
-        a = next(
-            (x for x in prompts.get("append_prompts", []) if x["id"] == req.append_prompt_id),
-            None,
-        )
-        if a:
-            append_value = a["value"]
-
-    # --- Compile the full prompt -------------------------------------------
+    # --- Resolve prompt parts and compile ------------------------------------
+    prepend_value, main_scene, append_value = _resolve_prompt_parts(req, prompts, strict=True)
     compiled_prompt = build_prompt(prepend_value, main_scene, append_value)
 
     # --- Resolve seed ------------------------------------------------------
@@ -594,37 +640,7 @@ async def compile_prompt(req: GenerateRequest) -> dict:
         Dictionary with a single ``compiled_prompt`` key.
     """
     prompts = _load_json(DATA_DIR / "prompts.json", {})
-
-    # Resolve prepend value.
-    prepend_value = ""
-    if req.prepend_prompt_id and req.prepend_prompt_id != "none":
-        p = next(
-            (x for x in prompts.get("prepend_prompts", []) if x["id"] == req.prepend_prompt_id),
-            None,
-        )
-        if p:
-            prepend_value = p["value"]
-
-    # Resolve main scene.
-    main_scene = req.manual_prompt or ""
-    if req.prompt_mode == "automated" and req.automated_prompt_id:
-        ap = next(
-            (x for x in prompts.get("automated_prompts", []) if x["id"] == req.automated_prompt_id),
-            None,
-        )
-        if ap:
-            main_scene = ap["value"]
-
-    # Resolve append value.
-    append_value = ""
-    if req.append_prompt_id and req.append_prompt_id != "none":
-        a = next(
-            (x for x in prompts.get("append_prompts", []) if x["id"] == req.append_prompt_id),
-            None,
-        )
-        if a:
-            append_value = a["value"]
-
+    prepend_value, main_scene, append_value = _resolve_prompt_parts(req, prompts, strict=False)
     compiled = build_prompt(prepend_value, main_scene, append_value)
     return {"compiled_prompt": compiled}
 

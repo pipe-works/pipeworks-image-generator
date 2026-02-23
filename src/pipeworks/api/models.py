@@ -29,16 +29,25 @@ class GenerateRequest(BaseModel):
     Attributes:
         model_id: Identifier of the model to use (must match an ``id`` value
             in ``models.json``).
+        prepend_mode: Either ``"template"`` (preset from ``prompts.json``) or
+            ``"manual"`` (user-supplied text).  Defaults to ``"template"``.
         prepend_prompt_id: Identifier of the prepend style prompt to apply.
-            Use ``"none"`` to skip.
+            Use ``"none"`` to skip.  Used when ``prepend_mode`` is
+            ``"template"``.
+        manual_prepend: Free-text prepend style.  Used when ``prepend_mode``
+            is ``"manual"``.
         prompt_mode: Either ``"manual"`` (user-supplied prompt) or
             ``"automated"`` (preset scene selection).
         manual_prompt: Free-text prompt.  Required when ``prompt_mode`` is
             ``"manual"``.
         automated_prompt_id: Identifier of the automated scene preset.
             Required when ``prompt_mode`` is ``"automated"``.
+        append_mode: Either ``"template"`` (preset from ``prompts.json``) or
+            ``"manual"`` (user-supplied text).  Defaults to ``"template"``.
         append_prompt_id: Identifier of the append modifier.  Use
-            ``"none"`` to skip.
+            ``"none"`` to skip.  Used when ``append_mode`` is ``"template"``.
+        manual_append: Free-text append modifier.  Used when ``append_mode``
+            is ``"manual"``.
         aspect_ratio_id: Identifier of the selected aspect ratio preset.
         width: Image width in pixels (should be a multiple of 64).
         height: Image height in pixels (should be a multiple of 64).
@@ -54,9 +63,17 @@ class GenerateRequest(BaseModel):
         ...,
         description="Model identifier from models.json (e.g. 'z-image-turbo').",
     )
+    prepend_mode: str = Field(
+        default="template",
+        description="Prepend mode: 'template' (use preset) or 'manual' (free text).",
+    )
     prepend_prompt_id: str = Field(
-        ...,
-        description="Prepend style prompt ID, or 'none' to skip.",
+        default="none",
+        description="Prepend style prompt ID, or 'none' to skip (template mode).",
+    )
+    manual_prepend: str | None = Field(
+        default=None,
+        description="Free-text prepend style (used when prepend_mode='manual').",
     )
     prompt_mode: str = Field(
         ...,
@@ -70,9 +87,17 @@ class GenerateRequest(BaseModel):
         default=None,
         description="Automated scene preset ID (required when prompt_mode='automated').",
     )
+    append_mode: str = Field(
+        default="template",
+        description="Append mode: 'template' (use preset) or 'manual' (free text).",
+    )
     append_prompt_id: str | None = Field(
         default=None,
-        description="Append modifier prompt ID, or 'none' to skip.",
+        description="Append modifier prompt ID, or 'none' to skip (template mode).",
+    )
+    manual_append: str | None = Field(
+        default=None,
+        description="Free-text append modifier (used when append_mode='manual').",
     )
     aspect_ratio_id: str = Field(
         ...,

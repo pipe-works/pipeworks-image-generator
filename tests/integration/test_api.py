@@ -218,6 +218,62 @@ class TestGenerate:
         data = resp.json()
         assert "8K" in data["compiled_prompt"]
 
+    def test_generate_manual_prepend(self, test_client):
+        """Manual prepend mode should use the free-text prepend value."""
+        resp = test_client.post(
+            "/api/generate",
+            json=self._make_generate_payload(
+                prepend_mode="manual",
+                manual_prepend="Watercolour painting style.",
+            ),
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "Watercolour painting style." in data["compiled_prompt"]
+
+    def test_generate_manual_append(self, test_client):
+        """Manual append mode should use the free-text append value."""
+        resp = test_client.post(
+            "/api/generate",
+            json=self._make_generate_payload(
+                append_mode="manual",
+                manual_append="Cinematic lighting, dramatic shadows.",
+            ),
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "Cinematic lighting, dramatic shadows." in data["compiled_prompt"]
+
+    def test_generate_manual_prepend_and_append(self, test_client):
+        """Both manual prepend and append should appear in the compiled prompt."""
+        resp = test_client.post(
+            "/api/generate",
+            json=self._make_generate_payload(
+                prepend_mode="manual",
+                manual_prepend="Ink sketch style.",
+                append_mode="manual",
+                manual_append="High contrast.",
+            ),
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "Ink sketch style." in data["compiled_prompt"]
+        assert "High contrast." in data["compiled_prompt"]
+
+    def test_generate_template_mode_backward_compat(self, test_client):
+        """Default template mode (no prepend_mode/append_mode) should still work."""
+        resp = test_client.post(
+            "/api/generate",
+            json=self._make_generate_payload(
+                prepend_prompt_id="oil-painting",
+                append_prompt_id="high-detail",
+            ),
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "oil painting" in data["compiled_prompt"].lower()
+        assert "8K" in data["compiled_prompt"]
+
 
 # ---------------------------------------------------------------------------
 # Prompt compilation endpoint tests.
@@ -268,6 +324,74 @@ class TestPromptCompile:
         assert resp.status_code == 200
         data = resp.json()
         assert "goblin" in data["compiled_prompt"].lower()
+
+    def test_compile_manual_prepend(self, test_client):
+        """Manual prepend mode should include free-text prepend in compiled prompt."""
+        resp = test_client.post(
+            "/api/prompt/compile",
+            json={
+                "model_id": "z-image-turbo",
+                "prepend_mode": "manual",
+                "manual_prepend": "Pencil sketch style.",
+                "prompt_mode": "manual",
+                "manual_prompt": "A castle.",
+                "aspect_ratio_id": "1:1",
+                "width": 1024,
+                "height": 1024,
+                "steps": 4,
+                "guidance": 0.0,
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "Pencil sketch style." in data["compiled_prompt"]
+        assert "A castle." in data["compiled_prompt"]
+
+    def test_compile_manual_append(self, test_client):
+        """Manual append mode should include free-text append in compiled prompt."""
+        resp = test_client.post(
+            "/api/prompt/compile",
+            json={
+                "model_id": "z-image-turbo",
+                "prompt_mode": "manual",
+                "manual_prompt": "A castle.",
+                "append_mode": "manual",
+                "manual_append": "Vibrant colours.",
+                "aspect_ratio_id": "1:1",
+                "width": 1024,
+                "height": 1024,
+                "steps": 4,
+                "guidance": 0.0,
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "Vibrant colours." in data["compiled_prompt"]
+
+    def test_compile_manual_prepend_and_append(self, test_client):
+        """Both manual prepend and append should appear in compiled prompt."""
+        resp = test_client.post(
+            "/api/prompt/compile",
+            json={
+                "model_id": "z-image-turbo",
+                "prepend_mode": "manual",
+                "manual_prepend": "Woodcut engraving.",
+                "prompt_mode": "manual",
+                "manual_prompt": "A dragon.",
+                "append_mode": "manual",
+                "manual_append": "Dramatic shadows.",
+                "aspect_ratio_id": "1:1",
+                "width": 1024,
+                "height": 1024,
+                "steps": 4,
+                "guidance": 0.0,
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "Woodcut engraving." in data["compiled_prompt"]
+        assert "A dragon." in data["compiled_prompt"]
+        assert "Dramatic shadows." in data["compiled_prompt"]
 
 
 # ---------------------------------------------------------------------------
