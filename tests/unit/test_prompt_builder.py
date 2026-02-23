@@ -1,12 +1,14 @@
 """Tests for pipeworks.api.prompt_builder — three-part prompt compilation.
 
 Tests cover:
-- Full prompt with all three parts (prepend, scene, append).
+- Full prompt with all three parts (prepend, scene, append) in template mode.
 - Empty prepend/append are silently omitted.
 - Whitespace-only values are treated as empty.
-- Fixed boilerplate sections are always present.
+- Fixed boilerplate sections are present in template mode, absent in manual mode.
 - Double newline delimiters between sections.
 - Main scene header is always included.
+- Manual prepend mode omits style boilerplate.
+- Manual append mode omits mood and colour boilerplate.
 """
 
 from __future__ import annotations
@@ -20,7 +22,7 @@ from pipeworks.api.prompt_builder import (
 
 
 class TestBuildPromptFullParts:
-    """Test prompt compilation with all three user parts provided."""
+    """Test prompt compilation with all three user parts provided (template mode)."""
 
     def test_all_parts_present(self):
         """Compiled prompt should contain all three user-provided parts."""
@@ -34,17 +36,17 @@ class TestBuildPromptFullParts:
         assert "8K resolution." in result
 
     def test_contains_style_boilerplate(self):
-        """Compiled prompt should always contain the Ledgerfall style boilerplate."""
+        """Template mode should include the Ledgerfall style boilerplate."""
         result = build_prompt("", "A scene.", "")
         assert _STYLE_BOILERPLATE in result
 
     def test_contains_mood_boilerplate(self):
-        """Compiled prompt should always contain the mood boilerplate."""
+        """Template mode should include the mood boilerplate."""
         result = build_prompt("", "A scene.", "")
         assert _MOOD_BOILERPLATE in result
 
     def test_contains_colour_boilerplate(self):
-        """Compiled prompt should always contain the colour palette boilerplate."""
+        """Template mode should include the colour palette boilerplate."""
         result = build_prompt("", "A scene.", "")
         assert _COLOUR_BOILERPLATE in result
 
@@ -107,3 +109,130 @@ class TestBuildPromptEmptyParts:
         result = build_prompt("", "  A padded scene.  ", "")
         assert "A padded scene." in result
         assert "  A padded scene.  " not in result
+
+
+class TestBuildPromptManualPrepend:
+    """Test prompt compilation when prepend_mode is 'manual'."""
+
+    def test_manual_prepend_omits_style_boilerplate(self):
+        """Manual prepend mode should NOT include style boilerplate."""
+        result = build_prompt(
+            "My custom style.",
+            "A scene.",
+            "",
+            prepend_mode="manual",
+        )
+        assert _STYLE_BOILERPLATE not in result
+        assert "My custom style." in result
+
+    def test_manual_prepend_keeps_mood_and_colour(self):
+        """Manual prepend mode should still include mood and colour boilerplate."""
+        result = build_prompt(
+            "My custom style.",
+            "A scene.",
+            "",
+            prepend_mode="manual",
+        )
+        assert _MOOD_BOILERPLATE in result
+        assert _COLOUR_BOILERPLATE in result
+
+    def test_manual_prepend_empty_omits_style(self):
+        """Empty manual prepend should omit both the value and style boilerplate."""
+        result = build_prompt("", "A scene.", "", prepend_mode="manual")
+        assert _STYLE_BOILERPLATE not in result
+        parts = result.split("\n\n")
+        assert parts[0] == "Main Scene:"
+
+
+class TestBuildPromptManualAppend:
+    """Test prompt compilation when append_mode is 'manual'."""
+
+    def test_manual_append_omits_mood_and_colour(self):
+        """Manual append mode should NOT include mood or colour boilerplate."""
+        result = build_prompt(
+            "",
+            "A scene.",
+            "Cinematic lighting.",
+            append_mode="manual",
+        )
+        assert _MOOD_BOILERPLATE not in result
+        assert _COLOUR_BOILERPLATE not in result
+        assert "Cinematic lighting." in result
+
+    def test_manual_append_keeps_style_boilerplate(self):
+        """Manual append mode should still include style boilerplate."""
+        result = build_prompt(
+            "",
+            "A scene.",
+            "Cinematic lighting.",
+            append_mode="manual",
+        )
+        assert _STYLE_BOILERPLATE in result
+
+    def test_manual_append_empty_omits_mood_and_colour(self):
+        """Empty manual append should omit mood and colour boilerplate."""
+        result = build_prompt("", "A scene.", "", append_mode="manual")
+        assert _MOOD_BOILERPLATE not in result
+        assert _COLOUR_BOILERPLATE not in result
+        # Should end with the scene text.
+        parts = result.split("\n\n")
+        assert parts[-1] == "A scene."
+
+
+class TestBuildPromptBothManual:
+    """Test prompt compilation when both prepend and append are manual."""
+
+    def test_both_manual_omits_all_boilerplate_and_header(self):
+        """Both manual should produce only user text, no boilerplate or header."""
+        result = build_prompt(
+            "Custom style.",
+            "A dragon.",
+            "High contrast.",
+            prepend_mode="manual",
+            append_mode="manual",
+        )
+        assert _STYLE_BOILERPLATE not in result
+        assert _MOOD_BOILERPLATE not in result
+        assert _COLOUR_BOILERPLATE not in result
+        assert "Main Scene:" not in result
+        assert "Custom style." in result
+        assert "A dragon." in result
+        assert "High contrast." in result
+
+    def test_both_manual_section_count(self):
+        """Both manual with all parts should have 3 sections."""
+        result = build_prompt(
+            "Style.",
+            "Scene.",
+            "Modifier.",
+            prepend_mode="manual",
+            append_mode="manual",
+        )
+        parts = result.split("\n\n")
+        # style, scene, modifier = 3 sections.
+        assert len(parts) == 3
+
+    def test_both_manual_empty_prepend_and_append(self):
+        """Both manual with empty prepend/append should be scene only."""
+        result = build_prompt(
+            "",
+            "Just a scene.",
+            "",
+            prepend_mode="manual",
+            append_mode="manual",
+        )
+        parts = result.split("\n\n")
+        # scene only = 1 section.
+        assert len(parts) == 1
+        assert parts[0] == "Just a scene."
+
+    def test_main_scene_header_present_when_one_template(self):
+        """Main Scene header should still appear if either mode is template."""
+        result = build_prompt(
+            "Custom.",
+            "A scene.",
+            "",
+            prepend_mode="manual",
+            append_mode="template",
+        )
+        assert "Main Scene:" in result

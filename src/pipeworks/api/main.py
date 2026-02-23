@@ -391,7 +391,13 @@ async def generate_images(req: GenerateRequest) -> dict:
 
     # --- Resolve prompt parts and compile ------------------------------------
     prepend_value, main_scene, append_value = _resolve_prompt_parts(req, prompts, strict=True)
-    compiled_prompt = build_prompt(prepend_value, main_scene, append_value)
+    compiled_prompt = build_prompt(
+        prepend_value,
+        main_scene,
+        append_value,
+        prepend_mode=req.prepend_mode,
+        append_mode=req.append_mode,
+    )
 
     # --- Resolve seed ------------------------------------------------------
     # If the client did not supply a seed, pick a random one.  Each image in
@@ -641,7 +647,13 @@ async def compile_prompt(req: GenerateRequest) -> dict:
     """
     prompts = _load_json(DATA_DIR / "prompts.json", {})
     prepend_value, main_scene, append_value = _resolve_prompt_parts(req, prompts, strict=False)
-    compiled = build_prompt(prepend_value, main_scene, append_value)
+    compiled = build_prompt(
+        prepend_value,
+        main_scene,
+        append_value,
+        prepend_mode=req.prepend_mode,
+        append_mode=req.append_mode,
+    )
     return {"compiled_prompt": compiled}
 
 
