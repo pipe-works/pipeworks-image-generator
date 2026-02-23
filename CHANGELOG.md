@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.2.0](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.1.2...pipeworks-image-generator-v0.2.0) (2026-02-23)
+
+
+### ⚠ BREAKING CHANGES
+
+* Gradio UI replaced with FastAPI REST API. Entry point unchanged (`pipeworks`) but now serves a web UI at :7860 via FastAPI instead of Gradio.
+
+### Features
+
+* replace Gradio architecture with FastAPI + vanilla JS frontend ([#11](https://github.com/pipe-works/pipeworks-image-generator/issues/11)) ([1919fd5](https://github.com/pipe-works/pipeworks-image-generator/commit/1919fd55c3088797cf2a654136c31aa704c05547))
+
+
+### Bug Fixes
+
+* automate version display and remove demo references ([#13](https://github.com/pipe-works/pipeworks-image-generator/issues/13)) ([6cf6f31](https://github.com/pipe-works/pipeworks-image-generator/commit/6cf6f31a19fbb3d7b910614cbb095be2cdbed3b4))
+
 ## [0.1.2](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.1.1...pipeworks-image-generator-v0.1.2) (2026-01-27)
 
 
