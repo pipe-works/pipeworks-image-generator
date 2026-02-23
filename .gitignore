@@ -227,3 +227,6 @@ models/
 src/pipeworks/static/gallery/*
 !src/pipeworks/static/gallery/.gitkeep
 src/pipeworks/static/data/gallery.json
+
+# Local tools and scripts
+tools/

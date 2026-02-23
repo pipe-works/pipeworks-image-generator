@@ -54,12 +54,15 @@ The package re-exports the most commonly used symbols for convenience:
 
 from __future__ import annotations
 
+from importlib.metadata import version
+
 # ---------------------------------------------------------------------------
-# Package version.
-# Bumped from 0.2.0 → 0.3.0 for the FastAPI migration (breaking change:
-# removed Gradio UI, plugin system, workflow system, and adapter registry).
+# Package version — read from pyproject.toml via importlib.metadata.
+# This is the single source of truth managed by release-please, which bumps
+# the version field in pyproject.toml on each release.  No manual edits
+# needed here.
 # ---------------------------------------------------------------------------
-__version__ = "0.3.0"
+__version__: str = version("pipeworks-image-generator")
 
 # ---------------------------------------------------------------------------
 # Convenience re-exports.

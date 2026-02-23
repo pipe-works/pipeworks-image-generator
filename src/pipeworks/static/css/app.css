@@ -39,12 +39,11 @@ html, body {
   gap: var(--sp-2);
 }
 
-.app-header__logo-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--col-accent);
+.app-header__logo-icon {
+  font-size: var(--text-lg);
+  color: var(--col-accent);
   flex-shrink: 0;
+  line-height: 1;
 }
 
 .app-header__nav {

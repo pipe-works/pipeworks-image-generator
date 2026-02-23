@@ -51,9 +51,11 @@ class TestConfigDefaults:
         assert test_config.default_width == 1024
         assert test_config.default_height == 1024
 
-    def test_default_server_port(self):
+    def test_default_server_port(self, monkeypatch):
         """Default server port should be 7860."""
+        monkeypatch.delenv("PIPEWORKS_SERVER_PORT", raising=False)
         cfg = PipeworksConfig(
+            _env_file=None,
             models_dir="/tmp/test_models",
             outputs_dir="/tmp/test_outputs",
             gallery_dir="/tmp/test_gallery",
