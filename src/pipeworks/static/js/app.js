@@ -313,7 +313,7 @@ function buildGeneratePayload() {
 
   // Main scene: manual or automated
   if (State.promptMode === "manual") {
-    payload.manual_prompt = $("#txt-manual-prompt").value.trim() || "A scene";
+    payload.manual_prompt = $("#txt-manual-prompt").value.trim();
   } else {
     payload.automated_prompt_id = $("#sel-auto-prompt").value;
   }

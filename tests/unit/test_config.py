@@ -20,21 +20,25 @@ from pipeworks.core.config import PipeworksConfig
 class TestConfigDefaults:
     """Verify that PipeworksConfig provides sensible defaults."""
 
-    def test_default_device_is_cuda(self, test_config: PipeworksConfig):
+    def test_default_device_is_cuda(self, monkeypatch, test_config: PipeworksConfig):
         """The test fixture overrides device to 'cpu'; verify direct default."""
+        monkeypatch.delenv("PIPEWORKS_DEVICE", raising=False)
         cfg = PipeworksConfig(
             models_dir="/tmp/test_models",
             outputs_dir="/tmp/test_outputs",
             gallery_dir="/tmp/test_gallery",
+            _env_file=None,
         )
         assert cfg.device == "cuda"
 
-    def test_default_torch_dtype(self):
+    def test_default_torch_dtype(self, monkeypatch):
         """Default torch dtype should be bfloat16."""
+        monkeypatch.delenv("PIPEWORKS_TORCH_DTYPE", raising=False)
         cfg = PipeworksConfig(
             models_dir="/tmp/test_models",
             outputs_dir="/tmp/test_outputs",
             gallery_dir="/tmp/test_gallery",
+            _env_file=None,
         )
         assert cfg.torch_dtype == "bfloat16"
 
