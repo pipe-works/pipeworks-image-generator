@@ -73,6 +73,39 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 _DTYPE_MAP: dict | None = None
 
+# ---------------------------------------------------------------------------
+# Scheduler identifier → factory function mapping.
+# Each value is a callable(pipeline_scheduler_config) → scheduler instance.
+# Lazily populated so that diffusers is not imported at module level.
+# ---------------------------------------------------------------------------
+_SCHEDULER_MAP: dict | None = None
+
+
+def _get_scheduler_map() -> dict:
+    """Return the scheduler string → factory callable mapping.
+
+    The mapping is lazily constructed on first call so that ``diffusers`` is
+    not imported at module level.  Each factory accepts the current pipeline
+    scheduler's ``config`` dict and returns a configured scheduler instance.
+
+    Returns:
+        Dictionary mapping scheduler identifiers to factory callables.
+    """
+    global _SCHEDULER_MAP
+    if _SCHEDULER_MAP is None:
+        from diffusers import DPMSolverMultistepScheduler, PNDMScheduler
+
+        _SCHEDULER_MAP = {
+            "pndm": lambda cfg: PNDMScheduler.from_config(cfg),
+            "dpmpp-2m-karras": lambda cfg: DPMSolverMultistepScheduler.from_config(
+                cfg,
+                algorithm_type="dpmsolver++",
+                solver_order=2,
+                use_karras_sigmas=True,
+            ),
+        }
+    return _SCHEDULER_MAP
+
 
 def _get_dtype_map() -> dict:
     """Return the dtype string → ``torch.dtype`` mapping.
@@ -247,6 +280,7 @@ class ModelManager:
         guidance_scale: float,
         seed: int,
         negative_prompt: str | None = None,
+        scheduler: str | None = None,
     ) -> Image.Image:
         """Generate a single image using the currently loaded pipeline.
 
@@ -273,12 +307,17 @@ class ModelManager:
             negative_prompt: Optional text describing what to avoid in the
                 generated image.  Not supported by all models (turbo models
                 typically ignore it).
+            scheduler: Optional scheduler identifier (e.g. ``"pndm"``,
+                ``"dpmpp-2m-karras"``).  When provided, the pipeline's
+                scheduler is swapped before inference.  ``None`` leaves the
+                pipeline's current scheduler unchanged.
 
         Returns:
             A PIL :class:`~PIL.Image.Image` of the generated result.
 
         Raises:
             RuntimeError: If no model is currently loaded.
+            ValueError: If *scheduler* is not a recognised identifier.
             torch.cuda.OutOfMemoryError: If there is insufficient GPU memory
                 to run the pipeline.
         """
@@ -314,6 +353,20 @@ class ModelManager:
             guidance_scale,
             seed,
         )
+
+        # --- Scheduler swap (optional) -------------------------------------
+        # If the caller requested a specific scheduler, replace the pipeline's
+        # scheduler before running inference.  The new scheduler is created
+        # from the current scheduler's config so that it inherits beta
+        # schedules, timestep spacing, etc.
+        if scheduler:
+            sched_map = _get_scheduler_map()
+            if scheduler not in sched_map:
+                raise ValueError(
+                    f"Unknown scheduler '{scheduler}'.  " f"Available: {sorted(sched_map.keys())}."
+                )
+            self._pipeline.scheduler = sched_map[scheduler](self._pipeline.scheduler.config)
+            logger.info("Scheduler set to '%s'.", scheduler)
 
         # --- Build pipeline kwargs -----------------------------------------
         pipeline_kwargs: dict = {

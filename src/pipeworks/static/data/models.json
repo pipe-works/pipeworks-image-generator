@@ -23,7 +23,8 @@
         { "id": "3:2", "label": "3:2 Photo", "width": 1152, "height": 768 },
         { "id": "2:3", "label": "2:3 Portrait", "width": 768, "height": 1152 }
       ],
-      "default_aspect": "1:1"
+      "default_aspect": "1:1",
+      "max_prompt_tokens": 77
     },
     {
       "id": "sd-v1-5",
@@ -39,6 +40,11 @@
       "max_guidance": 20.0,
       "guidance_step": 0.5,
       "supports_negative_prompt": true,
+      "schedulers": [
+        { "id": "pndm", "label": "PNDM (Default)" },
+        { "id": "dpmpp-2m-karras", "label": "DPM++ 2M Karras" }
+      ],
+      "default_scheduler": "pndm",
       "aspect_ratios": [
         { "id": "1:1", "label": "1:1 Square", "width": 512, "height": 512 },
         { "id": "4:3", "label": "4:3 Landscape", "width": 680, "height": 512 },
@@ -48,7 +54,8 @@
         { "id": "2:3", "label": "2:3 Portrait", "width": 512, "height": 768 },
         { "id": "3:2", "label": "3:2 Landscape", "width": 768, "height": 512 }
       ],
-      "default_aspect": "1:1"
+      "default_aspect": "1:1",
+      "max_prompt_tokens": 77
     },
     {
       "id": "sdxl-1-0",
@@ -74,7 +81,8 @@
         { "id": "2:3", "label": "2:3 Portrait", "width": 832, "height": 1216 },
         { "id": "21:9", "label": "21:9 Ultrawide", "width": 1536, "height": 640 }
       ],
-      "default_aspect": "1:1"
+      "default_aspect": "1:1",
+      "max_prompt_tokens": 77
     }
   ]
 }

@@ -92,6 +92,7 @@
                 rows="3"
               ></textarea>
             </div>
+            <div class="token-counter" id="prepend-tokens">0 / 77 tokens</div>
 
             <!-- Prompt mode toggle -->
             <div>
@@ -118,6 +119,7 @@
               <label class="control-label">Scene Preset</label>
               <select class="select" id="sel-auto-prompt" style="width:100%"></select>
             </div>
+            <div class="token-counter" id="main-tokens">0 / 77 tokens</div>
 
             <!-- Append modifier -->
             <div>
@@ -138,6 +140,7 @@
                 rows="3"
               ></textarea>
             </div>
+            <div class="token-counter" id="append-tokens">0 / 77 tokens</div>
 
             <!-- Negative prompt (conditional) -->
             <div id="negative-prompt-wrap">
@@ -153,7 +156,7 @@
             <!-- Live prompt preview -->
             <div>
               <label class="control-label" style="display:flex;align-items:center;justify-content:space-between">
-                <span>Compiled Prompt Preview</span>
+                <span>Compiled Prompt Preview <span class="token-counter token-counter--inline" id="total-tokens">0 / 77 tokens</span></span>
                 <button class="btn btn--ghost btn--sm" id="btn-expand-prompt" style="font-size:0.65rem">expand</button>
               </label>
               <div class="prompt-preview" id="prompt-preview-box">
@@ -194,6 +197,12 @@
                 <span class="ctrl-slider-value" id="lbl-guidance">7.5</span>
               </label>
               <input type="range" class="range-input" id="rng-guidance" min="0" max="20" step="0.1" value="7.5" />
+            </div>
+
+            <!-- Scheduler / Sampler (only visible for models that declare schedulers) -->
+            <div id="scheduler-wrap" style="display:none">
+              <label class="control-label">Scheduler / Sampler</label>
+              <select class="select" id="sel-scheduler" style="width:100%"></select>
             </div>
           </div>
 
@@ -280,6 +289,15 @@
             <option value="">All Models</option>
           </select>
           <button class="btn btn--secondary btn--sm" id="btn-gallery-refresh">⟳ Refresh</button>
+          <button class="btn btn--secondary btn--sm" id="btn-gallery-select">☐ Select</button>
+
+          <!-- Bulk selection controls (hidden until select mode active) -->
+          <div class="gallery-select-controls" id="gallery-select-controls">
+            <span class="badge badge--muted" id="lbl-select-count">0 selected</span>
+            <button class="btn btn--secondary btn--sm" id="btn-select-all">Select All</button>
+            <button class="btn btn--secondary btn--sm" id="btn-delete-selected" disabled
+              style="color:var(--col-err);border-color:var(--col-err)">Delete Selected</button>
+          </div>
         </div>
         <div class="gallery-grid" id="gallery-grid">
           <div class="gallery-empty" id="gallery-empty">

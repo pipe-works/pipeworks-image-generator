@@ -292,6 +292,31 @@ html, body {
 }
 
 
+/* ── Token counters ──────────────────────────────────────────────────────── */
+
+.token-counter {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--col-text-dim);
+  margin-top: var(--sp-1);
+  text-align: right;
+}
+
+.token-counter--inline {
+  margin-top: 0;
+  margin-left: var(--sp-2);
+}
+
+.token-counter--warn {
+  color: var(--col-warn);
+}
+
+.token-counter--over {
+  color: var(--col-err);
+  font-weight: 700;
+}
+
+
 /* ── Generate button ──────────────────────────────────────────────────────── */
 
 .btn--generate {
@@ -463,6 +488,61 @@ html, body {
   font-size: 0.6rem;
   padding: 1px 5px;
   border-radius: 3px;
+}
+
+
+/* ── Bulk selection mode ──────────────────────────────────────────────────── */
+
+/* Selection checkbox indicator (top-left, replaces batch badge position) */
+.img-card__check {
+  position: absolute;
+  top: var(--sp-1);
+  left: var(--sp-1);
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  border: 2px solid rgba(255,255,255,0.6);
+  background: rgba(0,0,0,0.4);
+  display: none;
+  z-index: 2;
+  pointer-events: none;
+  box-sizing: border-box;
+}
+
+/* Show checkbox when gallery is in select mode */
+.gallery-grid--selecting .img-card__check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Selected card styling */
+.img-card.is-selected {
+  border-color: var(--col-accent);
+  box-shadow: 0 0 0 2px var(--col-accent), 0 4px 12px rgba(0,0,0,0.3);
+}
+
+.img-card.is-selected .img-card__check {
+  background: var(--col-accent);
+  border-color: var(--col-accent);
+}
+
+.img-card.is-selected .img-card__check::after {
+  content: "✓";
+  color: var(--col-bg);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+/* Selection controls in toolbar (hidden until select mode active) */
+.gallery-select-controls {
+  display: none;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.gallery-select-controls.is-active {
+  display: flex;
 }
 
 

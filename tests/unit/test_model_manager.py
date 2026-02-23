@@ -91,19 +91,30 @@ class _MockContext:
         self.mock_torch = _create_mock_torch()
         self.mock_pipeline, self.mock_auto_class = _create_mock_pipeline()
 
-        # Create a mock diffusers module with AutoPipelineForText2Image.
+        # Create a mock diffusers module with AutoPipelineForText2Image and
+        # scheduler classes used by _get_scheduler_map().
         self.mock_diffusers = MagicMock()
         self.mock_diffusers.AutoPipelineForText2Image = self.mock_auto_class
+
+        # Mock scheduler classes — from_config returns a new mock instance.
+        self.mock_pndm_scheduler = MagicMock()
+        self.mock_pndm_scheduler.from_config.return_value = MagicMock(name="PNDMScheduler")
+        self.mock_diffusers.PNDMScheduler = self.mock_pndm_scheduler
+
+        self.mock_dpm_scheduler = MagicMock()
+        self.mock_dpm_scheduler.from_config.return_value = MagicMock(name="DPMSolverMultistep")
+        self.mock_diffusers.DPMSolverMultistepScheduler = self.mock_dpm_scheduler
 
         self._saved_torch = None
         self._saved_diffusers = None
 
     def __enter__(self):
-        # Reset the dtype map cache so it picks up our mock torch.
+        # Reset the dtype and scheduler map caches so they pick up our mocks.
         global _DTYPE_MAP
         import pipeworks.core.model_manager as mm
 
         mm._DTYPE_MAP = None
+        mm._SCHEDULER_MAP = None
 
         # Inject mocks into sys.modules.
         self._saved_torch = sys.modules.get("torch")
@@ -124,10 +135,11 @@ class _MockContext:
         else:
             sys.modules.pop("diffusers", None)
 
-        # Reset dtype map cache.
+        # Reset dtype and scheduler map caches.
         import pipeworks.core.model_manager as mm
 
         mm._DTYPE_MAP = None
+        mm._SCHEDULER_MAP = None
 
 
 # ---------------------------------------------------------------------------
@@ -331,6 +343,83 @@ class TestTurboEnforcement:
 
             call_kwargs = ctx.mock_pipeline.call_args[1]
             assert call_kwargs["guidance_scale"] == 0.0
+
+
+class TestSchedulerSwap:
+    """Test scheduler swapping in generate()."""
+
+    def test_scheduler_swap_dpmpp_2m_karras(self, test_config: PipeworksConfig):
+        """Passing scheduler='dpmpp-2m-karras' should replace the pipeline scheduler."""
+        with _MockContext() as ctx:
+            mgr = ModelManager(test_config)
+            mgr.load_model("stable-diffusion-v1-5/stable-diffusion-v1-5")
+
+            mgr.generate(
+                prompt="test",
+                width=512,
+                height=512,
+                steps=20,
+                guidance_scale=7.5,
+                seed=42,
+                scheduler="dpmpp-2m-karras",
+            )
+
+            # The DPMSolverMultistepScheduler.from_config should have been called.
+            ctx.mock_dpm_scheduler.from_config.assert_called_once()
+
+    def test_scheduler_swap_pndm(self, test_config: PipeworksConfig):
+        """Passing scheduler='pndm' should replace the pipeline scheduler with PNDM."""
+        with _MockContext() as ctx:
+            mgr = ModelManager(test_config)
+            mgr.load_model("stable-diffusion-v1-5/stable-diffusion-v1-5")
+
+            mgr.generate(
+                prompt="test",
+                width=512,
+                height=512,
+                steps=20,
+                guidance_scale=7.5,
+                seed=42,
+                scheduler="pndm",
+            )
+
+            ctx.mock_pndm_scheduler.from_config.assert_called_once()
+
+    def test_no_scheduler_leaves_pipeline_default(self, test_config: PipeworksConfig):
+        """Omitting scheduler should not call any scheduler factory."""
+        with _MockContext() as ctx:
+            mgr = ModelManager(test_config)
+            mgr.load_model("test/model")
+
+            mgr.generate(
+                prompt="test",
+                width=512,
+                height=512,
+                steps=4,
+                guidance_scale=7.0,
+                seed=42,
+            )
+
+            # Neither scheduler factory should have been called.
+            ctx.mock_pndm_scheduler.from_config.assert_not_called()
+            ctx.mock_dpm_scheduler.from_config.assert_not_called()
+
+    def test_unknown_scheduler_raises(self, test_config: PipeworksConfig):
+        """An unrecognised scheduler ID should raise ValueError."""
+        with _MockContext():
+            mgr = ModelManager(test_config)
+            mgr.load_model("test/model")
+
+            with pytest.raises(ValueError, match="Unknown scheduler"):
+                mgr.generate(
+                    prompt="test",
+                    width=512,
+                    height=512,
+                    steps=4,
+                    guidance_scale=7.0,
+                    seed=42,
+                    scheduler="nonexistent-scheduler",
+                )
 
 
 class TestUnload:
