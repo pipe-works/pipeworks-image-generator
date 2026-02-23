@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.2.0...pipeworks-image-generator-v0.2.1) (2026-02-23)
+
+
+### Features
+
+* add manual override for prepend and append prompt sections ([#14](https://github.com/pipe-works/pipeworks-image-generator/issues/14)) ([6ba6e9a](https://github.com/pipe-works/pipeworks-image-generator/commit/6ba6e9adbbfe1809255675fa1ee805aeee4a7a43))
+
 ## [0.2.0](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.1.2...pipeworks-image-generator-v0.2.0) (2026-02-23)
 
 
