@@ -219,14 +219,11 @@ models/
 *.safetensors
 *.ckpt
 
-# Input assets
-/src/inputs/
-!/src/inputs/.gitkeep
-
 # Generated outputs
 /src/outputs/
 !/src/outputs/.gitkeep
 
-# Gradio
-gradio_cached_examples/
-flagged/
+# Gallery images and database (generated at runtime)
+src/pipeworks/static/gallery/*
+!src/pipeworks/static/gallery/.gitkeep
+src/pipeworks/static/data/gallery.json

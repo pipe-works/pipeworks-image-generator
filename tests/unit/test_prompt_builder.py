@@ -1,938 +1,109 @@
-"""Unit tests for PromptBuilder functionality."""
-
-from pipeworks.core.prompt_builder import PromptBuilder
-
-
-class TestPromptBuilderInit:
-    """Tests for PromptBuilder initialization."""
-
-    def test_init(self, test_inputs_dir):
-        """Test PromptBuilder initialization."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        assert pb.inputs_dir == test_inputs_dir
-        assert pb._file_cache == {}
-
-
-class TestPromptBuilderFileScanning:
-    """Tests for file scanning methods."""
-
-    def test_scan_text_files(self, test_inputs_dir):
-        """Test scanning for .txt files."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        files = pb.scan_text_files()
-
-        # Should find all .txt files recursively
-        assert "test.txt" in files
-        assert "test2.txt" in files
-        assert "subfolder/nested.txt" in files
-        assert "subfolder/deep/deep.txt" in files
-        # Files should be sorted
-        assert files == sorted(files)
-
-    def test_scan_text_files_nonexistent_dir(self, temp_dir):
-        """Test scanning when directory doesn't exist."""
-        pb = PromptBuilder(temp_dir / "nonexistent")
-
-        files = pb.scan_text_files()
-
-        assert files == []
-
-    def test_scan_folders(self, test_inputs_dir):
-        """Test scanning for folders."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        folders = pb.scan_folders()
-
-        # Should find (Root) and subfolder
-        assert "(Root)" in folders
-        assert "subfolder" in folders
-        # Should be sorted
-        assert folders == sorted(folders)
-
-    def test_scan_folders_nonexistent_dir(self, temp_dir):
-        """Test scanning folders when directory doesn't exist."""
-        pb = PromptBuilder(temp_dir / "nonexistent")
-
-        folders = pb.scan_folders()
-
-        assert folders == ["(Root)"]
-
-    def test_scan_folders_no_root_files(self, temp_dir):
-        """Test scan_folders when no files in root."""
-        inputs_dir = temp_dir / "inputs"
-        inputs_dir.mkdir()
-        subfolder = inputs_dir / "subfolder"
-        subfolder.mkdir()
-        (subfolder / "test.txt").write_text("content")
-
-        pb = PromptBuilder(inputs_dir)
-        folders = pb.scan_folders()
-
-        # Should not include (Root) since no files in root
-        assert "(Root)" not in folders
-        assert "subfolder" in folders
-
-    def test_get_items_in_path_root(self, test_inputs_dir):
-        """Test getting items at root path."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        folders, files = pb.get_items_in_path("")
-
-        assert "subfolder" in folders
-        assert "test.txt" in files
-        assert "test2.txt" in files
-
-    def test_get_items_in_path_subfolder(self, test_inputs_dir):
-        """Test getting items in subfolder."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        folders, files = pb.get_items_in_path("subfolder")
-
-        assert "deep" in folders
-        assert "nested.txt" in files
-
-    def test_get_items_in_path_nonexistent(self, test_inputs_dir):
-        """Test getting items in nonexistent path."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        folders, files = pb.get_items_in_path("nonexistent")
-
-        assert folders == []
-        assert files == []
-
-    def test_get_items_in_path_empty_folder(self, temp_dir):
-        """Test getting items in empty folder."""
-        inputs_dir = temp_dir / "inputs"
-        inputs_dir.mkdir()
-        empty_folder = inputs_dir / "empty"
-        empty_folder.mkdir()
-
-        pb = PromptBuilder(inputs_dir)
-        folders, files = pb.get_items_in_path("")
-
-        # Empty folder should not be included
-        assert "empty" not in folders
-
-    def test_get_files_in_folder_root(self, test_inputs_dir):
-        """Test getting files in root folder."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        files = pb.get_files_in_folder("(Root)")
-
-        assert "test.txt" in files
-        assert "test2.txt" in files
-        # Should not include subdirectory files
-        assert "nested.txt" not in files
-
-    def test_get_files_in_folder_subfolder(self, test_inputs_dir):
-        """Test getting files in subfolder (recursive)."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        files = pb.get_files_in_folder("subfolder")
-
-        # Should include nested.txt
-        assert "nested.txt" in files
-        # Should also include deep/deep.txt (recursive)
-        assert "deep/deep.txt" in files
-
-    def test_get_files_in_folder_nonexistent(self, test_inputs_dir):
-        """Test getting files from nonexistent folder."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        files = pb.get_files_in_folder("nonexistent")
-
-        assert files == []
-
-    def test_get_files_in_folder_nonexistent_inputs_dir(self, temp_dir):
-        """Test getting files when inputs dir doesn't exist."""
-        pb = PromptBuilder(temp_dir / "nonexistent")
-
-        files = pb.get_files_in_folder("(Root)")
-
-        assert files == []
-
-
-class TestPromptBuilderPathOperations:
-    """Tests for path manipulation methods."""
-
-    def test_get_full_path_basic(self, test_inputs_dir):
-        """Test getting full path for file."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        result = pb.get_full_path("", "test.txt")
-
-        assert result == "test.txt"
-
-    def test_get_full_path_with_subfolder(self, test_inputs_dir):
-        """Test getting full path with subfolder."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        result = pb.get_full_path("subfolder", "nested.txt")
-
-        assert result == "subfolder/nested.txt"
-
-    def test_get_full_path_root_folder(self, test_inputs_dir):
-        """Test getting full path with (Root) folder."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        result = pb.get_full_path("(Root)", "test.txt")
-
-        assert result == "test.txt"
-
-    def test_get_full_path_none_folder(self, test_inputs_dir):
-        """Test getting full path with (None) folder."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        result = pb.get_full_path("(None)", "test.txt")
-
-        assert result == "test.txt"
-
-    def test_get_full_path_empty_filename(self, test_inputs_dir):
-        """Test getting full path with empty filename."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        result = pb.get_full_path("subfolder", "")
-
-        assert result == ""
-
-    def test_get_full_path_none_filename(self, test_inputs_dir):
-        """Test getting full path with (None) filename."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        result = pb.get_full_path("subfolder", "(None)")
-
-        assert result == ""
-
-
-class TestPromptBuilderFileReading:
-    """Tests for file reading methods."""
-
-    def test_read_file_lines(self, test_inputs_dir):
-        """Test reading file lines."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        lines = pb.read_file_lines("test.txt")
-
-        assert lines == ["line 1", "line 2", "line 3", "line 4", "line 5"]
-
-    def test_read_file_lines_caching(self, test_inputs_dir):
-        """Test that file reading uses cache."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        # First read
-        lines1 = pb.read_file_lines("test.txt")
-        # Second read should use cache
-        lines2 = pb.read_file_lines("test.txt")
-
-        assert lines1 == lines2
-        # Verify cache was used
-        assert "test.txt" in pb._file_cache
-
-    def test_read_file_lines_nonexistent(self, test_inputs_dir):
-        """Test reading nonexistent file."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        lines = pb.read_file_lines("nonexistent.txt")
-
-        assert lines == []
-
-    def test_read_file_lines_nested(self, test_inputs_dir):
-        """Test reading nested file."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        lines = pb.read_file_lines("subfolder/nested.txt")
-
-        assert lines == ["nested line 1", "nested line 2"]
-
-    def test_clear_cache(self, test_inputs_dir):
-        """Test clearing file cache."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        # Populate cache
-        pb.read_file_lines("test.txt")
-        assert "test.txt" in pb._file_cache
-
-        # Clear cache
-        pb.clear_cache()
-
-        assert pb._file_cache == {}
-
-    def test_get_file_info(self, test_inputs_dir):
-        """Test getting file information."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        info = pb.get_file_info("test.txt")
-
-        assert info["line_count"] == 5
-        assert info["preview"] == ["line 1", "line 2", "line 3", "line 4", "line 5"]
-        assert info["exists"] is True
-
-    def test_get_file_info_nonexistent(self, test_inputs_dir):
-        """Test getting info for nonexistent file."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        info = pb.get_file_info("nonexistent.txt")
-
-        assert info["line_count"] == 0
-        assert info["preview"] == []
-        assert info["exists"] is False
-
-    def test_get_file_info_preview_limit(self, test_inputs_dir):
-        """Test that file info preview is limited to 5 lines."""
-        pb = PromptBuilder(test_inputs_dir)
-        # test.txt has exactly 5 lines, so create a larger file
-        large_file = test_inputs_dir / "large.txt"
-        large_file.write_text("\n".join([f"line {i}" for i in range(1, 11)]))
-
-        info = pb.get_file_info("large.txt")
-
-        assert info["line_count"] == 10
-        assert len(info["preview"]) == 5
-        assert info["preview"] == ["line 1", "line 2", "line 3", "line 4", "line 5"]
-
-
-class TestPromptBuilderLineSelection:
-    """Tests for line selection methods."""
-
-    def test_get_random_line(self, test_inputs_dir):
-        """Test getting random line from file."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        result = pb.get_random_line("test.txt")
-
-        # Should be one of the lines
-        assert result in ["line 1", "line 2", "line 3", "line 4", "line 5"]
-
-    def test_get_random_line_empty_file(self, temp_dir):
-        """Test getting random line from empty file."""
-        inputs_dir = temp_dir / "inputs"
-        inputs_dir.mkdir()
-        empty_file = inputs_dir / "empty.txt"
-        empty_file.write_text("")
-
-        pb = PromptBuilder(inputs_dir)
-        result = pb.get_random_line("empty.txt")
-
-        assert result == ""
-
-    def test_get_specific_line(self, test_inputs_dir):
-        """Test getting specific line from file."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        result = pb.get_specific_line("test.txt", 3)
-
-        assert result == "line 3"
-
-    def test_get_specific_line_first(self, test_inputs_dir):
-        """Test getting first line."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        result = pb.get_specific_line("test.txt", 1)
-
-        assert result == "line 1"
-
-    def test_get_specific_line_last(self, test_inputs_dir):
-        """Test getting last line."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        result = pb.get_specific_line("test.txt", 5)
-
-        assert result == "line 5"
-
-    def test_get_specific_line_out_of_range(self, test_inputs_dir):
-        """Test getting line out of range."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        result = pb.get_specific_line("test.txt", 999)
-
-        assert result == ""
-
-    def test_get_specific_line_zero(self, test_inputs_dir):
-        """Test getting line with index 0 (invalid)."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        result = pb.get_specific_line("test.txt", 0)
-
-        assert result == ""
-
-    def test_get_specific_line_negative(self, test_inputs_dir):
-        """Test getting line with negative index."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        result = pb.get_specific_line("test.txt", -1)
-
-        assert result == ""
-
-    def test_get_sequential_line(self, test_inputs_dir):
-        """Test getting sequential line."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        # Start at line 2, run index 0 should get line 2
-        result = pb.get_sequential_line("test.txt", start_line=2, run_index=0)
-        assert result == "line 2"
-
-        # Start at line 2, run index 1 should get line 3
-        result = pb.get_sequential_line("test.txt", start_line=2, run_index=1)
-        assert result == "line 3"
-
-        # Start at line 2, run index 2 should get line 4
-        result = pb.get_sequential_line("test.txt", start_line=2, run_index=2)
-        assert result == "line 4"
-
-    def test_get_sequential_line_out_of_range(self, test_inputs_dir):
-        """Test sequential line going out of range."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        # Start at line 4, run index 5 would be line 9 (out of range)
-        result = pb.get_sequential_line("test.txt", start_line=4, run_index=5)
-
-        assert result == ""
-
-    def test_get_line_range(self, test_inputs_dir):
-        """Test getting line range from file."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        result = pb.get_line_range("test.txt", 2, 4)
-
-        # Default delimiter is now single space
-        assert result == "line 2 line 3 line 4"
-
-    def test_get_line_range_single_line(self, test_inputs_dir):
-        """Test getting range with same start and end."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        result = pb.get_line_range("test.txt", 3, 3)
-
-        assert result == "line 3"
-
-    def test_get_line_range_full_file(self, test_inputs_dir):
-        """Test getting entire file as range."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        result = pb.get_line_range("test.txt", 1, 5)
-
-        # Default delimiter is now single space
-        assert result == "line 1 line 2 line 3 line 4 line 5"
-
-    def test_get_line_range_clamped(self, test_inputs_dir):
-        """Test that line range is clamped to valid range."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        # Request range beyond file length
-        result = pb.get_line_range("test.txt", 3, 999)
-
-        # Should clamp to available lines (default delimiter is single space)
-        assert result == "line 3 line 4 line 5"
-
-    def test_get_line_range_reversed(self, test_inputs_dir):
-        """Test that reversed range is handled correctly."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        # Start > end should clamp to same line
-        result = pb.get_line_range("test.txt", 4, 2)
-
-        # Should return line 4 (start clamped to end)
-        assert result == "line 4"
-
-    def test_get_all_lines(self, test_inputs_dir):
-        """Test getting all lines from file."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        result = pb.get_all_lines("test.txt")
-
-        # Default delimiter is now single space
-        assert result == "line 1 line 2 line 3 line 4 line 5"
-
-    def test_get_all_lines_empty_file(self, temp_dir):
-        """Test getting all lines from empty file."""
-        inputs_dir = temp_dir / "inputs"
-        inputs_dir.mkdir()
-        empty_file = inputs_dir / "empty.txt"
-        empty_file.write_text("")
-
-        pb = PromptBuilder(inputs_dir)
-        result = pb.get_all_lines("empty.txt")
-
-        assert result == ""
-
-    def test_get_random_lines(self, test_inputs_dir):
-        """Test getting multiple random lines."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        result = pb.get_random_lines("test.txt", 3)
-
-        # Result should contain 3 lines joined with space delimiter
-        # Each line contains "line X" so we check for presence
-        # We can't split by space since lines themselves contain spaces
-        assert "line" in result
-        # Check that result is not empty
-        assert len(result) > 0
-        # Verify it's using space delimiter by checking for expected pattern
-        # With 3 lines like "line 1", "line 2", "line 3", joined by space:
-        # Result could be "line 1 line 2 line 3"
-        valid_lines = ["line 1", "line 2", "line 3", "line 4", "line 5"]
-        # Count how many valid lines appear in result
-        count = sum(1 for line in valid_lines if line in result)
-        assert count == 3  # Should have exactly 3 lines
-
-    def test_get_random_lines_more_than_available(self, test_inputs_dir):
-        """Test getting more random lines than available."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        # Request more lines than file has
-        result = pb.get_random_lines("test.txt", 999)
-
-        # Should return all available lines (joined with spaces - default delimiter)
-        # Count how many valid lines appear in result
-        valid_lines = ["line 1", "line 2", "line 3", "line 4", "line 5"]
-        count = sum(1 for line in valid_lines if line in result)
-        assert count == 5  # Should have all 5 lines
-
-    def test_get_random_lines_empty_file(self, temp_dir):
-        """Test getting random lines from empty file."""
-        inputs_dir = temp_dir / "inputs"
-        inputs_dir.mkdir()
-        empty_file = inputs_dir / "empty.txt"
-        empty_file.write_text("")
-
-        pb = PromptBuilder(inputs_dir)
-        result = pb.get_random_lines("empty.txt", 3)
-
-        assert result == ""
-
-
-class TestPromptBuilderBuildPrompt:
-    """Tests for build_prompt method."""
-
-    def test_build_prompt_with_text_segment(self, test_inputs_dir):
-        """Test building prompt with text-only segment."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        segments = [("text", "Hello world")]
-        result = pb.build_prompt(segments)
-
-        assert result == "Hello world"
-
-    def test_build_prompt_with_file_random(self, test_inputs_dir):
-        """Test building prompt with random line from file."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        segments = [("file_random", "test.txt")]
-        result = pb.build_prompt(segments)
-
-        # Should be one of the lines from test.txt
-        assert result in ["line 1", "line 2", "line 3", "line 4", "line 5"]
-
-    def test_build_prompt_with_file_specific(self, test_inputs_dir):
-        """Test building prompt with specific line from file."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        segments = [("file_specific", "test.txt|2")]
-
-        result = pb.build_prompt(segments)
-
-        assert result == "line 2"
-
-    def test_build_prompt_with_file_range(self, test_inputs_dir):
-        """Test building prompt with line range from file."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        segments = [("file_range", "test.txt|2|4")]
-
-        result = pb.build_prompt(segments)
-
-        assert "line 2" in result
-        assert "line 3" in result
-        assert "line 4" in result
-        assert "line 1" not in result
-        assert "line 5" not in result
-
-    def test_build_prompt_with_file_all(self, test_inputs_dir):
-        """Test building prompt with all lines from file."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        segments = [("file_all", "test.txt")]
-
-        result = pb.build_prompt(segments)
-
-        assert "line 1" in result
-        assert "line 2" in result
-        assert "line 3" in result
-        assert "line 4" in result
-        assert "line 5" in result
-
-    def test_build_prompt_with_file_random_multi(self, test_inputs_dir):
-        """Test building prompt with multiple random lines."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        segments = [("file_random_multi", "test.txt|3")]
-
-        result = pb.build_prompt(segments)
-
-        # file_random_multi joins lines with spaces (default delimiter)
-        # Count how many valid lines appear in result
-        valid_lines = ["line 1", "line 2", "line 3", "line 4", "line 5"]
-        count = sum(1 for line in valid_lines if line in result)
-        assert count == 3  # Should have exactly 3 lines
-
-    def test_build_prompt_with_file_sequential(self, test_inputs_dir):
-        """Test building prompt with sequential line."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        # Start at line 2, run index 0
-        segments = [("file_sequential", "test.txt|2|0")]
-        result = pb.build_prompt(segments)
-        assert result == "line 2"
-
-        # Start at line 2, run index 1
-        segments = [("file_sequential", "test.txt|2|1")]
-        result = pb.build_prompt(segments)
-        assert result == "line 3"
-
-    def test_build_prompt_combined_segments(self, test_inputs_dir):
-        """Test building prompt with multiple segments."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        segments = [
-            ("text", "Start:"),
-            ("file_specific", "test.txt|1"),
-            ("text", "Middle:"),
-            ("file_specific", "test.txt|3"),
-        ]
-
-        result = pb.build_prompt(segments)
-
-        assert "Start:" in result
-        assert "line 1" in result
-        assert "Middle:" in result
-        assert "line 3" in result
-
-    def test_build_prompt_empty_segments(self, test_inputs_dir):
-        """Test building prompt with no segments."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        segments = []
-        result = pb.build_prompt(segments)
-
-        assert result == ""
-
-    def test_build_prompt_skips_empty_segments(self, test_inputs_dir):
-        """Test that empty segments are skipped."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        segments = [
-            ("text", "Hello"),
-            ("text", ""),  # Empty text
-            ("text", "   "),  # Whitespace only
-            ("text", "World"),
-        ]
-
-        result = pb.build_prompt(segments)
-
-        # Default delimiter is now single space
-        assert result == "Hello World"
-
-    def test_build_prompt_invalid_file(self, test_inputs_dir):
-        """Test that invalid file path logs error and returns empty."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        segments = [("file_random", "nonexistent.txt")]
-
-        result = pb.build_prompt(segments)
-        assert result == ""
-
-    def test_build_prompt_invalid_line_number(self, test_inputs_dir):
-        """Test that invalid line number handles gracefully."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        segments = [("file_specific", "test.txt|999")]
-
-        result = pb.build_prompt(segments)
-        # Should return empty since line doesn't exist
-        assert result == ""
-
-    def test_build_prompt_invalid_file_specific_format(self, test_inputs_dir):
-        """Test handling of invalid file_specific format."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        # Missing pipe separator
-        segments = [("file_specific", "test.txt")]
-
-        result = pb.build_prompt(segments)
-        # Should handle error gracefully
-        assert result == ""
-
-    def test_build_prompt_invalid_file_range_format(self, test_inputs_dir):
-        """Test handling of invalid file_range format."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        # Missing one parameter
-        segments = [("file_range", "test.txt|2")]
-
-        result = pb.build_prompt(segments)
-        # Should handle error gracefully
-        assert result == ""
-
-    def test_build_prompt_invalid_file_random_multi_format(self, test_inputs_dir):
-        """Test handling of invalid file_random_multi format."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        # Missing count parameter
-        segments = [("file_random_multi", "test.txt")]
-
-        result = pb.build_prompt(segments)
-        # Should handle error gracefully
-        assert result == ""
-
-    def test_build_prompt_invalid_file_sequential_format(self, test_inputs_dir):
-        """Test handling of invalid file_sequential format."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        # Missing run index parameter
-        segments = [("file_sequential", "test.txt|2")]
-
-        result = pb.build_prompt(segments)
-        # Should handle error gracefully
-        assert result == ""
-
-    def test_build_prompt_with_nested_file(self, test_inputs_dir):
-        """Test building prompt from nested file."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        segments = [("file_specific", "subfolder/nested.txt|1")]
-
-        result = pb.build_prompt(segments)
-
-        assert result == "nested line 1"
-
-    def test_build_prompt_custom_delimiter(self, test_inputs_dir):
-        """Test that delimiter parameter is now used correctly."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        segments = [("text", "A"), ("text", "B")]
-
-        # The delimiter parameter should now be used
-        result = pb.build_prompt(segments, delimiter=" | ")
-
-        # Should use the custom delimiter
-        assert result == "A | B"
-        assert " | " in result
-
-    def test_build_prompt_delimiter_parameter_used(self, test_inputs_dir):
-        """Test that custom delimiter parameter is now correctly used."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        segments = [("text", "A"), ("text", "B"), ("text", "C")]
-
-        # Pass a custom delimiter
-        result = pb.build_prompt(segments, delimiter=" | ")
-
-        # Should now use the custom delimiter
-        assert result == "A | B | C"
-
-    def test_build_prompt_double_punctuation_text_segment_fixed(self, test_inputs_dir):
-        """Test that text segments with trailing delimiters are handled correctly."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        # With default space delimiter, trailing spaces are stripped
-        segments = [
-            ("text", "a beautiful landscape "),  # User text ends with space
-            ("text", "photorealistic"),
-            ("text", "golden hour lighting"),
-        ]
-
-        result = pb.build_prompt(segments)
-
-        # Should strip trailing space to avoid double spaces (default delimiter is " ")
-        assert result == "a beautiful landscape photorealistic golden hour lighting"
-
-        # Test with comma delimiter
-        segments = [
-            ("text", "a beautiful landscape,"),  # User text ends with comma
-            ("text", "photorealistic"),
-            ("text", "golden hour lighting"),
-        ]
-
-        result = pb.build_prompt(segments, delimiter=", ")
-
-        # Should strip trailing comma to avoid double commas
-        assert result == "a beautiful landscape, photorealistic, golden hour lighting"
-
-    def test_build_prompt_double_punctuation_mixed_segments_fixed(self, test_inputs_dir):
-        """Test that double punctuation is prevented with mixed text and file segments."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        # Create a file with content that has trailing comma
-        test_file = test_inputs_dir / "with_comma.txt"
-        test_file.write_text("style 1,\nstyle 2,\nstyle 3,")
-
-        # Test with comma delimiter
-        segments = [
-            ("text", "a wizard,"),  # Trailing comma
-            ("file_specific", "with_comma.txt|1"),  # File content has trailing comma
-            ("text", "magical"),
-        ]
-
-        result = pb.build_prompt(segments, delimiter=", ")
-
-        # Should strip trailing commas to prevent double punctuation
-        assert result == "a wizard, style 1, magical"
-
-    def test_get_line_range_custom_delimiter(self, test_inputs_dir):
-        """Test that get_line_range now supports custom delimiter."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        # Default delimiter (single space)
-        result = pb.get_line_range("test.txt", 1, 3)
-        assert result == "line 1 line 2 line 3"
-
-        # Custom delimiter (comma-space)
-        result = pb.get_line_range("test.txt", 1, 3, delimiter=", ")
-        assert result == "line 1, line 2, line 3"
-
-        # Custom delimiter (pipe)
-        result = pb.get_line_range("test.txt", 1, 3, delimiter=" | ")
-        assert result == "line 1 | line 2 | line 3"
-
-    def test_get_all_lines_custom_delimiter(self, test_inputs_dir):
-        """Test that get_all_lines now supports custom delimiter."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        # Default delimiter (single space)
-        result = pb.get_all_lines("test.txt")
-        assert result == "line 1 line 2 line 3 line 4 line 5"
-
-        # Custom delimiter (comma-space)
-        result = pb.get_all_lines("test.txt", delimiter=", ")
-        assert result == "line 1, line 2, line 3, line 4, line 5"
-
-        # Custom delimiter (dash)
-        result = pb.get_all_lines("test.txt", delimiter=" - ")
-        assert result == "line 1 - line 2 - line 3 - line 4 - line 5"
-
-    def test_get_random_lines_custom_delimiter(self, test_inputs_dir):
-        """Test that get_random_lines now supports custom delimiter."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        # Create a small file to ensure deterministic results
-        test_file = test_inputs_dir / "small.txt"
-        test_file.write_text("A\nB\nC")
-
-        # Default delimiter (single space)
-        result = pb.get_random_lines("small.txt", 3)
-        # Result will contain spaces between items
-        assert "A" in result
-        assert "B" in result
-        assert "C" in result
-        # Since it's random order, just check that spaces are used
-        parts = result.split(" ")
-        assert len(parts) == 3
-
-        # Custom delimiter (comma-space)
-        result = pb.get_random_lines("small.txt", 3, delimiter=", ")
-        assert ", " in result
-        assert "A" in result
-        assert "B" in result
-        assert "C" in result
-
-        # Custom delimiter (ampersand)
-        result = pb.get_random_lines("small.txt", 3, delimiter=" & ")
-        assert " & " in result
-        assert "A" in result
-        assert "B" in result
-        assert "C" in result
-
-    def test_build_prompt_custom_delimiter_with_trailing_punctuation(self, test_inputs_dir):
-        """Test that custom delimiter strips correctly to avoid double punctuation."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        segments = [
-            ("text", "first|"),  # Trailing pipe
-            ("text", "second"),
-            ("text", "third|"),  # Trailing pipe
-        ]
-
-        result = pb.build_prompt(segments, delimiter=" | ")
-
-        # Should strip trailing pipes to prevent "first| | second"
-        assert result == "first | second | third"
-
-    def test_build_prompt_mixed_trailing_delimiters(self, test_inputs_dir):
-        """Test handling of various trailing delimiter formats."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        segments = [
-            ("text", "alpha,"),  # Just comma
-            ("text", "beta, "),  # Comma with space
-            ("text", "gamma"),  # No trailing comma
-        ]
-
-        result = pb.build_prompt(segments, delimiter=", ")
-
-        # Should handle all cases correctly
-        assert result == "alpha, beta, gamma"
-
-    def test_strip_trailing_delimiter_helper(self, test_inputs_dir):
-        """Test the _strip_trailing_delimiter helper method."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        # Test with comma-space delimiter
-        assert pb._strip_trailing_delimiter("hello,", ", ") == "hello"
-        assert pb._strip_trailing_delimiter("hello, ", ", ") == "hello"
-        assert pb._strip_trailing_delimiter("hello", ", ") == "hello"
-
-        # Test with pipe delimiter
-        assert pb._strip_trailing_delimiter("test|", " | ") == "test"
-        assert pb._strip_trailing_delimiter("test | ", " | ") == "test"
-        assert pb._strip_trailing_delimiter("test", " | ") == "test"
-
-        # Test with dash delimiter
-        assert pb._strip_trailing_delimiter("word-", " - ") == "word"
-        assert pb._strip_trailing_delimiter("word - ", " - ") == "word"
-
-        # Test empty inputs
-        assert pb._strip_trailing_delimiter("", ", ") == ""
-        assert pb._strip_trailing_delimiter("text", "") == "text"
-
-    def test_empty_delimiter_behavior(self, test_inputs_dir):
-        """Test that empty delimiter concatenates content without separation."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        # Test with build_prompt - empty delimiter should concatenate
-        segments = [
-            ("text", "Hello"),
-            ("text", "World"),
-        ]
-
-        result = pb.build_prompt(segments, delimiter="")
-
-        assert result == "HelloWorld"
-
-        # Test with get_line_range - empty delimiter
-        result = pb.get_line_range("test.txt", 1, 3, delimiter="")
-
-        assert result == "line 1line 2line 3"
-
-        # Test with get_all_lines - empty delimiter
-        result = pb.get_all_lines("test.txt", delimiter="")
-
-        assert result == "line 1line 2line 3line 4line 5"
-
-    def test_default_space_delimiter_prevents_word_collision(self, test_inputs_dir):
-        """Test that default space delimiter prevents words from running together."""
-        pb = PromptBuilder(test_inputs_dir)
-
-        segments = [
-            ("text", "beautiful"),
-            ("text", "landscape"),
-            ("text", "photograph"),
-        ]
-
-        result = pb.build_prompt(segments)
-
-        # Default delimiter is single space, so words are separated
-        assert result == "beautiful landscape photograph"
-        # Ensure no word collision
-        assert "beautifullandscape" not in result
+"""Tests for pipeworks.api.prompt_builder — three-part prompt compilation.
+
+Tests cover:
+- Full prompt with all three parts (prepend, scene, append).
+- Empty prepend/append are silently omitted.
+- Whitespace-only values are treated as empty.
+- Fixed boilerplate sections are always present.
+- Double newline delimiters between sections.
+- Main scene header is always included.
+"""
+
+from __future__ import annotations
+
+from pipeworks.api.prompt_builder import (
+    _COLOUR_BOILERPLATE,
+    _MOOD_BOILERPLATE,
+    _STYLE_BOILERPLATE,
+    build_prompt,
+)
+
+
+class TestBuildPromptFullParts:
+    """Test prompt compilation with all three user parts provided."""
+
+    def test_all_parts_present(self):
+        """Compiled prompt should contain all three user-provided parts."""
+        result = build_prompt(
+            prepend_value="Oil painting style.",
+            main_scene="A goblin workshop.",
+            append_value="8K resolution.",
+        )
+        assert "Oil painting style." in result
+        assert "A goblin workshop." in result
+        assert "8K resolution." in result
+
+    def test_contains_style_boilerplate(self):
+        """Compiled prompt should always contain the Ledgerfall style boilerplate."""
+        result = build_prompt("", "A scene.", "")
+        assert _STYLE_BOILERPLATE in result
+
+    def test_contains_mood_boilerplate(self):
+        """Compiled prompt should always contain the mood boilerplate."""
+        result = build_prompt("", "A scene.", "")
+        assert _MOOD_BOILERPLATE in result
+
+    def test_contains_colour_boilerplate(self):
+        """Compiled prompt should always contain the colour palette boilerplate."""
+        result = build_prompt("", "A scene.", "")
+        assert _COLOUR_BOILERPLATE in result
+
+    def test_main_scene_header_present(self):
+        """The 'Main Scene:' header should always appear before the scene."""
+        result = build_prompt("", "A scene.", "")
+        assert "Main Scene:" in result
+
+    def test_sections_separated_by_double_newlines(self):
+        """All sections should be separated by double newlines."""
+        result = build_prompt("Prepend.", "Scene.", "Append.")
+        # Each section boundary should have exactly "\n\n".
+        parts = result.split("\n\n")
+        # With all 3 user parts + 3 boilerplate + header = 7 sections.
+        assert len(parts) == 7
+
+
+class TestBuildPromptEmptyParts:
+    """Test prompt compilation when prepend and/or append are empty."""
+
+    def test_empty_prepend_omitted(self):
+        """An empty prepend should not produce a blank section."""
+        result = build_prompt("", "A scene.", "Append.")
+        # The result should start with the boilerplate, not an empty section.
+        assert not result.startswith("\n")
+        # Verify the structure: boilerplate, header, scene, mood, append, colour.
+        parts = result.split("\n\n")
+        assert parts[0] == _STYLE_BOILERPLATE
+
+    def test_empty_append_omitted(self):
+        """An empty append should not produce a blank section."""
+        result = build_prompt("Prepend.", "A scene.", "")
+        # Should end with colour boilerplate, not an empty section.
+        assert result.strip().endswith(_COLOUR_BOILERPLATE)
+        parts = result.split("\n\n")
+        assert parts[-1] == _COLOUR_BOILERPLATE
+
+    def test_both_empty(self):
+        """When both prepend and append are empty, only fixed sections remain."""
+        result = build_prompt("", "A scene.", "")
+        parts = result.split("\n\n")
+        # boilerplate, header, scene, mood, colour = 5 sections.
+        assert len(parts) == 5
+
+    def test_whitespace_only_prepend_treated_as_empty(self):
+        """Whitespace-only prepend should be omitted."""
+        result = build_prompt("   \t\n  ", "A scene.", "")
+        parts = result.split("\n\n")
+        # Same as empty — 5 sections.
+        assert len(parts) == 5
+
+    def test_whitespace_only_append_treated_as_empty(self):
+        """Whitespace-only append should be omitted."""
+        result = build_prompt("", "A scene.", "   \n  ")
+        parts = result.split("\n\n")
+        assert len(parts) == 5
+
+    def test_scene_is_stripped(self):
+        """Main scene should be stripped of leading/trailing whitespace."""
+        result = build_prompt("", "  A padded scene.  ", "")
+        assert "A padded scene." in result
+        assert "  A padded scene.  " not in result
