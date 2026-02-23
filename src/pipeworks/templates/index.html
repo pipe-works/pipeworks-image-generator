@@ -16,11 +16,11 @@
   <!-- Header -->
   <header class="app-header">
     <div class="app-header__logo">
-      <span class="app-header__logo-dot"></span>
+      <span class="app-header__logo-icon">⚙</span>
       <span class="app-header__title">Image Generator</span>
     </div>
     <span class="app-header__subtitle">PIPE-WORKS · IMAGE GEN INSTRUMENT</span>
-    <span class="app-header__version">V0.2.0</span>
+    <span class="app-header__version" id="app-version"></span>
 
     <nav class="app-header__nav">
       <button class="btn btn--secondary btn--sm" id="btn-prompt-preview" title="Preview compiled prompt">
@@ -300,7 +300,7 @@
         <div class="panel" style="margin-bottom:var(--sp-4)">
           <div class="panel__heading">About — Image Generator</div>
           <p style="font-size:var(--text-sm);color:var(--col-text-muted);line-height:1.7;margin-bottom:var(--sp-3)">
-            A Pipe-Works demo tool for AI image generation. Supports three diffusion models with
+            A Pipe-Works tool for AI image generation. Supports multiple diffusion models with
             a structured prompt composition system. The API is the single source of truth for all
             configuration, gallery, and favourites data.
           </p>
@@ -368,13 +368,12 @@ Main Scene:
         </div>
 
         <div class="panel">
-          <div class="panel__heading">Demo Mode</div>
+          <div class="panel__heading">Requirements</div>
           <p style="font-size:var(--text-sm);color:var(--col-text-muted);line-height:1.7">
-            This build runs in <strong>demo mode</strong> — placeholder images are generated locally
-            without loading actual diffusion models. To enable real inference, install the optional
-            dependencies listed in <code>requirements.txt</code> and replace the
-            <code>_generate_demo_image()</code> function in <code>api/main.py</code> with a call
-            to the appropriate HuggingFace diffusers pipeline.
+            Image generation requires a CUDA-capable GPU with 16GB+ VRAM. Models are downloaded
+            from HuggingFace on first use and cached locally. See the
+            <a href="https://github.com/pipe-works/pipeworks-image-generator" target="_blank" class="model-info-card__link">README</a>
+            for full system requirements and configuration options.
           </p>
         </div>
       </div>

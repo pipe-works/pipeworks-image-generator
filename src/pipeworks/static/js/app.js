@@ -163,6 +163,11 @@ function populateControls() {
     selAppend.appendChild(opt);
   });
 
+  // Version badge in header (populated from API, single source of truth)
+  if (cfg.version) {
+    $("#app-version").textContent = `V${cfg.version}`;
+  }
+
   // Trigger model change to populate aspect ratios etc.
   onModelChange();
 }

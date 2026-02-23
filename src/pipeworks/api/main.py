@@ -64,6 +64,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
+from pipeworks import __version__
 from pipeworks.api.models import FavouriteRequest, GenerateRequest
 from pipeworks.api.prompt_builder import build_prompt
 from pipeworks.core.config import config
@@ -128,7 +129,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(
     title="Pipe-Works Image Generator",
     description="Image generation API with multi-model diffusion pipeline support.",
-    version="0.2.0",
+    version=__version__,
     lifespan=lifespan,
 )
 
@@ -236,7 +237,7 @@ async def get_config() -> dict:
     models = _load_json(DATA_DIR / "models.json", {"models": []})
     prompts = _load_json(DATA_DIR / "prompts.json", {})
     return {
-        "version": "0.2.0",
+        "version": __version__,
         "models": models.get("models", []),
         "prepend_prompts": prompts.get("prepend_prompts", []),
         "automated_prompts": prompts.get("automated_prompts", []),
