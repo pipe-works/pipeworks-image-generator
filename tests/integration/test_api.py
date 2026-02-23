@@ -260,6 +260,26 @@ class TestGenerate:
         assert "Ink sketch style." in data["compiled_prompt"]
         assert "High contrast." in data["compiled_prompt"]
 
+    def test_generate_with_scheduler(self, test_client):
+        """Scheduler should be passed through and stored in gallery metadata."""
+        resp = test_client.post(
+            "/api/generate",
+            json=self._make_generate_payload(scheduler="dpmpp-2m-karras"),
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["images"][0]["scheduler"] == "dpmpp-2m-karras"
+
+    def test_generate_without_scheduler(self, test_client):
+        """Omitting scheduler should store None in gallery metadata."""
+        resp = test_client.post(
+            "/api/generate",
+            json=self._make_generate_payload(),
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["images"][0]["scheduler"] is None
+
     def test_generate_template_mode_backward_compat(self, test_client):
         """Default template mode (no prepend_mode/append_mode) should still work."""
         resp = test_client.post(
@@ -581,6 +601,81 @@ class TestDelete:
 # ---------------------------------------------------------------------------
 # Stats endpoint tests.
 # ---------------------------------------------------------------------------
+
+
+class TestBulkDelete:
+    """Test POST /api/gallery/bulk-delete — bulk image deletion."""
+
+    def test_bulk_delete_success(self, test_client, sample_gallery):
+        """Deleting 2 of 5 images should leave 3 remaining."""
+        ids_to_delete = [sample_gallery[0]["id"], sample_gallery[1]["id"]]
+
+        resp = test_client.post(
+            "/api/gallery/bulk-delete",
+            json={"image_ids": ids_to_delete},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["success"] is True
+        assert set(data["deleted"]) == set(ids_to_delete)
+        assert data["not_found"] == []
+
+        # Verify gallery count decreased.
+        gallery_resp = test_client.get("/api/gallery")
+        assert gallery_resp.json()["total"] == 3
+
+    def test_bulk_delete_partial_not_found(self, test_client, sample_gallery):
+        """Some IDs missing should delete what exists and report not_found."""
+        valid_id = sample_gallery[0]["id"]
+        fake_id = "nonexistent-id-12345"
+
+        resp = test_client.post(
+            "/api/gallery/bulk-delete",
+            json={"image_ids": [valid_id, fake_id]},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert valid_id in data["deleted"]
+        assert fake_id in data["not_found"]
+
+        # Gallery should have 4 remaining.
+        gallery_resp = test_client.get("/api/gallery")
+        assert gallery_resp.json()["total"] == 4
+
+    def test_bulk_delete_empty_list_rejected(self, test_client, sample_gallery):
+        """An empty image_ids list should be rejected by Pydantic validation."""
+        resp = test_client.post(
+            "/api/gallery/bulk-delete",
+            json={"image_ids": []},
+        )
+        assert resp.status_code == 422
+
+    def test_bulk_delete_removes_files(self, test_client, sample_gallery, tmp_gallery_dir):
+        """PNG files should be removed from disk after bulk delete."""
+        entry = sample_gallery[0]
+        filepath = tmp_gallery_dir / entry["filename"]
+        assert filepath.exists()
+
+        test_client.post(
+            "/api/gallery/bulk-delete",
+            json={"image_ids": [entry["id"]]},
+        )
+
+        assert not filepath.exists()
+
+    def test_bulk_delete_all(self, test_client, sample_gallery):
+        """Deleting all images should result in an empty gallery."""
+        all_ids = [e["id"] for e in sample_gallery]
+
+        resp = test_client.post(
+            "/api/gallery/bulk-delete",
+            json={"image_ids": all_ids},
+        )
+        assert resp.status_code == 200
+        assert len(resp.json()["deleted"]) == 5
+
+        gallery_resp = test_client.get("/api/gallery")
+        assert gallery_resp.json()["total"] == 0
 
 
 class TestStats:

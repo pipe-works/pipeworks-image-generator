@@ -12,6 +12,9 @@ GenerateRequest
 FavouriteRequest
     Payload for ``POST /api/gallery/favourite`` — toggles the favourite
     status of a single gallery image.
+BulkDeleteRequest
+    Payload for ``POST /api/gallery/bulk-delete`` — deletes multiple gallery
+    images in a single request.
 """
 
 from __future__ import annotations
@@ -57,6 +60,9 @@ class GenerateRequest(BaseModel):
         batch_size: Number of images to generate in a single request
             (1–16 inclusive).
         negative_prompt: Optional text describing what to avoid.
+        scheduler: Optional scheduler/sampler identifier.  Must match an
+            ``id`` in the model's ``schedulers`` list from ``models.json``.
+            ``None`` means use the model's default scheduler.
     """
 
     model_id: str = Field(
@@ -131,6 +137,13 @@ class GenerateRequest(BaseModel):
         default=None,
         description="Optional negative prompt (not supported by all models).",
     )
+    scheduler: str | None = Field(
+        default=None,
+        description=(
+            "Scheduler/sampler identifier (e.g. 'pndm', 'dpmpp-2m-karras'). "
+            "None = use model's default scheduler."
+        ),
+    )
 
 
 class FavouriteRequest(BaseModel):
@@ -148,4 +161,19 @@ class FavouriteRequest(BaseModel):
     is_favourite: bool = Field(
         ...,
         description="True to mark as favourite, False to unmark.",
+    )
+
+
+class BulkDeleteRequest(BaseModel):
+    """Request body for the ``POST /api/gallery/bulk-delete`` endpoint.
+
+    Attributes:
+        image_ids: List of gallery image UUIDs to delete.  Must contain at
+            least one ID.
+    """
+
+    image_ids: list[str] = Field(
+        ...,
+        min_length=1,
+        description="List of gallery image UUIDs to delete (at least one required).",
     )

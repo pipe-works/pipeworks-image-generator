@@ -12,7 +12,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from pipeworks.api.models import FavouriteRequest, GenerateRequest
+from pipeworks.api.models import BulkDeleteRequest, FavouriteRequest, GenerateRequest
 
 
 class TestGenerateRequest:
@@ -161,6 +161,33 @@ class TestGenerateRequest:
         assert req.append_mode == "manual"
         assert req.manual_append == "Cinematic lighting."
 
+    def test_default_scheduler_is_none(self):
+        """Default scheduler should be None."""
+        req = GenerateRequest(
+            model_id="test",
+            prompt_mode="manual",
+            aspect_ratio_id="1:1",
+            width=1024,
+            height=1024,
+            steps=4,
+            guidance=0.0,
+        )
+        assert req.scheduler is None
+
+    def test_scheduler_can_be_set(self):
+        """Scheduler field should accept a string value."""
+        req = GenerateRequest(
+            model_id="test",
+            prompt_mode="manual",
+            aspect_ratio_id="1:1",
+            width=1024,
+            height=1024,
+            steps=4,
+            guidance=0.0,
+            scheduler="dpmpp-2m-karras",
+        )
+        assert req.scheduler == "dpmpp-2m-karras"
+
     def test_serialisation_round_trip(self):
         """Model should serialise to dict and back without data loss."""
         req = GenerateRequest(
@@ -210,3 +237,27 @@ class TestFavouriteRequest:
             is_favourite=False,
         )
         assert req.is_favourite is False
+
+
+class TestBulkDeleteRequest:
+    """Test BulkDeleteRequest Pydantic model."""
+
+    def test_valid_request(self):
+        """A request with one or more IDs should validate."""
+        req = BulkDeleteRequest(image_ids=["id-1", "id-2"])
+        assert req.image_ids == ["id-1", "id-2"]
+
+    def test_single_id(self):
+        """A request with exactly one ID should validate."""
+        req = BulkDeleteRequest(image_ids=["id-1"])
+        assert len(req.image_ids) == 1
+
+    def test_empty_list_raises(self):
+        """An empty image_ids list should raise ValidationError."""
+        with pytest.raises(ValidationError):
+            BulkDeleteRequest(image_ids=[])
+
+    def test_missing_field_raises(self):
+        """Omitting image_ids should raise ValidationError."""
+        with pytest.raises(ValidationError):
+            BulkDeleteRequest()

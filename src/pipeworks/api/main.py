@@ -65,7 +65,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from pipeworks import __version__
-from pipeworks.api.models import FavouriteRequest, GenerateRequest
+from pipeworks.api.models import BulkDeleteRequest, FavouriteRequest, GenerateRequest
 from pipeworks.api.prompt_builder import build_prompt
 from pipeworks.core.config import config
 from pipeworks.core.model_manager import ModelManager
@@ -432,6 +432,7 @@ async def generate_images(req: GenerateRequest) -> dict:
             guidance_scale=req.guidance,
             seed=img_seed,
             negative_prompt=req.negative_prompt,
+            scheduler=req.scheduler,
         )
 
         # Save the PIL image to disk as a PNG file.
@@ -462,6 +463,7 @@ async def generate_images(req: GenerateRequest) -> dict:
             "batch_index": i,
             "batch_size": req.batch_size,
             "batch_seed": base_seed,
+            "scheduler": req.scheduler,
         }
 
         # Insert newest first so the gallery is in reverse-chronological order.
@@ -566,6 +568,51 @@ async def toggle_favourite(req: FavouriteRequest) -> dict:
     _save_json(GALLERY_DB, gallery)
 
     return {"success": True, "id": req.image_id, "is_favourite": req.is_favourite}
+
+
+@app.post("/api/gallery/bulk-delete")
+async def bulk_delete_images(req: BulkDeleteRequest) -> dict:
+    """Delete multiple images from the gallery in a single request.
+
+    For each image ID in the request, removes the PNG file from disk and the
+    metadata entry from ``gallery.json``.  IDs that are not found are reported
+    in the ``not_found`` list but do not cause the request to fail.
+
+    Args:
+        req: Validated :class:`BulkDeleteRequest` payload containing the list
+            of image UUIDs to delete.
+
+    Returns:
+        Dictionary with ``success``, ``deleted`` (list of removed IDs), and
+        ``not_found`` (list of IDs that were not in the gallery).
+    """
+    gallery = _load_json(GALLERY_DB, [])
+
+    # Build a lookup for O(1) access by ID.
+    gallery_by_id: dict[str, dict] = {g["id"]: g for g in gallery}
+
+    deleted: list[str] = []
+    not_found: list[str] = []
+
+    for image_id in req.image_ids:
+        entry = gallery_by_id.get(image_id)
+        if not entry:
+            not_found.append(image_id)
+            continue
+
+        # Remove the PNG file from disk.
+        filepath = GALLERY_DIR / entry["filename"]
+        if filepath.exists():
+            filepath.unlink()
+
+        deleted.append(image_id)
+
+    # Remove all deleted entries from the gallery list and persist.
+    deleted_set = set(deleted)
+    gallery = [g for g in gallery if g["id"] not in deleted_set]
+    _save_json(GALLERY_DB, gallery)
+
+    return {"success": True, "deleted": deleted, "not_found": not_found}
 
 
 @app.delete("/api/gallery/{image_id}")

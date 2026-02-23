@@ -26,6 +26,8 @@ const State = {
   favPages: 1,
   lightboxImage: null,
   theme: "dark",
+  selectMode: false,
+  selectedIds: new Set(),
 };
 
 
@@ -221,8 +223,24 @@ function onModelChange() {
   const negWrap = $("#negative-prompt-wrap");
   negWrap.style.display = model.supports_negative_prompt ? "" : "none";
 
+  // Scheduler dropdown (only visible for models that declare schedulers)
+  const schedWrap = $("#scheduler-wrap");
+  const selScheduler = $("#sel-scheduler");
+  if (model.schedulers && model.schedulers.length > 0) {
+    selScheduler.innerHTML = "";
+    model.schedulers.forEach(s => {
+      selScheduler.appendChild(el("option", { value: s.id }, s.label));
+    });
+    selScheduler.value = model.default_scheduler || model.schedulers[0].id;
+    schedWrap.style.display = "";
+  } else {
+    selScheduler.innerHTML = "";
+    schedWrap.style.display = "none";
+  }
+
   updateStatusBar();
   updatePromptPreview();
+  updateTokenCounters();
 }
 
 function onAspectChange() {
@@ -235,6 +253,97 @@ function onAspectChange() {
   if (ar) {
     $("#lbl-resolution").textContent = `${ar.width} × ${ar.height} px`;
   }
+}
+
+
+// ── Token estimation ──────────────────────────────────────────────────────────
+
+/**
+ * Estimate CLIP BPE token count using a ~4 chars/token heuristic.
+ * Returns 0 for empty or whitespace-only text.
+ */
+function estimateTokens(text) {
+  const trimmed = text.trim();
+  if (!trimmed) return 0;
+  return Math.ceil(trimmed.length / 4);
+}
+
+/**
+ * Resolve the current user-entered text for a given prompt section.
+ * Returns the raw text string (not including boilerplate).
+ */
+function getPromptSectionText(section) {
+  if (!State.config) return "";
+
+  if (section === "prepend") {
+    if (State.prependMode === "manual") {
+      return $("#txt-manual-prepend").value;
+    }
+    // Template mode: resolve selected preset value.
+    const id = $("#sel-prepend").value;
+    const preset = State.config.prepend_prompts.find(p => p.id === id);
+    return preset ? (preset.value || preset.label) : "";
+  }
+
+  if (section === "main") {
+    if (State.promptMode === "manual") {
+      return $("#txt-manual-prompt").value;
+    }
+    const id = $("#sel-auto-prompt").value;
+    const preset = State.config.automated_prompts.find(p => p.id === id);
+    return preset ? (preset.value || preset.label) : "";
+  }
+
+  if (section === "append") {
+    if (State.appendMode === "manual") {
+      return $("#txt-manual-append").value;
+    }
+    const id = $("#sel-append").value;
+    if (!id || id === "none") return "";
+    const preset = State.config.append_prompts.find(p => p.id === id);
+    return preset ? (preset.value || preset.label) : "";
+  }
+
+  return "";
+}
+
+/**
+ * Update all token counter elements with current estimates.
+ * Per-section counters show user text only.  The total counter
+ * reflects the full compiled prompt (including boilerplate).
+ */
+function updateTokenCounters() {
+  if (!State.config || !State.selectedModel) return;
+
+  const model = State.config.models.find(m => m.id === State.selectedModel);
+  const maxTokens = model ? (model.max_prompt_tokens || 77) : 77;
+
+  // Per-section estimates (user text only).
+  const prependCount = estimateTokens(getPromptSectionText("prepend"));
+  const mainCount = estimateTokens(getPromptSectionText("main"));
+  const appendCount = estimateTokens(getPromptSectionText("append"));
+
+  // Total estimate from the compiled prompt preview text.
+  const previewText = $("#prompt-preview-box").textContent || "";
+  const totalCount = estimateTokens(previewText);
+
+  // Helper to set counter text and warn/over classes.
+  function applyCounter(elId, count, limit) {
+    const counter = $(elId);
+    if (!counter) return;
+    counter.textContent = `${count} / ${limit} tokens`;
+    counter.classList.remove("token-counter--warn", "token-counter--over");
+    if (count > limit) {
+      counter.classList.add("token-counter--over");
+    } else if (count > limit * 0.85) {
+      counter.classList.add("token-counter--warn");
+    }
+  }
+
+  applyCounter("#prepend-tokens", prependCount, maxTokens);
+  applyCounter("#main-tokens", mainCount, maxTokens);
+  applyCounter("#append-tokens", appendCount, maxTokens);
+  applyCounter("#total-tokens", totalCount, maxTokens);
 }
 
 
@@ -269,6 +378,7 @@ async function updatePromptPreview() {
     // Also update modal if open
     const modalText = $("#modal-prompt-text");
     if (modalText) modalText.textContent = data.compiled_prompt;
+    updateTokenCounters();
   } catch (_) {
     // Silent fail for preview
   }
@@ -330,6 +440,12 @@ function buildGeneratePayload() {
 
   if (model.supports_negative_prompt) {
     payload.negative_prompt = $("#txt-negative-prompt").value.trim() || null;
+  }
+
+  // Scheduler (only included when the model supports it)
+  if (model.schedulers && model.schedulers.length > 0) {
+    const schedVal = $("#sel-scheduler").value;
+    if (schedVal) payload.scheduler = schedVal;
   }
 
   return payload;
@@ -472,12 +588,22 @@ function createImageCard(img, context = "gallery") {
   overlay.appendChild(favBtn);
   overlay.appendChild(delBtn);
 
+  // Selection checkbox indicator (visible only in select mode via CSS).
+  const check = el("div", { className: "img-card__check" });
+
   card.appendChild(image);
   card.appendChild(star);
   card.appendChild(batchBadge);
+  card.appendChild(check);
   card.appendChild(overlay);
 
-  card.addEventListener("click", () => openLightbox(img));
+  card.addEventListener("click", () => {
+    if (State.selectMode) {
+      toggleCardSelection(img.id, card);
+    } else {
+      openLightbox(img);
+    }
+  });
 
   return card;
 }
@@ -543,6 +669,96 @@ async function deleteImage(imageId, card) {
 }
 
 
+// ── Bulk selection mode ────────────────────────────────────────────────────
+
+function toggleSelectMode() {
+  State.selectMode = !State.selectMode;
+  State.selectedIds.clear();
+
+  const btn = $("#btn-gallery-select");
+  const controls = $("#gallery-select-controls");
+  const grid = $("#gallery-grid");
+
+  btn.textContent = State.selectMode ? "✕ Cancel" : "☐ Select";
+  controls.classList.toggle("is-active", State.selectMode);
+  grid.classList.toggle("gallery-grid--selecting", State.selectMode);
+
+  // Clear any existing selections from cards.
+  $$(".img-card.is-selected", grid).forEach(c => c.classList.remove("is-selected"));
+
+  updateSelectionUI();
+}
+
+function toggleCardSelection(imgId, card) {
+  if (State.selectedIds.has(imgId)) {
+    State.selectedIds.delete(imgId);
+    card.classList.remove("is-selected");
+  } else {
+    State.selectedIds.add(imgId);
+    card.classList.add("is-selected");
+  }
+  updateSelectionUI();
+}
+
+function selectAllVisible() {
+  const grid = $("#gallery-grid");
+  $$(".img-card", grid).forEach(card => {
+    const id = card.getAttribute("data-id");
+    if (id && !State.selectedIds.has(id)) {
+      State.selectedIds.add(id);
+      card.classList.add("is-selected");
+    }
+  });
+  updateSelectionUI();
+}
+
+function updateSelectionUI() {
+  const count = State.selectedIds.size;
+  $("#lbl-select-count").textContent = `${count} selected`;
+  $("#btn-delete-selected").disabled = count === 0;
+}
+
+async function bulkDelete() {
+  const count = State.selectedIds.size;
+  if (count === 0) return;
+
+  if (!confirm(`Delete ${count} image${count !== 1 ? "s" : ""}? This cannot be undone.`)) return;
+
+  try {
+    const res = await fetch("/api/gallery/bulk-delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image_ids: [...State.selectedIds] }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Unknown error" }));
+      throw new Error(err.detail || `HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+
+    // Also remove from output images state if applicable.
+    const deletedSet = new Set(data.deleted);
+    State.outputImages = State.outputImages.filter(i => !deletedSet.has(i.id));
+
+    // Close lightbox if the viewed image was deleted.
+    if (State.lightboxImage && deletedSet.has(State.lightboxImage.id)) {
+      closeLightbox();
+    }
+
+    toast(`Deleted ${data.deleted.length} image${data.deleted.length !== 1 ? "s" : ""}`, "ok");
+
+    // Exit select mode and reload gallery.
+    toggleSelectMode();
+    loadGallery(State.galleryPage);
+
+  } catch (e) {
+    toast(`Bulk delete failed: ${e.message}`, "err");
+  }
+}
+
+
 // ── Output count ───────────────────────────────────────────────────────────────
 
 function updateOutputCount() {
@@ -560,7 +776,8 @@ function openLightbox(img) {
   $("#lb-model").textContent = img.model_label;
   $("#lb-resolution").textContent = `${img.width} × ${img.height} px`;
   $("#lb-seed").textContent = img.seed;
-  $("#lb-steps-cfg").textContent = `${img.steps} steps · CFG ${img.guidance}`;
+  const schedLabel = img.scheduler ? ` · ${img.scheduler}` : "";
+  $("#lb-steps-cfg").textContent = `${img.steps} steps · CFG ${img.guidance}${schedLabel}`;
   $("#lb-prompt").textContent = img.compiled_prompt || "—";
   $("#lb-btn-download").href = img.url;
   $("#lb-btn-download").download = `pipeworks_${img.id.slice(0, 8)}.png`;
@@ -588,6 +805,10 @@ function updateLightboxFavButton(isFav) {
 
 async function loadGallery(page = 1) {
   State.galleryPage = page;
+
+  // Exit select mode when gallery reloads (e.g. filter change, page change).
+  if (State.selectMode) toggleSelectMode();
+
   const modelFilter = $("#sel-gallery-model").value;
 
   try {
@@ -832,13 +1053,13 @@ function wireEvents() {
     schedulePromptPreview();
   });
 
-  // Prompt inputs → live preview
-  $("#txt-manual-prepend").addEventListener("input", schedulePromptPreview);
-  $("#txt-manual-prompt").addEventListener("input", schedulePromptPreview);
-  $("#txt-manual-append").addEventListener("input", schedulePromptPreview);
-  $("#sel-prepend").addEventListener("change", schedulePromptPreview);
-  $("#sel-auto-prompt").addEventListener("change", schedulePromptPreview);
-  $("#sel-append").addEventListener("change", schedulePromptPreview);
+  // Prompt inputs → live preview + token counters
+  $("#txt-manual-prepend").addEventListener("input", () => { updateTokenCounters(); schedulePromptPreview(); });
+  $("#txt-manual-prompt").addEventListener("input", () => { updateTokenCounters(); schedulePromptPreview(); });
+  $("#txt-manual-append").addEventListener("input", () => { updateTokenCounters(); schedulePromptPreview(); });
+  $("#sel-prepend").addEventListener("change", () => { updateTokenCounters(); schedulePromptPreview(); });
+  $("#sel-auto-prompt").addEventListener("change", () => { updateTokenCounters(); schedulePromptPreview(); });
+  $("#sel-append").addEventListener("change", () => { updateTokenCounters(); schedulePromptPreview(); });
 
   // Sliders
   $("#rng-steps").addEventListener("input", function () {
@@ -929,6 +1150,11 @@ function wireEvents() {
     State.galleryModelFilter = $("#sel-gallery-model").value;
     loadGallery(1);
   });
+
+  // Gallery bulk selection
+  $("#btn-gallery-select").addEventListener("click", toggleSelectMode);
+  $("#btn-select-all").addEventListener("click", selectAllVisible);
+  $("#btn-delete-selected").addEventListener("click", bulkDelete);
 
   // Favourites
   $("#btn-fav-refresh").addEventListener("click", () => loadFavourites(State.favPage));
