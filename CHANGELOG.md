@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.3](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.2.2...pipeworks-image-generator-v0.2.3) (2026-02-23)
+
+
+### Features
+
+* add per-section token counters with model-specific limits ([7ee46e7](https://github.com/pipe-works/pipeworks-image-generator/commit/7ee46e7db27cc41040296918d2ec2b7a73794a4a))
+* add per-section token counters with model-specific limits ([0d9fff7](https://github.com/pipe-works/pipeworks-image-generator/commit/0d9fff721f9aa08ca8425cbbbca7b7f5c7de0fc8))
+
 ## [0.2.2](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.2.1...pipeworks-image-generator-v0.2.2) (2026-02-23)
 
 
