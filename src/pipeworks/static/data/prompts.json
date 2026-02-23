@@ -1,0 +1,128 @@
+{
+  "prepend_prompts": [
+    {
+      "id": "ledgerfall_pamphlet",
+      "label": "Ledgerfall Pamphleteer",
+      "value": "A horizontal, aged parchment poster in a whimsical Ledgerfall pamphleteer style. Hand-inked illustration with slightly crooked linework, warm sepia tones, soft ink bleed, delicate marginalia and decorative corner flourishes. The aesthetic feels like an old guild notice pinned in a goblin workshop — part lab diagram, part folklore warning. Detailed cross-hatching, old woodcut engraving texture, medieval fantasy sketchbook energy. Uneven bold lettering, hand-drawn banners, playful annotations and scattered scraps of paper."
+    },
+    {
+      "id": "oil_painting_classic",
+      "label": "Classical Oil Painting",
+      "value": "A classical oil painting in the style of the Dutch Golden Age masters. Rich chiaroscuro lighting, deep shadows, warm candlelight tones. Thick impasto brushwork, cracked varnish texture, aged canvas grain. Formal composition with dramatic tenebrism. Museum-quality rendering with meticulous attention to fabric, skin, and material surfaces."
+    },
+    {
+      "id": "ink_wash",
+      "label": "East Asian Ink Wash",
+      "value": "A traditional East Asian ink wash painting (sumi-e style). Minimal, expressive brushstrokes on aged rice paper. Negative space as compositional element. Subtle gradients from deep black to pale grey. Occasional red seal stamp motif. Meditative, sparse, deeply intentional mark-making."
+    },
+    {
+      "id": "art_nouveau",
+      "label": "Art Nouveau Poster",
+      "value": "An Art Nouveau decorative poster in the style of Alphonse Mucha. Flowing organic lines, floral and botanical motifs, ornate decorative borders. Soft pastel palette with gold accents. Elegant feminine curves, stylised natural forms. Lithographic print texture, flat colour areas with fine line detail."
+    },
+    {
+      "id": "photorealistic",
+      "label": "Photorealistic",
+      "value": "Ultra-photorealistic, shot on a high-end digital camera. Natural lighting, shallow depth of field, sharp focus on subject. Cinematic colour grading, film grain. Professional photography composition. 8K resolution quality."
+    },
+    {
+      "id": "pixel_art",
+      "label": "Pixel Art",
+      "value": "Retro pixel art style, 16-bit era aesthetic. Limited colour palette, hard pixel edges, no anti-aliasing. Isometric or side-scrolling game sprite feel. Nostalgic SNES/Amiga era visual language. Crisp, deliberate pixel placement."
+    },
+    {
+      "id": "watercolour",
+      "label": "Watercolour Illustration",
+      "value": "Delicate watercolour illustration on textured cold-press paper. Soft wet-on-wet bleeds, granulation effects, visible paper texture. Loose expressive washes, subtle colour blooms. Ink outline with watercolour fill. Botanical illustration quality."
+    },
+    {
+      "id": "concept_art",
+      "label": "Concept Art / Matte Painting",
+      "value": "Professional concept art and matte painting style. Cinematic wide-angle composition, dramatic atmospheric perspective. Detailed environment design, strong silhouette language. Used for AAA game or film pre-production. Painterly but precise, with clear narrative intent."
+    },
+    {
+      "id": "none",
+      "label": "— None —",
+      "value": ""
+    }
+  ],
+  "automated_prompts": [
+    {
+      "id": "goblin_workshop",
+      "label": "Goblin Workshop Scene",
+      "value": "A chaotic goblin alchemist workshop. Bubbling potions in mismatched bottles, stacks of crooked books tied with string, scattered scrolls covered in frantic handwriting. A goblin in a leather apron peers through a cracked magnifying glass at a glowing specimen. Candles dripping wax onto cluttered benches. Shelves overflowing with labelled jars of dubious contents."
+    },
+    {
+      "id": "ancient_library",
+      "label": "Ancient Library",
+      "value": "A vast ancient library stretching into impossible heights. Towering bookshelves carved from dark oak, connected by precarious spiral staircases. Dusty tomes with cracked spines, illuminated manuscripts open on reading stands. Shafts of amber light filtering through stained glass windows. A lone scholar with ink-stained fingers studies by candlelight."
+    },
+    {
+      "id": "forest_spirit",
+      "label": "Forest Spirit Encounter",
+      "value": "A luminous forest spirit emerging from the mist between ancient trees. Bioluminescent tendrils of light weave through the undergrowth. Moss-covered stones form a natural altar. Fireflies drift in slow spirals. The spirit's form is half-human, half-tree, with bark-textured skin and leaves for hair."
+    },
+    {
+      "id": "clockwork_city",
+      "label": "Clockwork City",
+      "value": "A steampunk clockwork city at dusk. Massive brass gears turn in the sky, connected by chains and drive shafts. Steam vents billow white clouds. Gas lamps flicker on cobblestone streets. Airships dock at towering mooring masts. Citizens in Victorian attire navigate the mechanical metropolis."
+    },
+    {
+      "id": "underwater_ruins",
+      "label": "Underwater Ruins",
+      "value": "Sunken ancient ruins beneath a crystal-clear tropical sea. Coral has colonised crumbling stone columns. Schools of colourful fish weave between broken archways. Shafts of sunlight pierce the water in god-rays. A massive stone face, half-buried in sand, gazes upward. Sea anemones bloom in crevices."
+    },
+    {
+      "id": "winter_market",
+      "label": "Winter Night Market",
+      "value": "A bustling medieval winter market at night. Stalls hung with lanterns and garlands. Merchants in thick furs sell exotic wares. Snow falls softly on cobblestones. The smell of spiced wine and roasting chestnuts implied through visual warmth. Children chase each other between the stalls. A bard plays near a central bonfire."
+    },
+    {
+      "id": "dragon_lair",
+      "label": "Dragon's Hoard Lair",
+      "value": "A dragon's lair deep within a volcanic mountain. Mountains of gold coins, gemstones, and ancient artefacts. A massive dragon coiled atop the hoard, one eye half-open. Lava flows in channels carved into the rock floor. Stalactites drip with mineral deposits. The air shimmers with heat."
+    },
+    {
+      "id": "celestial_observatory",
+      "label": "Celestial Observatory",
+      "value": "An ancient celestial observatory atop a mountain peak. A massive brass orrery tracks planetary movements in the domed hall. Star charts cover every surface. An astronomer in robes adjusts a telescope aimed at a comet. The dome is open to a sky blazing with stars and nebulae."
+    }
+  ],
+  "append_prompts": [
+    {
+      "id": "goblin_lab_notes",
+      "label": "Goblin & Lab Notes Typography",
+      "value": "Additional props: ink pots, loose scrolls, candles, stacks of crooked books, pinned notes, string-tied scraps, tiny marginal doodles in the corners. Typography: Large curved banner at top reading: \"GOBLIN & LAB NOTES\". Mood: Playful but obsessive. Slightly mad research energy. Chaotic curiosity. Scholarly goblin workshop atmosphere. Color: Muted parchment background with soft brown and ink-black linework. Very limited colour palette, mostly sepia and faded parchment tones."
+    },
+    {
+      "id": "cinematic_grade",
+      "label": "Cinematic Colour Grade",
+      "value": "Cinematic colour grading: teal shadows, warm highlights, crushed blacks. Anamorphic lens flare. Film grain overlay. Aspect ratio 2.39:1 letterbox bars. Dolby Vision HDR quality. Shot on ARRI Alexa."
+    },
+    {
+      "id": "high_detail",
+      "label": "High Detail & Texture",
+      "value": "Extreme detail and texture. Every surface rendered with microscopic precision. Subsurface scattering on organic materials. Physically-based rendering. Ray-traced reflections and global illumination. 8K resolution, print-quality detail."
+    },
+    {
+      "id": "moody_atmosphere",
+      "label": "Moody Atmospheric",
+      "value": "Heavy atmospheric mood. Volumetric fog and light rays. Dramatic chiaroscuro lighting. Deep shadow pools with single strong light source. Emotional weight in every shadow. The air hangs heavy with unspoken tension."
+    },
+    {
+      "id": "golden_hour",
+      "label": "Golden Hour Light",
+      "value": "Golden hour lighting. Warm amber sunlight at low angle. Long soft shadows. Rim lighting on subjects. Lens flare from direct sun. Warm colour temperature 3200K. Magic hour atmosphere."
+    },
+    {
+      "id": "award_winning",
+      "label": "Award-Winning Quality",
+      "value": "Award-winning illustration. Featured in Spectrum Fantastic Art Annual. Best of show quality. Masterful composition, colour theory, and technical execution. The kind of work that stops you in your tracks."
+    },
+    {
+      "id": "none",
+      "label": "— None —",
+      "value": ""
+    }
+  ]
+}

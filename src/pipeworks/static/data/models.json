@@ -1,0 +1,80 @@
+{
+  "models": [
+    {
+      "id": "z-image-turbo",
+      "label": "Z-Image Turbo",
+      "hf_id": "Tongyi-MAI/Z-Image-Turbo",
+      "description": "Fast turbo model optimised for speed. Fewer inference steps required.",
+      "hf_url": "https://huggingface.co/Tongyi-MAI/Z-Image-Turbo",
+      "default_steps": 4,
+      "min_steps": 1,
+      "max_steps": 8,
+      "default_guidance": 0.0,
+      "min_guidance": 0.0,
+      "max_guidance": 3.0,
+      "guidance_step": 0.1,
+      "supports_negative_prompt": false,
+      "aspect_ratios": [
+        { "id": "1:1", "label": "1:1 Square", "width": 1024, "height": 1024 },
+        { "id": "16:9", "label": "16:9 Landscape", "width": 1360, "height": 768 },
+        { "id": "9:16", "label": "9:16 Portrait", "width": 768, "height": 1360 },
+        { "id": "4:3", "label": "4:3 Standard", "width": 1024, "height": 768 },
+        { "id": "3:4", "label": "3:4 Portrait", "width": 768, "height": 1024 },
+        { "id": "3:2", "label": "3:2 Photo", "width": 1152, "height": 768 },
+        { "id": "2:3", "label": "2:3 Portrait", "width": 768, "height": 1152 }
+      ],
+      "default_aspect": "1:1"
+    },
+    {
+      "id": "sd-v1-5",
+      "label": "Stable Diffusion v1.5",
+      "hf_id": "stable-diffusion-v1-5/stable-diffusion-v1-5",
+      "description": "Classic SD 1.5 — the foundational model. Wide LoRA/ControlNet ecosystem.",
+      "hf_url": "https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5",
+      "default_steps": 20,
+      "min_steps": 5,
+      "max_steps": 50,
+      "default_guidance": 7.5,
+      "min_guidance": 1.0,
+      "max_guidance": 20.0,
+      "guidance_step": 0.5,
+      "supports_negative_prompt": true,
+      "aspect_ratios": [
+        { "id": "1:1", "label": "1:1 Square", "width": 512, "height": 512 },
+        { "id": "4:3", "label": "4:3 Landscape", "width": 680, "height": 512 },
+        { "id": "3:4", "label": "3:4 Portrait", "width": 512, "height": 680 },
+        { "id": "16:9", "label": "16:9 Wide", "width": 912, "height": 512 },
+        { "id": "9:16", "label": "9:16 Tall", "width": 512, "height": 912 },
+        { "id": "2:3", "label": "2:3 Portrait", "width": 512, "height": 768 },
+        { "id": "3:2", "label": "3:2 Landscape", "width": 768, "height": 512 }
+      ],
+      "default_aspect": "1:1"
+    },
+    {
+      "id": "sdxl-1-0",
+      "label": "SD-XL 1.0",
+      "hf_id": "stabilityai/stable-diffusion-xl-base-1.0",
+      "description": "Stable Diffusion XL — high-resolution, superior detail and composition.",
+      "hf_url": "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0",
+      "default_steps": 30,
+      "min_steps": 10,
+      "max_steps": 60,
+      "default_guidance": 7.5,
+      "min_guidance": 1.0,
+      "max_guidance": 20.0,
+      "guidance_step": 0.5,
+      "supports_negative_prompt": true,
+      "aspect_ratios": [
+        { "id": "1:1", "label": "1:1 Square", "width": 1024, "height": 1024 },
+        { "id": "16:9", "label": "16:9 Landscape", "width": 1344, "height": 768 },
+        { "id": "9:16", "label": "9:16 Portrait", "width": 768, "height": 1344 },
+        { "id": "4:3", "label": "4:3 Standard", "width": 1152, "height": 896 },
+        { "id": "3:4", "label": "3:4 Portrait", "width": 896, "height": 1152 },
+        { "id": "3:2", "label": "3:2 Photo", "width": 1216, "height": 832 },
+        { "id": "2:3", "label": "2:3 Portrait", "width": 832, "height": 1216 },
+        { "id": "21:9", "label": "21:9 Ultrawide", "width": 1536, "height": 640 }
+      ],
+      "default_aspect": "1:1"
+    }
+  ]
+}

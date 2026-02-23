@@ -4,18 +4,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Pipeworks is a Python-based image generation framework for Z-Image-Turbo that provides both a programmatic API and a Gradio web UI. The project emphasizes code-first design over node-based interfaces, with a focus on extensibility through plugins and workflows.
+Pipe-Works Image Generator is a Python-based image generation system
+with a FastAPI REST API backend and a vanilla HTML/CSS/JS frontend.
+It supports multiple diffusion models via HuggingFace Diffusers with
+real inference, a JSON-based gallery, and a three-part prompt
+composition system.
 
 **Key Technologies:**
+
 - Python 3.12+ (type hints, modern syntax)
-- Z-Image-Turbo (6B parameter model via HuggingFace Diffusers)
-- Gradio 5.0+ for web UI
-- Pydantic for configuration and data validation
-- PyTorch for model inference
+- FastAPI + Uvicorn (REST API and static file serving)
+- HuggingFace Diffusers (multi-model pipeline support)
+- Pydantic / Pydantic Settings (configuration and request validation)
+- PyTorch (model inference)
+- Vanilla HTML/CSS/JS frontend (no build step)
 
 ## Development Commands
 
 ### Installation
+
 ```bash
 # Development install with all dependencies
 pip install -e ".[dev]"
@@ -25,448 +32,234 @@ pip install -e .
 ```
 
 ### Running the Application
+
 ```bash
-# Launch Gradio UI (preferred)
+# Launch FastAPI server (installed entry point)
 pipeworks
 
 # Direct module execution
-python -m pipeworks.ui.app
+python -m pipeworks.api.main
 ```
 
-The UI will be accessible at `http://0.0.0.0:7860` by default.
+The server will be accessible at `http://0.0.0.0:7860` by default.
 
 ### Testing
+
 ```bash
 # Run all tests with coverage
 pytest
 
 # Run specific test file
-pytest tests/unit/test_models.py
+pytest tests/unit/test_config.py
 
 # Run tests matching pattern
-pytest -k "test_validation"
+pytest -k "test_turbo"
 
 # Run unit tests only (fast)
 pytest tests/unit/ -v
 
-# Run integration tests only (may be slow)
+# Run integration tests only (FastAPI TestClient)
 pytest tests/integration/ -v
 
-# Run with detailed output
-pytest -vv --showlocals
+# Run without coverage (faster)
+pytest --no-cov
 ```
 
-**Test Coverage:** The project maintains 50%+ overall coverage, with core business logic (models, validation, state, components) at 93-100% coverage. The UI glue code in `app.py` is excluded from coverage as it's difficult to unit test.
+**Test Coverage:** 90 tests, 91%+ overall coverage. Core config and
+prompt builder at 100%, API routes at 91%, model manager at 87%.
 
 ### Code Quality
 
-**Automatic Formatting (Recommended):**
-```bash
-# Install pre-commit hooks (one-time setup)
-pip install pre-commit
-pre-commit install
-
-# Now ruff and black will auto-fix on every commit!
-# To run manually on all files:
-pre-commit run --all-files
-```
-
-**Manual Formatting:**
 ```bash
 # Check linting (ruff)
-ruff check src/
+ruff check src/ tests/
 
 # Auto-fix linting issues
-ruff check src/ --fix
+ruff check src/ tests/ --fix
 
 # Format code (black)
-black src/
+black src/ tests/
 
 # Check formatting without changes
-black --check src/
-
-# Type checking (mypy)
-mypy src/pipeworks/ui/ --ignore-missing-imports
+black --check src/ tests/
 ```
 
 **Code Standards:**
+
 - Line length: 100 characters
 - Target version: Python 3.12
 - Black formatter for consistent style
 - Ruff for linting (rules: E, F, I, N, W, UP)
-- **Pre-commit hooks enabled** - auto-fixes on commit
-
-### CI/CD
-The project uses GitHub Actions for CI on `main` and `develop` branches:
-- Test suite runs on Python 3.12 and 3.13
-- Linting and formatting checks
-- Type checking with mypy (non-blocking)
-- Security scanning with Trivy (non-blocking)
-- Coverage reports to Codecov
+- **Pre-commit hooks enabled** — auto-fixes on commit
 
 ## Architecture
 
 ### High-Level Structure
 
-```
+```text
 src/pipeworks/
-├── core/              # Core generation engine
-│   ├── config.py      # Pydantic configuration (env-based)
-│   ├── model_adapters.py  # Multi-model adapter system + registry
-│   ├── adapters/      # Model-specific implementations
-│   │   ├── zimage_turbo.py  # Z-Image-Turbo text-to-image adapter
-│   │   └── qwen_image_edit.py # Qwen-Image-Edit editing adapter
-│   ├── prompt_builder.py  # File-based prompt construction
-│   ├── tokenizer.py   # Tokenization analysis utilities
-│   ├── character_conditions.py  # Procedural character generation
-│   ├── facial_conditions.py     # Facial signal generation
-│   ├── gallery_browser.py  # Gallery browsing and filtering
-│   ├── favorites_db.py     # SQLite favorites database
-│   └── catalog_manager.py  # Archive management
-├── plugins/           # Plugin system
-│   ├── base.py        # PluginBase + PluginRegistry
-│   └── save_metadata.py  # Built-in metadata export plugin
-├── workflows/         # Workflow system
-│   ├── base.py        # WorkflowBase + WorkflowRegistry
-│   ├── character.py   # Character generation workflow
-│   ├── game_asset.py  # Game asset workflow
-│   └── city_map.py    # City/map generation workflow
-└── ui/                # Gradio web interface
-    ├── app.py         # Main UI layout and event wiring
-    ├── aspect_ratios.py  # Aspect ratio presets, validation, utilities
-    ├── components.py  # Reusable Gradio component builders
-    ├── handlers/      # Event handler business logic (5 modules)
-    ├── models.py      # Pydantic models for UI state
-    ├── state.py       # UI state management
-    ├── validation.py  # Input validation logic
-    ├── formatting.py  # Output formatting utilities
-    └── adapters.py    # UI value conversion functions
+├── __init__.py            # Package root, re-exports ModelManager + config
+├── core/                  # Core generation engine (no HTTP dependency)
+│   ├── __init__.py        # Re-exports ModelManager, PipeworksConfig, config
+│   ├── config.py          # Pydantic Settings (PIPEWORKS_* env prefix)
+│   └── model_manager.py   # Diffusers pipeline lifecycle management
+├── api/                   # FastAPI REST API layer
+│   ├── __init__.py        # Module docstring
+│   ├── main.py            # FastAPI app, all routes, CLI entry point
+│   ├── models.py          # Pydantic request models (GenerateRequest, etc.)
+│   └── prompt_builder.py  # Three-part prompt template compilation
+├── static/                # Web-accessible static assets (served at /static/)
+│   ├── css/               # Stylesheets (app.css, pipe-works-base.css, fonts)
+│   ├── js/                # Frontend JavaScript (app.js)
+│   ├── data/              # models.json, prompts.json, gallery.json
+│   ├── fonts/             # Woff2 font files (16 files)
+│   └── gallery/           # Generated images (gitignored, auto-created)
+└── templates/             # HTML templates
+    └── index.html         # Main application page
 ```
 
 ### Key Architectural Patterns
 
 #### 1. Configuration System (`core/config.py`)
+
 - Single `PipeworksConfig` class using Pydantic Settings
 - All settings loaded from environment variables (prefix: `PIPEWORKS_`)
-- Global `config` instance available via `from pipeworks.core.config import config`
-- Environment variables override defaults (see `.env.example`)
+- Global `config` instance: `from pipeworks.core.config import config`
+- Auto-creates `models_dir`, `outputs_dir`, `gallery_dir` on init
+- Path defaults resolve to package-internal `static/` and `templates/` directories
 
-#### 2. Plugin Architecture (`plugins/base.py`)
-Plugins hook into the generation lifecycle at four points:
-- `on_generate_start(params)` - Modify parameters before generation
-- `on_generate_complete(image, params)` - Modify image after generation
-- `on_before_save(image, path, params)` - Modify image/path before saving
-- `on_after_save(image, path, params)` - Post-save actions (e.g., metadata export)
+#### 2. Model Manager (`core/model_manager.py`)
 
-Plugins are registered globally via `plugin_registry` and instantiated per-session in the UI.
+- `ModelManager` manages one diffusers pipeline at a time
+- Lazy loading — model loads on first `generate()` or explicit `load_model()`
+- Model switching — unloads current model, clears CUDA, loads new one
+- Turbo enforcement — models with "turbo" in their HF ID get `guidance_scale=0.0`
+- Deterministic seeding — `torch.Generator(device).manual_seed(seed)` per call
+- Performance options — attention slicing, CPU offload, torch.compile (from config)
 
-**Example Plugin Usage:**
-```python
-from pipeworks.plugins.base import plugin_registry
+#### 3. API Layer (`api/main.py`)
 
-# Get available plugins
-available = plugin_registry.list_available()
+FastAPI application with 10 REST endpoints:
 
-# Instantiate a plugin
-plugin = plugin_registry.instantiate("Save Metadata", output_folder="metadata")
+| Method   | Path                        | Purpose                           |
+|----------|-----------------------------|-----------------------------------|
+| GET      | `/`                         | Serve HTML page                   |
+| GET      | `/api/config`               | Models, prompts, aspect ratios    |
+| POST     | `/api/generate`             | Generate image batch              |
+| POST     | `/api/prompt/compile`       | Preview compiled prompt           |
+| GET      | `/api/gallery`              | Paginated gallery with filters    |
+| GET      | `/api/gallery/{id}`         | Single gallery entry              |
+| GET      | `/api/gallery/{id}/prompt`  | Prompt metadata for an image      |
+| POST     | `/api/gallery/favourite`    | Toggle favourite status           |
+| DELETE   | `/api/gallery/{id}`         | Delete image + metadata           |
+| GET      | `/api/stats`                | Gallery totals and per-model counts |
+
+- Lifespan context manager for ModelManager setup/teardown
+- JSON-based gallery persistence (no database)
+- StaticFiles mount for CSS/JS/fonts/gallery images
+- HTMLResponse for index.html (no template engine needed)
+
+#### 4. Three-Part Prompt System (`api/prompt_builder.py`)
+
+Prompts are compiled from three user-selectable parts interleaved with fixed boilerplate:
+
+```text
+[Prepend Style]  (optional)
+[Fixed: Ledgerfall pamphleteer aesthetic]
+Main Scene:
+[Manual Prompt or Automated Preset]
+[Fixed: Mood/atmosphere]
+[Append Modifier]  (optional)
+[Fixed: Colour palette directive]
 ```
 
-#### 3. Workflow System (`workflows/base.py`)
-Workflows encapsulate generation strategies for specific content types (characters, game assets, maps). Each workflow defines:
-- Prompt engineering approach (`build_prompt()`)
-- Default parameters
-- Pre/post processing hooks
-- UI controls specific to the workflow
+#### 5. Frontend
 
-Workflows are registered via `workflow_registry` (similar pattern to plugins).
-
-#### 4. UI State Management (`ui/state.py`, `ui/models.py`)
-- Session-based state using Gradio's `gr.State`
-- `UIState` Pydantic model contains all session data (prompt builder, tokenizer, generation params)
-- State is lazily initialized via `initialize_ui_state()` to avoid loading heavy resources upfront
-- Components pass state between handlers for persistence
-
-**Important:** UI handlers must return the updated state as part of their outputs to maintain state consistency.
-
-#### 5. Prompt Builder (`core/prompt_builder.py`)
-Constructs prompts by combining text and random lines from files in the `inputs/` directory. Supports:
-- File browsing with folder navigation
-- Multiple selection modes: random line, specific line, line range, all lines, N random lines
-- Three segments (start, middle, end) for flexible composition
-- File content caching for performance
-
-#### 6. Refactored UI Architecture (`ui/`)
-The UI was recently refactored (commit 39b5b1a) to separate concerns:
-- **app.py**: Only UI layout, Gradio components, and event wiring
-- **handlers.py**: All event handler business logic (generation, navigation, validation)
-- **components.py**: Reusable UI component builders (SegmentUI class)
-- **formatting.py**: Output formatting for info/error messages
-- **adapters.py**: Conversion between UI values and domain objects
-- **models.py**: Pydantic data models (GenerationParams, SegmentConfig, UIState)
-- **validation.py**: Input validation with custom ValidationError
-- **state.py**: State initialization logic
-
-This separation makes the codebase more testable and maintainable.
+- Vanilla HTML/CSS/JS — no build step, no framework
+- Uses pipe-works design system tokens (`pipe-works-base.css`)
+- Fetches config dynamically via `GET /api/config` on page load
+- All interactions through REST API calls
 
 ### Critical Implementation Details
 
-#### Model Adapter Lifecycle
+#### ModelManager Lifecycle
+
 ```python
-from pipeworks import model_registry, config
+from pipeworks.core.config import config
+from pipeworks.core.model_manager import ModelManager
 
-# Initialize adapter (doesn't load model yet)
-adapter = model_registry.instantiate("Z-Image-Turbo", config)
+mgr = ModelManager(config)
+mgr.load_model("Tongyi-MAI/Z-Image-Turbo")
 
-# Load model (lazy loading)
-adapter.load_model()  # Called automatically on first generate()
-
-# Generate image
-image = adapter.generate(
-    prompt="...",
-    width=1024,
-    height=1024,
-    num_inference_steps=9,
-    seed=42
+image = mgr.generate(
+    prompt="a goblin workshop",
+    width=1024, height=1024,
+    steps=4, guidance_scale=0.0, seed=42,
 )
 
-# Generate and save (runs plugin hooks)
-image, path = adapter.generate_and_save(prompt="...", seed=42)
-
-# Cleanup
-adapter.unload_model()
+mgr.unload()  # Frees GPU memory
 ```
 
-**Plugin Injection:**
-```python
-# Pass plugins during initialization
-from pipeworks import model_registry, config
-from pipeworks.plugins.base import plugin_registry
+#### Turbo Model Constraints
 
-metadata_plugin = plugin_registry.instantiate("Save Metadata")
-adapter = model_registry.instantiate("Z-Image-Turbo", config, plugins=[metadata_plugin])
-```
-
-#### Z-Image-Turbo Specifics
-- **Guidance Scale**: Must be 0.0 for Turbo models (enforced in adapters/zimage_turbo.py)
-- **Optimal Steps**: 9 inference steps (config default)
+- **Guidance Scale**: Must be 0.0 (enforced automatically in `model_manager.py`)
+- **Optimal Steps**: 4-9 inference steps
 - **Dtype**: bfloat16 recommended (config default)
 - **Device**: cuda preferred, falls back to cpu
 
-#### UI Component Reuse (`ui/components.py`)
-The `SegmentUI` class eliminates code duplication for the three prompt builder segments:
-```python
-# Creates identical UI controls for start/middle/end segments
-start_segment, middle_segment, end_segment = create_three_segments(initial_choices)
+#### Gallery Persistence
 
-# Access components
-file_dropdown = segment.file
-mode_dropdown = segment.mode
-
-# Get all inputs for event handlers
-inputs = segment.get_input_components()
-```
-
-#### Session State Pattern
-```python
-# Handler function signature
-def handle_event(input_value: str, state: UIState) -> tuple[str, UIState]:
-    # Initialize state if needed
-    state = initialize_ui_state(state)
-
-    # Access state components
-    state.prompt_builder.do_something()
-
-    # Update state
-    state.last_seed = 42
-
-    # Return outputs including updated state
-    return output_value, state
-```
-
-## Common Development Patterns
-
-### Adding a New Plugin
-
-1. **Create plugin class** in `src/pipeworks/plugins/`:
-```python
-from pipeworks.plugins.base import PluginBase, plugin_registry
-
-class MyPlugin(PluginBase):
-    name = "My Plugin"
-    description = "Does something cool"
-    version = "0.1.0"
-
-    def on_after_save(self, image, path, params):
-        # Your plugin logic
-        pass
-
-# Register the plugin
-plugin_registry.register(MyPlugin)
-```
-
-2. **Import in** `src/pipeworks/plugins/__init__.py`:
-```python
-from .my_plugin import MyPlugin
-```
-
-3. **Add UI controls** in `src/pipeworks/ui/app.py` (plugins section)
-
-### Adding a New Workflow
-
-1. **Create workflow class** in `src/pipeworks/workflows/`:
-```python
-from pipeworks.workflows.base import WorkflowBase, workflow_registry
-
-class MyWorkflow(WorkflowBase):
-    name = "My Workflow"
-    description = "Generate specific content type"
-    version = "0.1.0"
-
-    def build_prompt(self, **kwargs) -> str:
-        # Build workflow-specific prompt
-        return f"Your prompt template with {kwargs['param']}"
-
-# Register the workflow
-workflow_registry.register(MyWorkflow)
-```
-
-2. **Import in** `src/pipeworks/workflows/__init__.py`
-
-### Working with Aspect Ratios
-
-The aspect ratio system provides presets, validation, and utilities for image dimensions:
-
-```python
-from pipeworks.ui.aspect_ratios import (
-    AspectRatioPreset,
-    PresetCategory,
-    get_preset_by_name,
-    get_dimensions,
-    validate_dimensions,
-    list_preset_names,
-    get_presets_by_category,
-)
-from pipeworks.core.config import config
-
-# Get preset object with rich metadata
-preset = get_preset_by_name("Square 1:1 (1024x1024)")
-print(preset.is_square)       # True
-print(preset.category)        # "standard"
-print(preset.width, preset.height)  # 1024, 1024
-
-# Get dimensions for UI handler (with config fallback for Custom)
-width, height = get_dimensions("Widescreen 16:9 (1280x720)", config)
-# Returns: (1280, 720)
-
-# Validate custom dimensions (raises AspectRatioValidationError if invalid)
-validate_dimensions(1280, 720)  # OK - multiple of 64, within range
-# validate_dimensions(1000, 1000)  # Raises error: not multiple of 64
-
-# List all available presets
-all_presets = list_preset_names()
-# ['Square 1:1 (1024x1024)', 'Widescreen 16:9 (1280x720)', ..., 'Custom']
-
-# Filter presets by category
-social_media = get_presets_by_category(PresetCategory.SOCIAL_MEDIA)
-for preset in social_media:
-    print(f"{preset.name}: {preset.description}")
-```
-
-**Validation Constraints (Z-Image-Turbo):**
-- Dimensions must be positive integers
-- Range: 64-2048 pixels
-- Must be multiples of 64 (diffusion model requirement)
-- Custom preset uses config.default_width and config.default_height
-
-**Backward Compatibility:**
-- `ASPECT_RATIOS` dict still available from `models.py`
-- Maintains exact same structure: `{"preset name": (width, height) or None}`
-- UI code can continue using existing imports
+- Single `gallery.json` file in `static/data/`
+- Self-bootstrapping — created on first generation
+- Newest images inserted at position 0 (reverse chronological)
+- Image PNGs stored in `static/gallery/` (web-accessible)
 
 ### Writing Tests
 
-Follow the established testing patterns in `tests/`:
-
 **Unit tests** (`tests/unit/`):
-- Test individual functions/classes in isolation
-- Use fixtures from `conftest.py` (temp_dir, test_config, etc.)
-- Mock external dependencies (file I/O, model loading)
-- Focus on business logic validation
+
+- `test_config.py` — Config defaults, validation, directory creation
+- `test_model_manager.py` — Loading, generation, turbo, unload (all mocked)
+- `test_prompt_builder.py` — Prompt compilation, empty parts, boilerplate
+- `test_api_models.py` — Pydantic validation, defaults, serialisation
 
 **Integration tests** (`tests/integration/`):
-- Test component interactions
-- Use real file systems (via temp_dir fixture)
-- Test end-to-end workflows
 
-**Example test structure:**
-```python
-def test_something(test_inputs_dir, valid_segment_config):
-    """Test description."""
-    # Arrange
-    builder = PromptBuilder(test_inputs_dir)
+- `test_api.py` — All 10 endpoints via FastAPI TestClient with mocked ModelManager
 
-    # Act
-    result = builder.do_something(valid_segment_config)
+**Test patterns:**
 
-    # Assert
-    assert result == expected_value
-```
+- `conftest.py` provides `test_config`, `test_client`, `mock_model_manager`, `sample_gallery`
+- ModelManager mocking uses `sys.modules` injection for lazy torch/diffusers imports
+- API tests use `unittest.mock.patch` on module-level path constants
 
 ### Adding Configuration Options
 
-1. **Add to** `PipeworksConfig` in `src/pipeworks/core/config.py`:
-```python
-class PipeworksConfig(BaseSettings):
-    my_setting: str = Field(
-        default="default_value",
-        description="Setting description"
-    )
-```
-
-2. **Update** `.env.example` with the new variable:
-```bash
-PIPEWORKS_MY_SETTING=default_value
-```
-
-3. **Access via** `from pipeworks.core.config import config; config.my_setting`
+1. Add field to `PipeworksConfig` in `src/pipeworks/core/config.py`
+2. Update `.env.example` with the new `PIPEWORKS_*` variable
+3. Access via `from pipeworks.core.config import config; config.my_setting`
 
 ## Important Constraints
 
-1. **Z-Image-Turbo requires guidance_scale=0.0** - This is enforced in adapters/zimage_turbo.py with a warning
-2. **Models directory is large** (50GB+) - Always in `.gitignore`
-3. **UI state must be returned** from handlers to maintain session consistency
-4. **Plugin hooks are optional** - Not all plugins need to implement all hooks
-5. **Prompt builder caches file contents** - Call `clear_cache()` if files change during runtime
-6. **Type hints are required** - Project uses modern Python typing throughout
-7. **All configuration via environment variables** - No hardcoded paths or credentials
+1. **Turbo models require guidance_scale=0.0** — enforced in model_manager.py
+2. **Models directory is large** (50GB+) — always in `.gitignore`
+3. **No template engine** — HTMLResponse serves static index.html
+4. **Gallery is JSON-based** — no SQLite or database dependency
+5. **Type hints are required** — project uses modern Python typing throughout
+6. **All configuration via environment variables** — no hardcoded paths or credentials
+7. **Detailed comments and docstrings required** — all code must be thoroughly documented
 
 ## Environment Variables
 
 See `.env.example` for all available settings. Key variables:
 
-- `PIPEWORKS_MODEL_ID`: HuggingFace model ID
-- `PIPEWORKS_DEVICE`: cuda, mps, or cpu
-- `PIPEWORKS_TORCH_DTYPE`: bfloat16, float16, or float32
-- `PIPEWORKS_NUM_INFERENCE_STEPS`: Default inference steps (9 recommended)
-- `PIPEWORKS_MODELS_DIR`: Model cache location
-- `PIPEWORKS_OUTPUTS_DIR`: Generated images location
-- `PIPEWORKS_INPUTS_DIR`: Prompt builder text files location
-- `PIPEWORKS_GRADIO_SERVER_PORT`: UI server port (default: 7860)
-
-## Recent Refactoring (December 2025)
-
-The codebase recently underwent a major refactoring to improve maintainability and testability:
-
-1. **Phase 1** (commit 39b5b1a): Extracted UI business logic from `app.py` (866 → 459 lines)
-   - Created `handlers.py`, `formatting.py`, `adapters.py`
-   - All event handlers now separately testable
-
-2. **Testing & CI** (commit 7741739): Added comprehensive test suite
-   - 93-100% coverage for core business logic
-   - GitHub Actions CI with Python 3.12/3.13
-
-3. **Code Quality** (commit 979f045): Fixed all linting errors
-   - Full black formatting compliance
-   - All ruff checks passing
-
-When modifying the UI, maintain the separation of concerns established in this refactoring.
+| Variable | Default | Description |
+|---|---|---|
+| `PIPEWORKS_DEVICE` | `cuda` | Compute device (cuda, mps, cpu) |
+| `PIPEWORKS_TORCH_DTYPE` | `bfloat16` | Model precision |
+| `PIPEWORKS_NUM_INFERENCE_STEPS` | `9` | Default inference steps |
+| `PIPEWORKS_GUIDANCE_SCALE` | `0.0` | Default guidance (0.0 for turbo) |
+| `PIPEWORKS_SERVER_HOST` | `0.0.0.0` | Server bind address |
+| `PIPEWORKS_SERVER_PORT` | `7860` | Server port |
+| `PIPEWORKS_MODELS_DIR` | `models` | Model cache location |
+| `PIPEWORKS_OUTPUTS_DIR` | `outputs` | Generated images directory |

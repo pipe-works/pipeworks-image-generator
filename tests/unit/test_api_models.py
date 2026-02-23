@@ -1,0 +1,152 @@
+"""Tests for pipeworks.api.models — Pydantic request/response models.
+
+Tests cover:
+- Required field validation on GenerateRequest.
+- Default values for optional fields.
+- FavouriteRequest field validation.
+- Serialisation round-trips.
+"""
+
+from __future__ import annotations
+
+import pytest
+from pydantic import ValidationError
+
+from pipeworks.api.models import FavouriteRequest, GenerateRequest
+
+
+class TestGenerateRequest:
+    """Test GenerateRequest Pydantic model."""
+
+    def test_valid_minimal_request(self):
+        """A request with all required fields should validate successfully."""
+        req = GenerateRequest(
+            model_id="z-image-turbo",
+            prepend_prompt_id="none",
+            prompt_mode="manual",
+            manual_prompt="A goblin workshop.",
+            aspect_ratio_id="1:1",
+            width=1024,
+            height=1024,
+            steps=4,
+            guidance=0.0,
+        )
+        assert req.model_id == "z-image-turbo"
+        assert req.batch_size == 1  # Default value.
+
+    def test_missing_required_field_raises(self):
+        """Omitting a required field should raise ValidationError."""
+        with pytest.raises(ValidationError):
+            GenerateRequest(
+                # Missing model_id.
+                prepend_prompt_id="none",
+                prompt_mode="manual",
+                aspect_ratio_id="1:1",
+                width=1024,
+                height=1024,
+                steps=4,
+                guidance=0.0,
+            )
+
+    def test_default_batch_size(self):
+        """Default batch_size should be 1."""
+        req = GenerateRequest(
+            model_id="test",
+            prepend_prompt_id="none",
+            prompt_mode="manual",
+            aspect_ratio_id="1:1",
+            width=1024,
+            height=1024,
+            steps=4,
+            guidance=0.0,
+        )
+        assert req.batch_size == 1
+
+    def test_default_optional_fields_are_none(self):
+        """Optional fields should default to None."""
+        req = GenerateRequest(
+            model_id="test",
+            prepend_prompt_id="none",
+            prompt_mode="manual",
+            aspect_ratio_id="1:1",
+            width=1024,
+            height=1024,
+            steps=4,
+            guidance=0.0,
+        )
+        assert req.manual_prompt is None
+        assert req.automated_prompt_id is None
+        assert req.seed is None
+        assert req.negative_prompt is None
+
+    def test_all_fields_populated(self):
+        """All fields should be settable and retrievable."""
+        req = GenerateRequest(
+            model_id="z-image-turbo",
+            prepend_prompt_id="oil-painting",
+            prompt_mode="automated",
+            manual_prompt=None,
+            automated_prompt_id="goblin-workshop",
+            append_prompt_id="high-detail",
+            aspect_ratio_id="16:9",
+            width=1280,
+            height=720,
+            steps=9,
+            guidance=7.5,
+            seed=42,
+            batch_size=4,
+            negative_prompt="blurry",
+        )
+        assert req.append_prompt_id == "high-detail"
+        assert req.batch_size == 4
+        assert req.negative_prompt == "blurry"
+
+    def test_serialisation_round_trip(self):
+        """Model should serialise to dict and back without data loss."""
+        req = GenerateRequest(
+            model_id="test",
+            prepend_prompt_id="none",
+            prompt_mode="manual",
+            manual_prompt="test prompt",
+            aspect_ratio_id="1:1",
+            width=1024,
+            height=1024,
+            steps=4,
+            guidance=0.0,
+            seed=42,
+        )
+        data = req.model_dump()
+        restored = GenerateRequest(**data)
+        assert restored.model_id == req.model_id
+        assert restored.seed == req.seed
+
+
+class TestFavouriteRequest:
+    """Test FavouriteRequest Pydantic model."""
+
+    def test_valid_favourite_request(self):
+        """A valid request should have image_id and is_favourite."""
+        req = FavouriteRequest(
+            image_id="abc-123",
+            is_favourite=True,
+        )
+        assert req.image_id == "abc-123"
+        assert req.is_favourite is True
+
+    def test_missing_image_id_raises(self):
+        """Omitting image_id should raise ValidationError."""
+        with pytest.raises(ValidationError):
+            FavouriteRequest(is_favourite=True)
+
+    def test_missing_is_favourite_raises(self):
+        """Omitting is_favourite should raise ValidationError."""
+        with pytest.raises(ValidationError):
+            FavouriteRequest(image_id="abc-123")
+
+    def test_unfavourite(self):
+        """is_favourite=False should be accepted."""
+        req = FavouriteRequest(
+            image_id="abc-123",
+            is_favourite=False,
+        )
+        assert req.is_favourite is False

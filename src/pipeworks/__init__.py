@@ -1,17 +1,77 @@
-"""Pipeworks Image Generator - Multi-model AI image generation and editing."""
+"""Pipe-Works Image Generator — AI image generation with FastAPI backend.
 
-__version__ = "0.2.0"  # Breaking change: removed legacy ImageGenerator
+This package provides a complete image generation system built on HuggingFace
+Diffusers pipelines, served through a FastAPI REST API with a vanilla JS
+frontend.  The architecture follows a simple layered design:
 
-# Import adapters to ensure they're registered
-from pipeworks.core.adapters import QwenImageEditAdapter, ZImageTurboAdapter  # noqa: F401
+Layers
+------
+core
+    Configuration management (:class:`PipeworksConfig`) and diffusion pipeline
+    lifecycle management (:class:`ModelManager`).  The core layer has no
+    knowledge of HTTP or the API — it deals only with configuration, model
+    loading, and image generation.
+
+api
+    FastAPI application with REST endpoints for generation, gallery management,
+    prompt compilation, and static asset serving.  The API layer depends on
+    ``core`` for model inference and configuration.
+
+static / templates
+    Vanilla HTML/CSS/JS frontend assets served by FastAPI's ``StaticFiles``
+    mount and ``HTMLResponse``.  No build step or template engine required.
+
+Quick Start
+-----------
+::
+
+    from pipeworks.core.config import config
+    from pipeworks.core.model_manager import ModelManager
+
+    mgr = ModelManager(config)
+    mgr.load_model("Tongyi-MAI/Z-Image-Turbo")
+
+    image = mgr.generate(
+        prompt="a goblin workshop",
+        width=1024, height=1024,
+        steps=4, guidance_scale=0.0, seed=42,
+    )
+
+Or launch the full web application::
+
+    pipeworks          # CLI entry point
+    # → FastAPI server on http://0.0.0.0:7860
+
+Exports
+-------
+The package re-exports the most commonly used symbols for convenience:
+
+- :class:`ModelManager` — pipeline lifecycle management.
+- :class:`PipeworksConfig` — Pydantic Settings configuration class.
+- ``config`` — the global configuration singleton.
+- ``__version__`` — current package version string.
+"""
+
+from __future__ import annotations
+
+# ---------------------------------------------------------------------------
+# Package version.
+# Bumped from 0.2.0 → 0.3.0 for the FastAPI migration (breaking change:
+# removed Gradio UI, plugin system, workflow system, and adapter registry).
+# ---------------------------------------------------------------------------
+__version__ = "0.3.0"
+
+# ---------------------------------------------------------------------------
+# Convenience re-exports.
+# These allow callers to write ``from pipeworks import ModelManager`` instead
+# of the fully-qualified ``from pipeworks.core.model_manager import ...``.
+# ---------------------------------------------------------------------------
 from pipeworks.core.config import PipeworksConfig, config
-from pipeworks.core.model_adapters import ModelAdapterBase, model_registry
+from pipeworks.core.model_manager import ModelManager
 
 __all__ = [
-    "ModelAdapterBase",
-    "model_registry",
+    "ModelManager",
     "PipeworksConfig",
     "config",
-    "ZImageTurboAdapter",
-    "QwenImageEditAdapter",
+    "__version__",
 ]

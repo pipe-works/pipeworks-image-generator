@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pipe-Works · Image Generator</title>
+  <link rel="stylesheet" href="/static/css/pipe-works-fonts.css" />
+  <link rel="stylesheet" href="/static/css/pipe-works-base.css" />
+  <link rel="stylesheet" href="/static/css/app.css" />
+</head>
+<body>
+
+<!-- ── App Shell ─────────────────────────────────────────────────────────── -->
+<div class="app-shell">
+
+  <!-- Header -->
+  <header class="app-header">
+    <div class="app-header__logo">
+      <span class="app-header__logo-dot"></span>
+      <span class="app-header__title">Image Generator</span>
+    </div>
+    <span class="app-header__subtitle">PIPE-WORKS · IMAGE GEN INSTRUMENT</span>
+    <span class="app-header__version">V0.2.0</span>
+
+    <nav class="app-header__nav">
+      <button class="btn btn--secondary btn--sm" id="btn-prompt-preview" title="Preview compiled prompt">
+        ◈ Prompt
+      </button>
+      <button class="btn btn--secondary btn--sm" id="btn-stats" title="Gallery statistics">
+        ◈ Stats
+      </button>
+      <button class="btn btn--secondary btn--sm" id="btn-theme-toggle">
+        ◑ Dark
+      </button>
+    </nav>
+  </header>
+
+  <!-- Tab Navigation -->
+  <nav class="tab-nav" role="tablist">
+    <button class="tab-nav__item is-active" data-tab="generation" role="tab">Generation</button>
+    <button class="tab-nav__item" data-tab="gallery" role="tab">Gallery</button>
+    <button class="tab-nav__item" data-tab="favourites" role="tab">Favourites</button>
+    <button class="tab-nav__item" data-tab="help" role="tab">Help</button>
+  </nav>
+
+  <!-- Body -->
+  <div class="app-body">
+
+    <!-- ── GENERATION TAB ──────────────────────────────────────────────── -->
+    <div class="tab-content is-active" id="tab-generation">
+      <div class="gen-layout">
+
+        <!-- Controls panel -->
+        <aside class="gen-controls" id="gen-controls">
+
+          <!-- Model selection -->
+          <div class="ctrl-section">
+            <div class="ctrl-section__heading">Model</div>
+            <div class="ctrl-full">
+              <label class="control-label">Diffusion Model</label>
+              <select class="select" id="sel-model" style="width:100%"></select>
+            </div>
+            <div class="model-info-card" id="model-info-card">
+              <div class="model-info-card__name" id="model-info-name">—</div>
+              <div id="model-info-desc">Select a model above</div>
+              <a class="model-info-card__link" id="model-info-link" href="#" target="_blank" rel="noopener">
+                View on HuggingFace →
+              </a>
+            </div>
+          </div>
+
+          <!-- Prompt composition -->
+          <div class="ctrl-section">
+            <div class="ctrl-section__heading">Prompt Composer</div>
+
+            <!-- Prepend (required) -->
+            <div class="ctrl-full">
+              <label class="control-label">Prepend Style <span class="u-accent">*</span></label>
+              <select class="select" id="sel-prepend" style="width:100%"></select>
+            </div>
+
+            <!-- Prompt mode toggle -->
+            <div>
+              <label class="control-label">Main Scene Mode</label>
+              <div class="prompt-mode-toggle">
+                <button class="btn btn--secondary btn--sm is-active" id="btn-mode-manual" data-mode="manual">Manual</button>
+                <button class="btn btn--secondary btn--sm" id="btn-mode-auto" data-mode="automated">Automated</button>
+              </div>
+            </div>
+
+            <!-- Manual prompt -->
+            <div id="prompt-manual-wrap">
+              <label class="control-label">Manual Prompt <span class="u-accent">*</span></label>
+              <textarea
+                class="prompt-textarea"
+                id="txt-manual-prompt"
+                placeholder="Describe your main scene here…"
+                rows="4"
+              ></textarea>
+            </div>
+
+            <!-- Automated prompt -->
+            <div id="prompt-auto-wrap" style="display:none">
+              <label class="control-label">Scene Preset</label>
+              <select class="select" id="sel-auto-prompt" style="width:100%"></select>
+            </div>
+
+            <!-- Append (optional) -->
+            <div class="ctrl-full">
+              <label class="control-label">Append Modifier</label>
+              <select class="select" id="sel-append" style="width:100%"></select>
+            </div>
+
+            <!-- Negative prompt (conditional) -->
+            <div id="negative-prompt-wrap">
+              <label class="control-label">Negative Prompt</label>
+              <textarea
+                class="prompt-textarea"
+                id="txt-negative-prompt"
+                placeholder="What to avoid in the image…"
+                rows="2"
+              ></textarea>
+            </div>
+
+            <!-- Live prompt preview -->
+            <div>
+              <label class="control-label" style="display:flex;align-items:center;justify-content:space-between">
+                <span>Compiled Prompt Preview</span>
+                <button class="btn btn--ghost btn--sm" id="btn-expand-prompt" style="font-size:0.65rem">expand</button>
+              </label>
+              <div class="prompt-preview" id="prompt-preview-box">
+                Select options above to preview the compiled prompt…
+              </div>
+            </div>
+          </div>
+
+          <!-- Image settings -->
+          <div class="ctrl-section">
+            <div class="ctrl-section__heading">Image Settings</div>
+
+            <!-- Aspect ratio -->
+            <div class="ctrl-full">
+              <label class="control-label">Aspect Ratio</label>
+              <select class="select" id="sel-aspect" style="width:100%"></select>
+            </div>
+
+            <!-- Resolution display -->
+            <div class="ctrl-row">
+              <span class="control-label" style="min-width:auto">Resolution:</span>
+              <span class="u-mono u-accent" id="lbl-resolution" style="font-size:var(--text-xs)">—</span>
+            </div>
+
+            <!-- Steps -->
+            <div>
+              <label class="control-label" style="display:flex;justify-content:space-between">
+                <span>Inference Steps</span>
+                <span class="ctrl-slider-value" id="lbl-steps">20</span>
+              </label>
+              <input type="range" class="range-input" id="rng-steps" min="1" max="60" value="20" />
+            </div>
+
+            <!-- Guidance -->
+            <div>
+              <label class="control-label" style="display:flex;justify-content:space-between">
+                <span>Guidance Scale (CFG)</span>
+                <span class="ctrl-slider-value" id="lbl-guidance">7.5</span>
+              </label>
+              <input type="range" class="range-input" id="rng-guidance" min="0" max="20" step="0.1" value="7.5" />
+            </div>
+          </div>
+
+          <!-- Seed & batch -->
+          <div class="ctrl-section">
+            <div class="ctrl-section__heading">Seed &amp; Batch</div>
+
+            <!-- Seed -->
+            <div>
+              <label class="control-label" style="display:flex;align-items:center;justify-content:space-between">
+                <span>Seed</span>
+                <label class="toggle-label" style="margin-bottom:0">
+                  <input type="checkbox" id="chk-random-seed" checked />
+                  <span class="toggle-text">Random</span>
+                </label>
+              </label>
+              <div class="ctrl-seed-row">
+                <input
+                  type="number"
+                  class="input"
+                  id="inp-seed"
+                  placeholder="0 – 4294967295"
+                  min="0"
+                  max="4294967295"
+                  disabled
+                  style="flex:1"
+                />
+                <button class="btn btn--secondary btn--sm" id="btn-new-seed" title="Generate random seed" disabled>⟳</button>
+              </div>
+            </div>
+
+            <!-- Batch size -->
+            <div>
+              <label class="control-label">Batch Size</label>
+              <div class="batch-counter">
+                <button class="batch-counter__btn" id="btn-batch-dec">−</button>
+                <span class="batch-counter__value" id="lbl-batch">1</span>
+                <button class="batch-counter__btn" id="btn-batch-inc">+</button>
+                <span class="u-muted" style="font-size:var(--text-xs);font-family:var(--font-mono)">image(s)</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Generate button -->
+          <div class="ctrl-section">
+            <div class="progress-bar-wrap" id="progress-wrap" style="display:none">
+              <div class="progress-bar is-indeterminate" id="progress-bar"></div>
+            </div>
+            <button class="btn btn--generate" id="btn-generate">
+              ◆ Generate
+            </button>
+          </div>
+
+        </aside>
+
+        <!-- Output panel -->
+        <main class="gen-output">
+          <div class="gen-output__toolbar">
+            <span class="gen-output__label">Output</span>
+            <span class="badge badge--muted" id="lbl-output-count">0 images</span>
+            <button class="btn btn--secondary btn--sm" id="btn-clear-output">Clear</button>
+          </div>
+          <div class="gen-output__canvas" id="gen-canvas">
+            <div class="gen-placeholder" id="gen-placeholder">
+              <div class="gen-placeholder__icon">◈</div>
+              <div>Configure your prompt and click <strong>Generate</strong></div>
+              <div class="u-muted" style="font-size:var(--text-xs)">Images will appear here</div>
+            </div>
+          </div>
+        </main>
+
+      </div>
+    </div><!-- /tab-generation -->
+
+
+    <!-- ── GALLERY TAB ─────────────────────────────────────────────────── -->
+    <div class="tab-content" id="tab-gallery">
+      <div class="gallery-layout">
+        <div class="gallery-toolbar">
+          <span class="gallery-toolbar__label">Gallery</span>
+          <span class="badge badge--muted" id="lbl-gallery-count">0 images</span>
+          <div class="gallery-toolbar__spacer"></div>
+          <select class="select" id="sel-gallery-model" style="width:160px">
+            <option value="">All Models</option>
+          </select>
+          <button class="btn btn--secondary btn--sm" id="btn-gallery-refresh">⟳ Refresh</button>
+        </div>
+        <div class="gallery-grid" id="gallery-grid">
+          <div class="gallery-empty" id="gallery-empty">
+            <div style="font-size:2rem;opacity:0.3">◈</div>
+            <div>No images in gallery yet</div>
+            <div class="u-muted" style="font-size:var(--text-xs)">Generate some images first</div>
+          </div>
+        </div>
+        <div class="gallery-pagination" id="gallery-pagination">
+          <button class="btn btn--secondary btn--sm" id="btn-gallery-prev">← Prev</button>
+          <span id="lbl-gallery-page">Page 1 of 1</span>
+          <button class="btn btn--secondary btn--sm" id="btn-gallery-next">Next →</button>
+        </div>
+      </div>
+    </div><!-- /tab-gallery -->
+
+
+    <!-- ── FAVOURITES TAB ──────────────────────────────────────────────── -->
+    <div class="tab-content" id="tab-favourites">
+      <div class="gallery-layout">
+        <div class="gallery-toolbar">
+          <span class="gallery-toolbar__label">Favourites</span>
+          <span class="badge badge--muted" id="lbl-fav-count">0 images</span>
+          <div class="gallery-toolbar__spacer"></div>
+          <button class="btn btn--secondary btn--sm" id="btn-fav-refresh">⟳ Refresh</button>
+        </div>
+        <div class="gallery-grid" id="fav-grid">
+          <div class="gallery-empty" id="fav-empty">
+            <div style="font-size:2rem;opacity:0.3">★</div>
+            <div>No favourites yet</div>
+            <div class="u-muted" style="font-size:var(--text-xs)">Star images to add them here</div>
+          </div>
+        </div>
+        <div class="gallery-pagination" id="fav-pagination">
+          <button class="btn btn--secondary btn--sm" id="btn-fav-prev">← Prev</button>
+          <span id="lbl-fav-page">Page 1 of 1</span>
+          <button class="btn btn--secondary btn--sm" id="btn-fav-next">Next →</button>
+        </div>
+      </div>
+    </div><!-- /tab-favourites -->
+
+
+    <!-- ── HELP TAB ────────────────────────────────────────────────────── -->
+    <div class="tab-content" id="tab-help">
+      <div class="app-main" style="max-width:760px;margin:0 auto">
+        <div class="panel" style="margin-bottom:var(--sp-4)">
+          <div class="panel__heading">About — Image Generator</div>
+          <p style="font-size:var(--text-sm);color:var(--col-text-muted);line-height:1.7;margin-bottom:var(--sp-3)">
+            A Pipe-Works demo tool for AI image generation. Supports three diffusion models with
+            a structured prompt composition system. The API is the single source of truth for all
+            configuration, gallery, and favourites data.
+          </p>
+          <table>
+            <thead>
+              <tr><th>Model</th><th>Type</th><th>Resolution</th><th>HuggingFace</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="badge badge--active">Z-Image Turbo</span></td>
+                <td>Turbo / Fast</td>
+                <td>Up to 1360×768</td>
+                <td><a href="https://huggingface.co/Tongyi-MAI/Z-Image-Turbo" target="_blank" class="model-info-card__link">Tongyi-MAI/Z-Image-Turbo</a></td>
+              </tr>
+              <tr>
+                <td><span class="badge badge--info">SD v1.5</span></td>
+                <td>Classic SD</td>
+                <td>Up to 912×512</td>
+                <td><a href="https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5" target="_blank" class="model-info-card__link">stable-diffusion-v1-5</a></td>
+              </tr>
+              <tr>
+                <td><span class="badge">SD-XL 1.0</span></td>
+                <td>XL High-Res</td>
+                <td>Up to 1536×640</td>
+                <td><a href="https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0" target="_blank" class="model-info-card__link">stabilityai/sdxl-base-1.0</a></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="panel" style="margin-bottom:var(--sp-4)">
+          <div class="panel__heading">Prompt Structure</div>
+          <p style="font-size:var(--text-sm);color:var(--col-text-muted);line-height:1.7;margin-bottom:var(--sp-2)">
+            The compiled prompt follows a fixed structure:
+          </p>
+          <pre style="font-size:var(--text-xs)">
+[Prepend Style]          ← Required dropdown selection
+[Style boilerplate]      ← Fixed Ledgerfall pamphleteer text
+Main Scene:
+[Manual or Automated]    ← Your scene description
+[Mood boilerplate]       ← Fixed tension/atmosphere text
+[Append Modifier]        ← Optional dropdown selection
+[Colour boilerplate]     ← Fixed parchment colour text
+          </pre>
+        </div>
+
+        <div class="panel" style="margin-bottom:var(--sp-4)">
+          <div class="panel__heading">API Endpoints</div>
+          <table>
+            <thead><tr><th>Method</th><th>Endpoint</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td>GET</td><td><code>/api/config</code></td><td>Full app config (models, prompts)</td></tr>
+              <tr><td>POST</td><td><code>/api/generate</code></td><td>Generate image batch</td></tr>
+              <tr><td>POST</td><td><code>/api/prompt/compile</code></td><td>Preview compiled prompt</td></tr>
+              <tr><td>GET</td><td><code>/api/gallery</code></td><td>Paginated gallery</td></tr>
+              <tr><td>GET</td><td><code>/api/gallery/{id}</code></td><td>Single image entry</td></tr>
+              <tr><td>POST</td><td><code>/api/gallery/favourite</code></td><td>Toggle favourite</td></tr>
+              <tr><td>DELETE</td><td><code>/api/gallery/{id}</code></td><td>Delete image</td></tr>
+              <tr><td>GET</td><td><code>/api/stats</code></td><td>Gallery statistics</td></tr>
+            </tbody>
+          </table>
+          <p style="margin-top:var(--sp-2);font-size:var(--text-xs);color:var(--col-text-muted)">
+            Full OpenAPI docs at <a href="/docs" target="_blank" class="model-info-card__link">/docs</a>
+          </p>
+        </div>
+
+        <div class="panel">
+          <div class="panel__heading">Demo Mode</div>
+          <p style="font-size:var(--text-sm);color:var(--col-text-muted);line-height:1.7">
+            This build runs in <strong>demo mode</strong> — placeholder images are generated locally
+            without loading actual diffusion models. To enable real inference, install the optional
+            dependencies listed in <code>requirements.txt</code> and replace the
+            <code>_generate_demo_image()</code> function in <code>api/main.py</code> with a call
+            to the appropriate HuggingFace diffusers pipeline.
+          </p>
+        </div>
+      </div>
+    </div><!-- /tab-help -->
+
+  </div><!-- /app-body -->
+
+  <!-- Status bar -->
+  <footer class="status-bar">
+    <div class="status-indicator">
+      <div class="status-dot" id="status-dot"></div>
+      <span class="status-bar__text" id="status-text">Ready</span>
+    </div>
+    <div class="status-bar__right">
+      <span class="status-bar__text" id="status-model">—</span>
+      <span class="status-bar__text" id="status-seed">seed —</span>
+      <span class="status-bar__text">Pipe-Works · Image Generator</span>
+    </div>
+  </footer>
+
+</div><!-- /app-shell -->
+
+
+<!-- ── Lightbox Modal ─────────────────────────────────────────────────────── -->
+<div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Image detail">
+  <div class="lightbox__backdrop" id="lightbox-backdrop"></div>
+  <div class="lightbox__card">
+    <div class="lightbox__image-area">
+      <button class="lightbox__close" id="lightbox-close" aria-label="Close">✕</button>
+      <img class="lightbox__image" id="lightbox-img" src="" alt="Generated image" />
+    </div>
+    <div class="lightbox__info">
+      <div class="lightbox__meta-row">
+        <div class="lightbox__meta-label">Model</div>
+        <div class="lightbox__meta-value" id="lb-model">—</div>
+      </div>
+      <div class="lightbox__meta-row">
+        <div class="lightbox__meta-label">Resolution</div>
+        <div class="lightbox__meta-value" id="lb-resolution">—</div>
+      </div>
+      <div class="lightbox__meta-row">
+        <div class="lightbox__meta-label">Seed</div>
+        <div class="lightbox__meta-value" id="lb-seed">—</div>
+      </div>
+      <div class="lightbox__meta-row">
+        <div class="lightbox__meta-label">Steps / CFG</div>
+        <div class="lightbox__meta-value" id="lb-steps-cfg">—</div>
+      </div>
+      <div class="lightbox__meta-row">
+        <div class="lightbox__meta-label">Compiled Prompt</div>
+        <div class="lightbox__prompt-text" id="lb-prompt">—</div>
+      </div>
+      <div class="lightbox__actions">
+        <button class="btn btn--secondary btn--sm" id="lb-btn-fav">★ Favourite</button>
+        <a class="btn btn--secondary btn--sm" id="lb-btn-download" href="#" download>↓ Download</a>
+        <button class="btn btn--ghost btn--sm" id="lb-btn-delete" style="color:var(--col-err)">✕ Delete</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ── Prompt Preview Modal ───────────────────────────────────────────────── -->
+<div class="modal hidden" id="modal-prompt">
+  <div class="modal__backdrop" id="modal-prompt-backdrop"></div>
+  <div class="modal__card" style="width:min(720px,92vw)">
+    <div class="modal__header">
+      <span style="font-family:var(--font-mono);font-weight:700;color:var(--col-accent)">◈ Compiled Prompt</span>
+      <button class="btn btn--ghost btn--sm" id="modal-prompt-close">✕</button>
+    </div>
+    <pre id="modal-prompt-text" style="font-size:var(--text-xs);max-height:60vh;overflow-y:auto;white-space:pre-wrap;word-break:break-word;background:var(--col-code-bg);border:1px solid var(--col-border);border-radius:var(--radius-sm);padding:var(--sp-3)"></pre>
+    <div class="modal__actions">
+      <button class="btn btn--secondary btn--sm" id="btn-copy-prompt">Copy</button>
+      <button class="btn btn--secondary btn--sm" id="modal-prompt-close2">Close</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ── Stats Modal ────────────────────────────────────────────────────────── -->
+<div class="modal hidden" id="modal-stats">
+  <div class="modal__backdrop" id="modal-stats-backdrop"></div>
+  <div class="modal__card" style="width:min(480px,92vw)">
+    <div class="modal__header">
+      <span style="font-family:var(--font-mono);font-weight:700;color:var(--col-accent)">◈ Gallery Stats</span>
+      <button class="btn btn--ghost btn--sm" id="modal-stats-close">✕</button>
+    </div>
+    <div id="modal-stats-content" style="font-family:var(--font-mono);font-size:var(--text-sm)">
+      Loading…
+    </div>
+    <div class="modal__actions">
+      <button class="btn btn--secondary btn--sm" id="modal-stats-close2">Close</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ── Toast container ────────────────────────────────────────────────────── -->
+<div class="toast-container" id="toast-container"></div>
+
+
+<!-- ── Scripts ────────────────────────────────────────────────────────────── -->
+<script src="/static/js/app.js"></script>
+
+</body>
+</html>
