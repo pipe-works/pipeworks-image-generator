@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.2.1...pipeworks-image-generator-v0.2.2) (2026-02-23)
+
+
+### Bug Fixes
+
+* skip boilerplate in manual prepend/append mode ([#16](https://github.com/pipe-works/pipeworks-image-generator/issues/16)) ([fcef29b](https://github.com/pipe-works/pipeworks-image-generator/commit/fcef29b5dcb6cf39bd47210f1d74c210d7d946a1))
+
 ## [0.2.1](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.2.0...pipeworks-image-generator-v0.2.1) (2026-02-23)
 
 
