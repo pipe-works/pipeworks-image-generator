@@ -4,6 +4,10 @@
  */
 
 import { getImageCardBadgeLabel } from "./gallery-context.mjs";
+import {
+  formatImageCountLabel,
+  resolveGalleryPaginationDirection,
+} from "./gallery-navigation.mjs";
 import { createOutputLightboxController } from "./output-lightbox.mjs";
 
 "use strict";
@@ -751,6 +755,8 @@ async function deleteImage(imageId, card) {
       outputLightboxController.handleRemovedImages([imageId]);
     }
 
+    await refreshGalleryCollectionsAfterDelete();
+
     toast("Image deleted", "ok", 1500);
   } catch (e) {
     toast(`Failed to delete: ${e.message}`, "err");
@@ -835,6 +841,8 @@ async function bulkDelete() {
       outputLightboxController.handleRemovedImages(data.deleted);
     }
 
+    await refreshGalleryCollectionsAfterDelete();
+
     toast(`Deleted ${data.deleted.length} image${data.deleted.length !== 1 ? "s" : ""}`, "ok");
 
     // Exit select mode and reload gallery.
@@ -851,7 +859,7 @@ async function bulkDelete() {
 
 function updateOutputCount() {
   const count = $("#gen-canvas").querySelectorAll(".img-card").length;
-  $("#lbl-output-count").textContent = `${count} image${count !== 1 ? "s" : ""}`;
+  $("#lbl-output-count").textContent = formatImageCountLabel(count);
 }
 
 
@@ -896,6 +904,55 @@ function findLightboxContextCard(imageId) {
   return document.querySelector(`.img-card[data-id="${imageId}"]`);
 }
 
+/**
+ * Refresh gallery-derived collections after a delete mutation.
+ *
+ * Gallery and Favourites counts are authoritative on the backend because the
+ * server may also prune stale metadata for files that were deleted directly
+ * from the gallery directory.  Reloading both collections after a delete keeps
+ * count badges, page counts, model filters, and navigation state aligned with
+ * the reconciled backend view.
+ */
+async function refreshGalleryCollectionsAfterDelete() {
+  await Promise.all([
+    loadGallery(State.galleryPage),
+    loadFavourites(State.favPage),
+  ]);
+}
+
+/**
+ * Determine whether the user is currently typing into a text-entry control.
+ *
+ * Global keyboard shortcuts should never steal keystrokes from inputs,
+ * textareas, selects, or contenteditable elements.
+ *
+ * @returns {boolean} `true` when a text-entry element currently owns focus.
+ */
+function isTypingTargetActive() {
+  const activeElement = document.activeElement;
+
+  if (!activeElement) {
+    return false;
+  }
+
+  const tagName = activeElement.tagName;
+  return (
+    tagName === "INPUT"
+    || tagName === "TEXTAREA"
+    || tagName === "SELECT"
+    || activeElement.isContentEditable
+  );
+}
+
+/**
+ * Return the identifier of the currently active top-level tab.
+ *
+ * @returns {string | null} Active tab identifier, such as `gallery`.
+ */
+function getActiveTabId() {
+  return $(".tab-nav__item.is-active")?.dataset.tab || null;
+}
+
 
 // ── Gallery ────────────────────────────────────────────────────────────────────
 
@@ -925,6 +982,7 @@ async function loadGallery(page = 1) {
     const data = await res.json();
 
     State.galleryTotal = data.total;
+    State.galleryPage = data.page;
     State.galleryPages = data.pages;
     State.galleryImages = data.images;
 
@@ -941,17 +999,17 @@ async function loadGallery(page = 1) {
       );
       grid.appendChild(empty);
     } else {
-      const galleryOffset = (page - 1) * State.galleryPerPage;
+      const galleryOffset = (data.page - 1) * State.galleryPerPage;
       data.images.forEach((img, index) => {
         const collectionIndex = galleryOffset + index + 1;
         grid.appendChild(createImageCard(img, "gallery", collectionIndex));
       });
     }
 
-    $("#lbl-gallery-count").textContent = `${data.total} image${data.total !== 1 ? "s" : ""}`;
-    $("#lbl-gallery-page").textContent = `Page ${page} of ${data.pages}`;
-    $("#btn-gallery-prev").disabled = page <= 1;
-    $("#btn-gallery-next").disabled = page >= data.pages;
+    $("#lbl-gallery-count").textContent = formatImageCountLabel(data.total);
+    $("#lbl-gallery-page").textContent = `Page ${data.page} of ${data.pages}`;
+    $("#btn-gallery-prev").disabled = data.page <= 1;
+    $("#btn-gallery-next").disabled = data.page >= data.pages;
 
   } catch (e) {
     toast(`Gallery load failed: ${e.message}`, "err");
@@ -976,6 +1034,7 @@ async function loadFavourites(page = 1) {
     const data = await res.json();
 
     State.favTotal = data.total;
+    State.favPage = data.page;
     State.favPages = data.pages;
     State.favouriteImages = data.images;
 
@@ -990,17 +1049,17 @@ async function loadFavourites(page = 1) {
       );
       grid.appendChild(empty);
     } else {
-      const favouritesOffset = (page - 1) * State.galleryPerPage;
+      const favouritesOffset = (data.page - 1) * State.galleryPerPage;
       data.images.forEach((img, index) => {
         const collectionIndex = favouritesOffset + index + 1;
         grid.appendChild(createImageCard(img, "favourites", collectionIndex));
       });
     }
 
-    $("#lbl-fav-count").textContent = `${data.total} image${data.total !== 1 ? "s" : ""}`;
-    $("#lbl-fav-page").textContent = `Page ${page} of ${data.pages}`;
-    $("#btn-fav-prev").disabled = page <= 1;
-    $("#btn-fav-next").disabled = page >= data.pages;
+    $("#lbl-fav-count").textContent = formatImageCountLabel(data.total);
+    $("#lbl-fav-page").textContent = `Page ${data.page} of ${data.pages}`;
+    $("#btn-fav-prev").disabled = data.page <= 1;
+    $("#btn-fav-next").disabled = data.page >= data.pages;
 
   } catch (e) {
     toast(`Favourites load failed: ${e.message}`, "err");
@@ -1320,6 +1379,36 @@ function wireEvents() {
 
     if (outputLightboxController && outputLightboxController.handleKeydown(e)) {
       return;
+    }
+
+    /**
+     * Gallery page navigation is intentionally limited to the Gallery tab and
+     * is disabled while a modal or text-entry control owns focus.
+     */
+    if (!e.altKey && !e.ctrlKey && !e.metaKey && !isTypingTargetActive()) {
+      const galleryDirection = resolveGalleryPaginationDirection(e.key);
+      const activeTabId = getActiveTabId();
+      const promptModalOpen = !$("#modal-prompt").classList.contains("hidden");
+      const statsModalOpen = !$("#modal-stats").classList.contains("hidden");
+
+      if (
+        galleryDirection !== 0
+        && activeTabId === "gallery"
+        && !promptModalOpen
+        && !statsModalOpen
+      ) {
+        if (galleryDirection === -1 && State.galleryPage > 1) {
+          e.preventDefault();
+          loadGallery(State.galleryPage - 1);
+          return;
+        }
+
+        if (galleryDirection === 1 && State.galleryPage < State.galleryPages) {
+          e.preventDefault();
+          loadGallery(State.galleryPage + 1);
+          return;
+        }
+      }
     }
 
     if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {

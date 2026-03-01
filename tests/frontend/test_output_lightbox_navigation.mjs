@@ -17,6 +17,10 @@ import {
   getUnavailableCollectionStatusText,
 } from "../../src/pipeworks/static/js/gallery-context.mjs";
 import {
+  formatImageCountLabel,
+  resolveGalleryPaginationDirection,
+} from "../../src/pipeworks/static/js/gallery-navigation.mjs";
+import {
   getLightboxTransportState,
   getWrappedImageIndex,
   resolveOutputNavigationDirection,
@@ -138,4 +142,23 @@ test("collection helpers return consistent display text", () => {
   );
   assert.equal(getCollectionNavigationHint(), "H/K previous · J/L next");
   assert.equal(getUnavailableCollectionStatusText("output"), "Output navigation unavailable");
+});
+
+/**
+ * Gallery pagination hotkeys should map only the requested `h/l` shortcuts.
+ */
+test("resolveGalleryPaginationDirection maps gallery page hotkeys correctly", () => {
+  assert.equal(resolveGalleryPaginationDirection("h"), -1);
+  assert.equal(resolveGalleryPaginationDirection("l"), 1);
+  assert.equal(resolveGalleryPaginationDirection("j"), 0);
+});
+
+/**
+ * Count labels should stay grammatically correct for singular and plural
+ * values because the gallery toolbar count is updated frequently.
+ */
+test("formatImageCountLabel handles singular and plural labels", () => {
+  assert.equal(formatImageCountLabel(0), "0 images");
+  assert.equal(formatImageCountLabel(1), "1 image");
+  assert.equal(formatImageCountLabel(7), "7 images");
 });

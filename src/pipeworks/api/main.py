@@ -65,6 +65,12 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from pipeworks import __version__
+from pipeworks.api.gallery_store import (
+    filter_gallery_entries,
+    load_gallery_entries,
+    paginate_gallery_entries,
+    save_gallery_entries,
+)
 from pipeworks.api.models import BulkDeleteRequest, FavouriteRequest, GenerateRequest
 from pipeworks.api.prompt_builder import build_prompt
 from pipeworks.core.config import config
@@ -176,19 +182,6 @@ def _load_json(path: Path, default):
         except Exception:
             return default
     return default
-
-
-def _save_json(path: Path, data) -> None:
-    """Persist a Python object to a JSON file.
-
-    The file is written with 2-space indentation for readability.
-
-    Args:
-        path: Absolute path to the JSON file.
-        data: JSON-serialisable Python object (typically a list or dict).
-    """
-    with open(path, "w") as f:
-        json.dump(data, f, indent=2)
 
 
 # ---------------------------------------------------------------------------
@@ -413,7 +406,7 @@ async def generate_images(req: GenerateRequest) -> dict:
         model_mgr.load_model(hf_id)
 
     # --- Generate batch ----------------------------------------------------
-    gallery = _load_json(GALLERY_DB, [])
+    gallery = load_gallery_entries(GALLERY_DB, GALLERY_DIR)
     generated: list[dict] = []
 
     for i in range(req.batch_size):
@@ -471,7 +464,7 @@ async def generate_images(req: GenerateRequest) -> dict:
         generated.append(entry)
 
     # Persist the updated gallery to disk.
-    _save_json(GALLERY_DB, gallery)
+    save_gallery_entries(GALLERY_DB, gallery)
 
     return {
         "success": True,
@@ -492,6 +485,10 @@ async def get_gallery(
 
     Supports filtering by favourite status and model ID.
 
+    Before filtering, the gallery metadata is reconciled against the gallery
+    directory so stale entries caused by manual file deletion do not inflate the
+    reported image count, pagination, or filtered totals.
+
     Args:
         page: Page number (1-indexed).
         per_page: Number of images per page.
@@ -502,27 +499,13 @@ async def get_gallery(
         Dictionary with keys ``total``, ``page``, ``per_page``, ``pages``,
         and ``images``.
     """
-    gallery = _load_json(GALLERY_DB, [])
-
-    # Apply filters.
-    if favourites_only:
-        gallery = [g for g in gallery if g.get("is_favourite")]
-    if model_id:
-        gallery = [g for g in gallery if g.get("model_id") == model_id]
-
-    # Calculate pagination.
-    total = len(gallery)
-    start = (page - 1) * per_page
-    end = start + per_page
-    page_items = gallery[start:end]
-
-    return {
-        "total": total,
-        "page": page,
-        "per_page": per_page,
-        "pages": (total + per_page - 1) // per_page if total > 0 else 1,
-        "images": page_items,
-    }
+    gallery = load_gallery_entries(GALLERY_DB, GALLERY_DIR)
+    filtered_gallery = filter_gallery_entries(
+        gallery,
+        favourites_only=favourites_only,
+        model_id=model_id,
+    )
+    return paginate_gallery_entries(filtered_gallery, page, per_page)
 
 
 @app.get("/api/gallery/{image_id}")
@@ -538,7 +521,7 @@ async def get_image(image_id: str) -> dict:
     Raises:
         HTTPException: 404 if the image is not found.
     """
-    gallery: list[dict] = _load_json(GALLERY_DB, [])
+    gallery: list[dict] = load_gallery_entries(GALLERY_DB, GALLERY_DIR)
     entry: dict | None = next((g for g in gallery if g["id"] == image_id), None)
     if not entry:
         raise HTTPException(status_code=404, detail="Image not found")
@@ -558,14 +541,14 @@ async def toggle_favourite(req: FavouriteRequest) -> dict:
     Raises:
         HTTPException: 404 if the image is not found.
     """
-    gallery = _load_json(GALLERY_DB, [])
+    gallery = load_gallery_entries(GALLERY_DB, GALLERY_DIR)
     entry = next((g for g in gallery if g["id"] == req.image_id), None)
     if not entry:
         raise HTTPException(status_code=404, detail="Image not found")
 
     # Update the favourite flag and persist to disk.
     entry["is_favourite"] = req.is_favourite
-    _save_json(GALLERY_DB, gallery)
+    save_gallery_entries(GALLERY_DB, gallery)
 
     return {"success": True, "id": req.image_id, "is_favourite": req.is_favourite}
 
@@ -586,7 +569,7 @@ async def bulk_delete_images(req: BulkDeleteRequest) -> dict:
         Dictionary with ``success``, ``deleted`` (list of removed IDs), and
         ``not_found`` (list of IDs that were not in the gallery).
     """
-    gallery = _load_json(GALLERY_DB, [])
+    gallery = load_gallery_entries(GALLERY_DB, GALLERY_DIR)
 
     # Build a lookup for O(1) access by ID.
     gallery_by_id: dict[str, dict] = {g["id"]: g for g in gallery}
@@ -610,7 +593,7 @@ async def bulk_delete_images(req: BulkDeleteRequest) -> dict:
     # Remove all deleted entries from the gallery list and persist.
     deleted_set = set(deleted)
     gallery = [g for g in gallery if g["id"] not in deleted_set]
-    _save_json(GALLERY_DB, gallery)
+    save_gallery_entries(GALLERY_DB, gallery)
 
     return {"success": True, "deleted": deleted, "not_found": not_found}
 
@@ -631,7 +614,7 @@ async def delete_image(image_id: str) -> dict:
     Raises:
         HTTPException: 404 if the image is not found.
     """
-    gallery = _load_json(GALLERY_DB, [])
+    gallery = load_gallery_entries(GALLERY_DB, GALLERY_DIR)
     entry = next((g for g in gallery if g["id"] == image_id), None)
     if not entry:
         raise HTTPException(status_code=404, detail="Image not found")
@@ -643,7 +626,7 @@ async def delete_image(image_id: str) -> dict:
 
     # Remove the entry from the gallery list and persist.
     gallery = [g for g in gallery if g["id"] != image_id]
-    _save_json(GALLERY_DB, gallery)
+    save_gallery_entries(GALLERY_DB, gallery)
 
     return {"success": True, "deleted": image_id}
 
@@ -662,7 +645,7 @@ async def get_image_prompt(image_id: str) -> dict:
     Raises:
         HTTPException: 404 if the image is not found.
     """
-    gallery = _load_json(GALLERY_DB, [])
+    gallery = load_gallery_entries(GALLERY_DB, GALLERY_DIR)
     entry = next((g for g in gallery if g["id"] == image_id), None)
     if not entry:
         raise HTTPException(status_code=404, detail="Image not found")
@@ -708,11 +691,15 @@ async def compile_prompt(req: GenerateRequest) -> dict:
 async def get_stats() -> dict:
     """Return gallery statistics.
 
+    Like ``GET /api/gallery``, this endpoint reconciles ``gallery.json`` with
+    the gallery directory before counting.  Images that were deleted manually
+    from disk therefore stop contributing to the reported totals immediately.
+
     Returns:
         Dictionary with ``total_images``, ``total_favourites``, and
         ``model_counts`` (a mapping of model_id → count).
     """
-    gallery = _load_json(GALLERY_DB, [])
+    gallery = load_gallery_entries(GALLERY_DB, GALLERY_DIR)
     total = len(gallery)
     favourites = sum(1 for g in gallery if g.get("is_favourite"))
 
