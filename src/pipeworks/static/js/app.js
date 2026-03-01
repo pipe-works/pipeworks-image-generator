@@ -3,6 +3,8 @@
  * Vanilla JS, no frameworks. Pipe-Works design system.
  */
 
+import { createOutputLightboxController } from "./output-lightbox.mjs";
+
 "use strict";
 
 // ── State ──────────────────────────────────────────────────────────────────────
@@ -29,6 +31,15 @@ const State = {
   selectMode: false,
   selectedIds: new Set(),
 };
+
+/**
+ * The dedicated lightbox controller is created during initialisation so the
+ * main application file can delegate Output navigation and slideshow behavior
+ * to a smaller, purpose-built module.
+ *
+ * @type {ReturnType<typeof createOutputLightboxController> | null}
+ */
+let outputLightboxController = null;
 
 
 // ── DOM helpers ────────────────────────────────────────────────────────────────
@@ -601,7 +612,7 @@ function createImageCard(img, context = "gallery") {
     if (State.selectMode) {
       toggleCardSelection(img.id, card);
     } else {
-      openLightbox(img);
+      openLightbox(img, context);
     }
   });
 
@@ -625,15 +636,15 @@ async function toggleFavourite(imageId, isFav, card, btn) {
     btn.textContent = isFav ? "★" : "☆";
     btn.title = isFav ? "Remove from favourites" : "Add to favourites";
 
-    // Update lightbox if open
-    if (State.lightboxImage && State.lightboxImage.id === imageId) {
-      State.lightboxImage.is_favourite = isFav;
-      updateLightboxFavButton(isFav);
-    }
-
     // Update output images state
     const outImg = State.outputImages.find(i => i.id === imageId);
     if (outImg) outImg.is_favourite = isFav;
+
+    // Keep the dedicated lightbox controller in sync regardless of which
+    // surface initiated the favourite change.
+    if (outputLightboxController) {
+      outputLightboxController.updateImageState(imageId, { is_favourite: isFav });
+    }
 
     toast(isFav ? "Added to favourites" : "Removed from favourites", "ok", 1500);
   } catch (e) {
@@ -658,8 +669,8 @@ async function deleteImage(imageId, card) {
     State.outputImages = State.outputImages.filter(i => i.id !== imageId);
     updateOutputCount();
 
-    if (State.lightboxImage && State.lightboxImage.id === imageId) {
-      closeLightbox();
+    if (outputLightboxController) {
+      outputLightboxController.handleRemovedImages([imageId]);
     }
 
     toast("Image deleted", "ok", 1500);
@@ -742,9 +753,10 @@ async function bulkDelete() {
     const deletedSet = new Set(data.deleted);
     State.outputImages = State.outputImages.filter(i => !deletedSet.has(i.id));
 
-    // Close lightbox if the viewed image was deleted.
-    if (State.lightboxImage && deletedSet.has(State.lightboxImage.id)) {
-      closeLightbox();
+    // Let the dedicated lightbox controller decide whether to close or
+    // advance to the nearest surviving Output image.
+    if (outputLightboxController) {
+      outputLightboxController.handleRemovedImages(data.deleted);
     }
 
     toast(`Deleted ${data.deleted.length} image${data.deleted.length !== 1 ? "s" : ""}`, "ok");
@@ -769,35 +781,14 @@ function updateOutputCount() {
 
 // ── Lightbox ───────────────────────────────────────────────────────────────────
 
-function openLightbox(img) {
-  State.lightboxImage = img;
-
-  $("#lightbox-img").src = img.url;
-  $("#lb-model").textContent = img.model_label;
-  $("#lb-resolution").textContent = `${img.width} × ${img.height} px`;
-  $("#lb-seed").textContent = img.seed;
-  const schedLabel = img.scheduler ? ` · ${img.scheduler}` : "";
-  $("#lb-steps-cfg").textContent = `${img.steps} steps · CFG ${img.guidance}${schedLabel}`;
-  $("#lb-prompt").textContent = img.compiled_prompt || "—";
-  $("#lb-btn-download").href = img.url;
-  $("#lb-btn-download").download = `pipeworks_${img.id.slice(0, 8)}.png`;
-
-  updateLightboxFavButton(img.is_favourite);
-
-  $("#lightbox").classList.add("is-open");
-  document.body.style.overflow = "hidden";
+function openLightbox(img, context = "gallery") {
+  if (!outputLightboxController) return;
+  outputLightboxController.open({ image: img, context });
 }
 
 function closeLightbox() {
-  $("#lightbox").classList.remove("is-open");
-  document.body.style.overflow = "";
-  State.lightboxImage = null;
-}
-
-function updateLightboxFavButton(isFav) {
-  const btn = $("#lb-btn-fav");
-  btn.textContent = isFav ? "★ Unfavourite" : "☆ Favourite";
-  btn.classList.toggle("is-active", isFav);
+  if (!outputLightboxController) return;
+  outputLightboxController.close();
 }
 
 
@@ -982,6 +973,40 @@ function decBatch() {
 // ── Event wiring ───────────────────────────────────────────────────────────────
 
 function wireEvents() {
+  /**
+   * Create the dedicated lightbox controller before wiring global handlers so
+   * keyboard shortcuts and button flows can delegate to the module cleanly.
+   */
+  outputLightboxController = createOutputLightboxController({
+    getOutputImages: () => State.outputImages,
+    onImageChange: (image) => {
+      State.lightboxImage = image;
+    },
+    onClose: () => {
+      State.lightboxImage = null;
+    },
+    onToggleFavourite: (image) => {
+      const card = document.querySelector(`.img-card[data-id="${image.id}"]`);
+      const favButton = card ? card.querySelector(".img-card__fav-btn") : null;
+      const nextFavouriteState = !image.is_favourite;
+
+      toggleFavourite(
+        image.id,
+        nextFavouriteState,
+        card || { classList: { toggle: () => {} } },
+        favButton || {
+          classList: { toggle: () => {} },
+          textContent: "",
+          title: "",
+        },
+      );
+    },
+    onDeleteImage: (image) => {
+      const card = document.querySelector(`.img-card[data-id="${image.id}"]`);
+      deleteImage(image.id, card || { style: {}, remove: () => {} });
+    },
+  });
+
   // Theme toggle
   $("#btn-theme-toggle").addEventListener("click", toggleTheme);
 
@@ -1087,6 +1112,9 @@ function wireEvents() {
     const canvas = $("#gen-canvas");
     canvas.innerHTML = "";
     State.outputImages = [];
+    if (outputLightboxController) {
+      outputLightboxController.resetOutputCollection();
+    }
     const placeholder = el("div", { className: "gen-placeholder", id: "gen-placeholder" },
       el("div", { className: "gen-placeholder__icon" }, "◈"),
       el("div", {}, "Configure your prompt and click "),
@@ -1119,29 +1147,6 @@ function wireEvents() {
   $("#modal-stats-close2").addEventListener("click", () => $("#modal-stats").classList.add("hidden"));
   $("#modal-stats-backdrop").addEventListener("click", () => $("#modal-stats").classList.add("hidden"));
 
-  // Lightbox
-  $("#lightbox-close").addEventListener("click", closeLightbox);
-  $("#lightbox-backdrop").addEventListener("click", closeLightbox);
-
-  $("#lb-btn-fav").addEventListener("click", () => {
-    if (!State.lightboxImage) return;
-    const img = State.lightboxImage;
-    const newFav = !img.is_favourite;
-
-    // Find card in DOM and update
-    const card = document.querySelector(`.img-card[data-id="${img.id}"]`);
-    const favBtn = card ? card.querySelector(".img-card__fav-btn") : null;
-
-    toggleFavourite(img.id, newFav, card || { classList: { toggle: () => {} } }, favBtn || { classList: { toggle: () => {} }, textContent: "" });
-  });
-
-  $("#lb-btn-delete").addEventListener("click", () => {
-    if (!State.lightboxImage) return;
-    const img = State.lightboxImage;
-    const card = document.querySelector(`.img-card[data-id="${img.id}"]`);
-    deleteImage(img.id, card || { style: {}, remove: () => {} });
-  });
-
   // Gallery
   $("#btn-gallery-refresh").addEventListener("click", () => loadGallery(State.galleryPage));
   $("#btn-gallery-prev").addEventListener("click", () => loadGallery(State.galleryPage - 1));
@@ -1167,7 +1172,13 @@ function wireEvents() {
       closeLightbox();
       $("#modal-prompt").classList.add("hidden");
       $("#modal-stats").classList.add("hidden");
+      return;
     }
+
+    if (outputLightboxController && outputLightboxController.handleKeydown(e)) {
+      return;
+    }
+
     if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
       if (!State.isGenerating) generate();
     }
