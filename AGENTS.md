@@ -41,6 +41,7 @@ pyenv exec pytest -q
 pyenv exec ruff check src tests
 pyenv exec black --check src tests
 pyenv exec pipeworks
+node --test tests/frontend/test_output_lightbox_navigation.mjs
 ```
 
 Useful targeted commands:
@@ -52,6 +53,21 @@ pyenv exec ruff check src tests --fix
 pyenv exec black src tests
 ```
 
+## Release Automation
+
+This repo uses `release-please` and expects conventional commit semantics for
+releasable changes.
+
+- Use commit and PR titles with the correct prefix when the change should be
+  eligible for a release entry.
+- Prefer `feat:` for user-facing features, `fix:` for bug fixes, `perf:` for
+  performance work, `docs:` for documentation, and `chore:` only for
+  non-releasable housekeeping.
+- Do not use untagged titles like `Update X` or `Add Y` when the work should
+  trigger release automation.
+- If you are preparing a PR that should ship, make sure the final title keeps
+  the conventional prefix.
+
 ## Verified Baseline
 
 These commands were run successfully in this repository:
@@ -59,10 +75,11 @@ These commands were run successfully in this repository:
 - `pyenv exec pytest -q`
 - `pyenv exec ruff check src tests`
 - `pyenv exec black --check src tests`
+- `node --test tests/frontend/test_output_lightbox_navigation.mjs`
 
 At the time of writing:
 
-- `128` tests passed
+- `129` tests passed
 - total coverage was `93.88%`
 
 ## Important Paths
