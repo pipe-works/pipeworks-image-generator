@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.4](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.2.3...pipeworks-image-generator-v0.2.4) (2026-03-01)
+
+
+### Bug Fixes
+
+* correct gallery numbering and lightbox transport ([dfd6337](https://github.com/pipe-works/pipeworks-image-generator/commit/dfd6337b3b6c389efd37a7c613b21943a5f2dc82))
+* correct gallery numbering and lightbox transport ([57fde85](https://github.com/pipe-works/pipeworks-image-generator/commit/57fde859244f0d58f306b9ce6633560e8224af4a))
+
 ## [0.2.3](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.2.2...pipeworks-image-generator-v0.2.3) (2026-02-23)
 
 
