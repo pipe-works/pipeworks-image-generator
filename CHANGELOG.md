@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.5](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.2.4...pipeworks-image-generator-v0.2.5) (2026-03-01)
+
+
+### Bug Fixes
+
+* reconcile gallery counts with filesystem state ([f4f268f](https://github.com/pipe-works/pipeworks-image-generator/commit/f4f268f989d8ccb3657c98f70a08986268c4ed2f))
+* reconcile gallery counts with filesystem state ([c190a49](https://github.com/pipe-works/pipeworks-image-generator/commit/c190a49b6b804de869e1487538b1dab289603287))
+
 ## [0.2.4](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.2.3...pipeworks-image-generator-v0.2.4) (2026-03-01)
 
 
