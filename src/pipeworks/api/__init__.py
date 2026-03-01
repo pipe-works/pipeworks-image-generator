@@ -12,4 +12,6 @@ models
     Pydantic models for API request and response validation.
 prompt_builder
     Three-part prompt template compilation.
+gallery_store
+    File-backed gallery reconciliation, filtering, and pagination helpers.
 """

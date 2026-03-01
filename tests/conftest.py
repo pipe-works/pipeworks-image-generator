@@ -334,6 +334,75 @@ def sample_gallery(tmp_gallery_dir: Path, test_config: PipeworksConfig) -> list[
     return entries
 
 
+@pytest.fixture
+def sample_gallery_mixed_models(tmp_gallery_dir: Path, test_config: PipeworksConfig) -> list[dict]:
+    """Create gallery entries spanning multiple model IDs.
+
+    This fixture is used for tests that need to verify model-filtered counts and
+    pagination after reconciliation against the gallery directory.
+
+    Args:
+        tmp_gallery_dir: Path to the gallery directory.
+        test_config: Configuration with temp paths.
+
+    Returns:
+        Mixed-model gallery entry dictionaries in persisted order.
+    """
+    import time
+    import uuid
+
+    model_ids = [
+        ("z-image-turbo", "Z-Image Turbo"),
+        ("sdxl-base", "SDXL Base"),
+        ("z-image-turbo", "Z-Image Turbo"),
+        ("sdxl-base", "SDXL Base"),
+        ("z-image-turbo", "Z-Image Turbo"),
+    ]
+
+    entries: list[dict] = []
+
+    for index, (model_id, model_label) in enumerate(model_ids):
+        img_id = str(uuid.uuid4())
+        filename = f"{img_id}.png"
+        filepath = tmp_gallery_dir / filename
+
+        _make_test_image().save(filepath, format="PNG")
+
+        entries.append(
+            {
+                "id": img_id,
+                "filename": filename,
+                "url": f"/static/gallery/{filename}",
+                "model_id": model_id,
+                "model_label": model_label,
+                "compiled_prompt": f"Prompt {index}",
+                "prepend_prompt_id": "none",
+                "prompt_mode": "manual",
+                "manual_prompt": f"Prompt {index}",
+                "automated_prompt_id": None,
+                "append_prompt_id": "none",
+                "aspect_ratio_id": "1:1",
+                "width": 1024,
+                "height": 1024,
+                "steps": 4,
+                "guidance": 0.0,
+                "seed": 100 + index,
+                "negative_prompt": None,
+                "is_favourite": index % 2 == 0,
+                "created_at": time.time() - (index * 60),
+                "batch_index": 0,
+                "batch_size": 1,
+                "batch_seed": 100 + index,
+            }
+        )
+
+    gallery_db = test_config.data_dir / "gallery.json"
+    with open(gallery_db, "w") as f:
+        json.dump(entries, f, indent=2)
+
+    return entries
+
+
 # ---------------------------------------------------------------------------
 # FastAPI TestClient fixture.
 # ---------------------------------------------------------------------------

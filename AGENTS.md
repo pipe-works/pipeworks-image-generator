@@ -79,7 +79,7 @@ These commands were run successfully in this repository:
 
 At the time of writing:
 
-- `129` tests passed
+- `134` tests passed
 - total coverage was `93.88%`
 
 ## Important Paths

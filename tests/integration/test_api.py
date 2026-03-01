@@ -17,6 +17,8 @@ real model loading or GPU access occurs.  Tests cover every endpoint:
 
 from __future__ import annotations
 
+import json
+
 # ---------------------------------------------------------------------------
 # Index page tests.
 # ---------------------------------------------------------------------------
@@ -482,6 +484,72 @@ class TestGallery:
         data = resp.json()
         assert data["total"] == 0
 
+    def test_gallery_prunes_missing_files_from_counts(
+        self,
+        test_client,
+        sample_gallery,
+        tmp_gallery_dir,
+        test_config,
+    ):
+        """Missing files on disk should be removed from gallery totals automatically."""
+        missing_entry = sample_gallery[0]
+        missing_path = tmp_gallery_dir / missing_entry["filename"]
+        assert missing_path.exists()
+
+        missing_path.unlink()
+
+        resp = test_client.get("/api/gallery")
+        assert resp.status_code == 200
+        data = resp.json()
+
+        assert data["total"] == 4
+        assert all(image["id"] != missing_entry["id"] for image in data["images"])
+
+        persisted_gallery = json.loads((test_config.data_dir / "gallery.json").read_text())
+        assert len(persisted_gallery) == 4
+        assert all(entry["id"] != missing_entry["id"] for entry in persisted_gallery)
+
+    def test_gallery_model_filter_counts_only_existing_matching_images(
+        self,
+        test_client,
+        sample_gallery_mixed_models,
+        tmp_gallery_dir,
+    ):
+        """Model-filtered totals should ignore manually deleted files."""
+        missing_entry = next(
+            entry for entry in sample_gallery_mixed_models if entry["model_id"] == "z-image-turbo"
+        )
+        (tmp_gallery_dir / missing_entry["filename"]).unlink()
+
+        overall_resp = test_client.get("/api/gallery")
+        overall_data = overall_resp.json()
+        assert overall_data["total"] == 4
+
+        model_resp = test_client.get("/api/gallery?model_id=z-image-turbo")
+        model_data = model_resp.json()
+        assert model_data["total"] == 2
+        assert all(image["model_id"] == "z-image-turbo" for image in model_data["images"])
+
+        other_model_resp = test_client.get("/api/gallery?model_id=sdxl-base")
+        other_model_data = other_model_resp.json()
+        assert other_model_data["total"] == 2
+
+    def test_gallery_clamps_page_after_collection_shrinks(self, test_client, sample_gallery):
+        """Pagination should clamp to the last valid page after deletions."""
+        first_page = test_client.get("/api/gallery?page=3&per_page=2")
+        assert first_page.status_code == 200
+        assert first_page.json()["page"] == 3
+
+        test_client.delete(f"/api/gallery/{sample_gallery[0]['id']}")
+        test_client.delete(f"/api/gallery/{sample_gallery[1]['id']}")
+
+        resp = test_client.get("/api/gallery?page=3&per_page=2")
+        data = resp.json()
+        assert data["total"] == 3
+        assert data["pages"] == 2
+        assert data["page"] == 2
+        assert len(data["images"]) == 1
+
 
 class TestGalleryEntry:
     """Test single gallery entry retrieval."""
@@ -592,6 +660,20 @@ class TestDelete:
         resp = test_client.get("/api/gallery")
         assert resp.json()["total"] == 4
 
+    def test_delete_updates_model_filtered_count(self, test_client, sample_gallery_mixed_models):
+        """Deleting a filtered-model image should reduce that filtered total."""
+        entry_id = next(
+            entry["id"] for entry in sample_gallery_mixed_models if entry["model_id"] == "sdxl-base"
+        )
+
+        delete_resp = test_client.delete(f"/api/gallery/{entry_id}")
+        assert delete_resp.status_code == 200
+
+        filtered_resp = test_client.get("/api/gallery?model_id=sdxl-base")
+        filtered_data = filtered_resp.json()
+        assert filtered_data["total"] == 1
+        assert all(entry["model_id"] == "sdxl-base" for entry in filtered_data["images"])
+
     def test_delete_nonexistent(self, test_client, sample_gallery):
         """Deleting a nonexistent image should return 404."""
         resp = test_client.delete("/api/gallery/nonexistent-id")
@@ -697,3 +779,20 @@ class TestStats:
         assert data["total_images"] == 5
         assert data["total_favourites"] == 1  # Only first entry is favourited.
         assert data["model_counts"]["z-image-turbo"] == 5
+
+    def test_stats_exclude_entries_for_missing_files(
+        self,
+        test_client,
+        sample_gallery_mixed_models,
+        tmp_gallery_dir,
+    ):
+        """Stats should ignore metadata whose image files were removed manually."""
+        removed_entry = sample_gallery_mixed_models[0]
+        (tmp_gallery_dir / removed_entry["filename"]).unlink()
+
+        resp = test_client.get("/api/stats")
+        data = resp.json()
+
+        assert data["total_images"] == 4
+        assert data["model_counts"]["z-image-turbo"] == 2
+        assert data["model_counts"]["sdxl-base"] == 2
