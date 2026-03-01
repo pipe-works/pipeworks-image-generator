@@ -1,0 +1,116 @@
+/* ==========================================================================
+   Output Lightbox Enhancements
+   --------------------------------------------------------------------------
+   This stylesheet contains only the styles required for the generation-page
+   output lightbox transport controls and keyboard-navigation affordances.
+
+   The base button treatment comes from the shared Pipe-Works app style guide:
+   icon-only controls use `.btn.btn--icon`.  These rules only handle lightbox
+   placement, grouping, and state-specific presentation for this repository.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Position the close button within the image stage while preserving the
+   shared `.btn--icon` visual language from the shared style guide.
+   -------------------------------------------------------------------------- */
+.lightbox__close {
+  position: absolute;
+  top: var(--sp-2);
+  right: var(--sp-2);
+  z-index: 2;
+  background: color-mix(in srgb, var(--col-surface) 88%, transparent);
+  backdrop-filter: blur(4px);
+}
+
+/* --------------------------------------------------------------------------
+   The transport panel sits above the metadata column so navigation, playback,
+   and keyboard help are immediately visible whenever the lightbox opens.
+   -------------------------------------------------------------------------- */
+.lightbox__transport {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding-bottom: var(--sp-3);
+  border-bottom: 1px solid var(--col-border);
+}
+
+/* --------------------------------------------------------------------------
+   Keep the transport controls in a compact row that can still wrap cleanly on
+   narrow screens without collapsing button spacing.
+   -------------------------------------------------------------------------- */
+.lightbox__transport-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+/* --------------------------------------------------------------------------
+   The transport icons should feel like the small symbolic controls already
+   used throughout the header and tool chrome, not like oversized media-player
+   buttons.  These overrides intentionally reduce both the control footprint
+   and glyph size relative to the shared `.btn--icon` default.
+   -------------------------------------------------------------------------- */
+.lightbox__transport-btn {
+  width: 28px;
+  height: 28px;
+  font-size: 0.7rem;
+  line-height: 1;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  letter-spacing: -0.08em;
+}
+
+/* --------------------------------------------------------------------------
+   The status area shows the active output position and the keyboard hint that
+   explains the vim-style bindings requested for this feature.
+   -------------------------------------------------------------------------- */
+.lightbox__transport-meta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.lightbox__transport-hint {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--col-text-muted);
+  line-height: 1.5;
+}
+
+/* --------------------------------------------------------------------------
+   Playing state should be obvious without inventing a new button treatment,
+   so the active icon button gets the same accent border/glow language used by
+   other active controls in the application.
+   -------------------------------------------------------------------------- */
+.lightbox__transport .btn--icon.is-active {
+  border-color: var(--col-accent);
+  color: var(--col-accent);
+  background: var(--col-accent-glow);
+}
+
+/* --------------------------------------------------------------------------
+   Disabled transport buttons still need to remain visible so users can infer
+   which controls become available when opening an image from the Output pane.
+   -------------------------------------------------------------------------- */
+.lightbox__transport .btn--icon:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* --------------------------------------------------------------------------
+   The metadata column already stacks content vertically.  On smaller screens
+   the transport controls benefit from slightly tighter wrapping so the layout
+   remains readable without horizontal scrolling.
+   -------------------------------------------------------------------------- */
+@media (max-width: 900px) {
+  .lightbox__transport-controls {
+    gap: var(--sp-1);
+  }
+
+  .lightbox__transport-btn {
+    width: 26px;
+    height: 26px;
+    font-size: 0.65rem;
+  }
+}

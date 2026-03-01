@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="/static/css/pipe-works-fonts.css" />
   <link rel="stylesheet" href="/static/css/pipe-works-base.css" />
   <link rel="stylesheet" href="/static/css/app.css" />
+  <link rel="stylesheet" href="/static/css/output-lightbox.css" />
 </head>
 <body>
 
@@ -448,10 +449,23 @@ Main Scene:
   <div class="lightbox__backdrop" id="lightbox-backdrop"></div>
   <div class="lightbox__card">
     <div class="lightbox__image-area">
-      <button class="lightbox__close" id="lightbox-close" aria-label="Close">✕</button>
+      <button class="btn btn--icon lightbox__close" id="lightbox-close" aria-label="Close">✕</button>
       <img class="lightbox__image" id="lightbox-img" src="" alt="Generated image" />
     </div>
     <div class="lightbox__info">
+      <div class="lightbox__transport" id="lb-transport">
+        <div class="lightbox__transport-controls">
+          <button class="btn btn--icon lightbox__transport-btn" id="lb-btn-prev" aria-label="Previous output image" title="Previous output image">&lt;&lt;</button>
+          <button class="btn btn--icon lightbox__transport-btn" id="lb-btn-play" aria-label="Play output slideshow" title="Play output slideshow">&gt;</button>
+          <button class="btn btn--icon lightbox__transport-btn" id="lb-btn-pause" aria-label="Pause output slideshow" title="Pause output slideshow">||</button>
+          <button class="btn btn--icon lightbox__transport-btn" id="lb-btn-stop" aria-label="Stop output slideshow" title="Stop output slideshow">[]</button>
+          <button class="btn btn--icon lightbox__transport-btn" id="lb-btn-next" aria-label="Next output image" title="Next output image">&gt;&gt;</button>
+        </div>
+        <div class="lightbox__transport-meta">
+          <span class="badge badge--muted" id="lb-nav-status">Output navigation unavailable</span>
+          <span class="lightbox__transport-hint" id="lb-nav-hint">Open an image from Output to use H/J/K/L navigation.</span>
+        </div>
+      </div>
       <div class="lightbox__meta-row">
         <div class="lightbox__meta-label">Model</div>
         <div class="lightbox__meta-value" id="lb-model">—</div>
@@ -522,7 +536,7 @@ Main Scene:
 
 
 <!-- ── Scripts ────────────────────────────────────────────────────────────── -->
-<script src="/static/js/app.js"></script>
+<script type="module" src="/static/js/app.js"></script>
 
 </body>
 </html>
