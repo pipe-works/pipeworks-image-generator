@@ -3,6 +3,7 @@
  * Vanilla JS, no frameworks. Pipe-Works design system.
  */
 
+import { getImageCardBadgeLabel } from "./gallery-context.mjs";
 import { createOutputLightboxController } from "./output-lightbox.mjs";
 
 "use strict";
@@ -18,6 +19,8 @@ const State = {
   batchSize: 1,
   isGenerating: false,
   outputImages: [],
+  galleryImages: [],
+  favouriteImages: [],
   galleryPage: 1,
   galleryPerPage: 20,
   galleryTotal: 0,
@@ -27,6 +30,7 @@ const State = {
   favTotal: 0,
   favPages: 1,
   lightboxImage: null,
+  lightboxContext: null,
   theme: "dark",
   selectMode: false,
   selectedIds: new Set(),
@@ -550,7 +554,22 @@ async function generate() {
 
 // ── Image card ─────────────────────────────────────────────────────────────────
 
-function createImageCard(img, context = "gallery") {
+/**
+ * Create an image card for one of the frontend image collections.
+ *
+ * The card UI is shared between Output, Gallery, and Favourites, but the
+ * badge numbering rules differ by context.  Output keeps the original
+ * generation batch position, while Gallery and Favourites show the image's
+ * current position inside the visible collection.
+ *
+ * @param {object} img - Image metadata record returned by the backend.
+ * @param {string} [context="gallery"] - Collection context for the card.
+ * @param {number | null} [collectionIndex=null] - One-based position within
+ *     the currently rendered collection, when the collection uses positional
+ *     numbering.
+ * @returns {HTMLDivElement} Fully wired card element.
+ */
+function createImageCard(img, context = "gallery", collectionIndex = null) {
   const card = el("div", {
     className: `img-card${img.is_favourite ? " is-favourite" : ""}`,
     style: { width: "200px" },
@@ -567,9 +586,12 @@ function createImageCard(img, context = "gallery") {
 
   const star = el("div", { className: "img-card__star" }, "★");
 
-  const batchBadge = el("div", { className: "img-card__batch-badge" },
-    `#${(img.batch_index || 0) + 1}`
-  );
+  const badgeLabel = getImageCardBadgeLabel({
+    context,
+    image: img,
+    collectionIndex,
+  });
+  const batchBadge = el("div", { className: "img-card__batch-badge" }, badgeLabel || "");
 
   const overlay = el("div", { className: "img-card__overlay" });
 
@@ -620,6 +642,64 @@ function createImageCard(img, context = "gallery") {
 }
 
 
+// ── Collection state synchronisation ──────────────────────────────────────────
+
+/**
+ * Apply a partial image update across every in-memory image collection.
+ *
+ * Output, Gallery, and Favourites are loaded separately, but they can all
+ * contain the same image records.  Patching all collections together keeps
+ * cards and the lightbox in sync immediately after local actions such as a
+ * favourite toggle.
+ *
+ * @param {string} imageId - Identifier of the image to update.
+ * @param {object} patch - Partial image fields to merge into matching items.
+ */
+function patchImageAcrossCollections(imageId, patch) {
+  /**
+   * Patch a single image collection immutably.
+   *
+   * @param {Array<object>} images - Source collection to patch.
+   * @returns {Array<object>} Collection with the patch applied.
+   */
+  function patchCollection(images) {
+    return images.map(image => (image.id === imageId ? { ...image, ...patch } : image));
+  }
+
+  State.outputImages = patchCollection(State.outputImages);
+  State.galleryImages = patchCollection(State.galleryImages);
+  State.favouriteImages = patchCollection(State.favouriteImages);
+}
+
+/**
+ * Remove one or more images from every in-memory image collection.
+ *
+ * Delete actions can start from any tab or from the lightbox itself.  Removing
+ * the deleted IDs from all known collections ensures badge numbering, card
+ * lists, and lightbox transport state stay aligned without waiting for a
+ * manual refresh.
+ *
+ * @param {Array<string>} imageIds - Identifiers to remove from all collections.
+ */
+function removeImagesAcrossCollections(imageIds) {
+  const removedImageIds = new Set(imageIds);
+
+  /**
+   * Filter a collection down to only still-existing images.
+   *
+   * @param {Array<object>} images - Source collection.
+   * @returns {Array<object>} Collection without the removed IDs.
+   */
+  function filterCollection(images) {
+    return images.filter(image => !removedImageIds.has(image.id));
+  }
+
+  State.outputImages = filterCollection(State.outputImages);
+  State.galleryImages = filterCollection(State.galleryImages);
+  State.favouriteImages = filterCollection(State.favouriteImages);
+}
+
+
 // ── Favourite toggle ───────────────────────────────────────────────────────────
 
 async function toggleFavourite(imageId, isFav, card, btn) {
@@ -636,9 +716,7 @@ async function toggleFavourite(imageId, isFav, card, btn) {
     btn.textContent = isFav ? "★" : "☆";
     btn.title = isFav ? "Remove from favourites" : "Add to favourites";
 
-    // Update output images state
-    const outImg = State.outputImages.find(i => i.id === imageId);
-    if (outImg) outImg.is_favourite = isFav;
+    patchImageAcrossCollections(imageId, { is_favourite: isFav });
 
     // Keep the dedicated lightbox controller in sync regardless of which
     // surface initiated the favourite change.
@@ -666,7 +744,7 @@ async function deleteImage(imageId, card) {
     card.style.transition = "opacity 0.3s";
     setTimeout(() => card.remove(), 300);
 
-    State.outputImages = State.outputImages.filter(i => i.id !== imageId);
+    removeImagesAcrossCollections([imageId]);
     updateOutputCount();
 
     if (outputLightboxController) {
@@ -749,9 +827,7 @@ async function bulkDelete() {
 
     const data = await res.json();
 
-    // Also remove from output images state if applicable.
-    const deletedSet = new Set(data.deleted);
-    State.outputImages = State.outputImages.filter(i => !deletedSet.has(i.id));
+    removeImagesAcrossCollections(data.deleted);
 
     // Let the dedicated lightbox controller decide whether to close or
     // advance to the nearest surviving Output image.
@@ -782,18 +858,56 @@ function updateOutputCount() {
 // ── Lightbox ───────────────────────────────────────────────────────────────────
 
 function openLightbox(img, context = "gallery") {
+  State.lightboxContext = context;
   if (!outputLightboxController) return;
   outputLightboxController.open({ image: img, context });
 }
 
 function closeLightbox() {
+  State.lightboxContext = null;
   if (!outputLightboxController) return;
   outputLightboxController.close();
+}
+
+/**
+ * Find the visible card node that corresponds to the active lightbox context.
+ *
+ * The same image can appear in multiple tabs at once, for example in Gallery
+ * and Favourites.  Lightbox actions should update the card in the collection
+ * the user is actively browsing rather than whichever duplicate happens to
+ * appear first in document order.
+ *
+ * @param {string} imageId - Identifier of the image to locate.
+ * @returns {Element | null} Matching card from the active collection, if any.
+ */
+function findLightboxContextCard(imageId) {
+  if (State.lightboxContext === "output") {
+    return $("#gen-canvas")?.querySelector(`.img-card[data-id="${imageId}"]`) || null;
+  }
+
+  if (State.lightboxContext === "gallery") {
+    return $("#gallery-grid")?.querySelector(`.img-card[data-id="${imageId}"]`) || null;
+  }
+
+  if (State.lightboxContext === "favourites") {
+    return $("#fav-grid")?.querySelector(`.img-card[data-id="${imageId}"]`) || null;
+  }
+
+  return document.querySelector(`.img-card[data-id="${imageId}"]`);
 }
 
 
 // ── Gallery ────────────────────────────────────────────────────────────────────
 
+/**
+ * Load one page of the main gallery collection and render it into the grid.
+ *
+ * Besides updating the DOM, this function also refreshes `State.galleryImages`
+ * so the lightbox transport controls can navigate through exactly the same
+ * gallery page the user is currently viewing.
+ *
+ * @param {number} [page=1] - One-based gallery page to load.
+ */
 async function loadGallery(page = 1) {
   State.galleryPage = page;
 
@@ -812,6 +926,7 @@ async function loadGallery(page = 1) {
 
     State.galleryTotal = data.total;
     State.galleryPages = data.pages;
+    State.galleryImages = data.images;
 
     const grid = $("#gallery-grid");
     grid.innerHTML = "";
@@ -826,8 +941,10 @@ async function loadGallery(page = 1) {
       );
       grid.appendChild(empty);
     } else {
-      data.images.forEach(img => {
-        grid.appendChild(createImageCard(img, "gallery"));
+      const galleryOffset = (page - 1) * State.galleryPerPage;
+      data.images.forEach((img, index) => {
+        const collectionIndex = galleryOffset + index + 1;
+        grid.appendChild(createImageCard(img, "gallery", collectionIndex));
       });
     }
 
@@ -841,6 +958,14 @@ async function loadGallery(page = 1) {
   }
 }
 
+/**
+ * Load one page of the favourites collection and render it into the grid.
+ *
+ * The in-memory `State.favouriteImages` array mirrors the rendered favourites
+ * page so lightbox navigation stays aligned with the visible favourites list.
+ *
+ * @param {number} [page=1] - One-based favourites page to load.
+ */
 async function loadFavourites(page = 1) {
   State.favPage = page;
 
@@ -852,6 +977,7 @@ async function loadFavourites(page = 1) {
 
     State.favTotal = data.total;
     State.favPages = data.pages;
+    State.favouriteImages = data.images;
 
     const grid = $("#fav-grid");
     grid.innerHTML = "";
@@ -864,8 +990,10 @@ async function loadFavourites(page = 1) {
       );
       grid.appendChild(empty);
     } else {
-      data.images.forEach(img => {
-        grid.appendChild(createImageCard(img, "favourites"));
+      const favouritesOffset = (page - 1) * State.galleryPerPage;
+      data.images.forEach((img, index) => {
+        const collectionIndex = favouritesOffset + index + 1;
+        grid.appendChild(createImageCard(img, "favourites", collectionIndex));
       });
     }
 
@@ -978,15 +1106,30 @@ function wireEvents() {
    * keyboard shortcuts and button flows can delegate to the module cleanly.
    */
   outputLightboxController = createOutputLightboxController({
-    getOutputImages: () => State.outputImages,
+    getCollectionImages: (context) => {
+      if (context === "output") {
+        return State.outputImages;
+      }
+
+      if (context === "gallery") {
+        return State.galleryImages;
+      }
+
+      if (context === "favourites") {
+        return State.favouriteImages;
+      }
+
+      return [];
+    },
     onImageChange: (image) => {
       State.lightboxImage = image;
     },
     onClose: () => {
       State.lightboxImage = null;
+      State.lightboxContext = null;
     },
     onToggleFavourite: (image) => {
-      const card = document.querySelector(`.img-card[data-id="${image.id}"]`);
+      const card = findLightboxContextCard(image.id);
       const favButton = card ? card.querySelector(".img-card__fav-btn") : null;
       const nextFavouriteState = !image.is_favourite;
 
@@ -1002,7 +1145,7 @@ function wireEvents() {
       );
     },
     onDeleteImage: (image) => {
-      const card = document.querySelector(`.img-card[data-id="${image.id}"]`);
+      const card = findLightboxContextCard(image.id);
       deleteImage(image.id, card || { style: {}, remove: () => {} });
     },
   });
