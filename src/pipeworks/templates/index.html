@@ -240,7 +240,14 @@
               <label class="control-label">Batch Size</label>
               <div class="batch-counter">
                 <button class="batch-counter__btn" id="btn-batch-dec">−</button>
-                <span class="batch-counter__value" id="lbl-batch">1</span>
+                <input
+                  class="batch-counter__input"
+                  id="inp-batch"
+                  type="number"
+                  min="1"
+                  max="1000"
+                  value="1"
+                />
                 <button class="batch-counter__btn" id="btn-batch-inc">+</button>
                 <span class="u-muted" style="font-size:var(--text-xs);font-family:var(--font-mono)">image(s)</span>
               </div>

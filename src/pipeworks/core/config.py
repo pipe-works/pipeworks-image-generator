@@ -138,6 +138,8 @@ class PipeworksConfig(BaseSettings):
             Bind address for the uvicorn ASGI server.
         server_port : int
             Port for the uvicorn ASGI server (1024–65535).
+        disable_http_cache : bool
+            Disable browser caching for HTML, API, and static responses.
 
     Notes
     -----
@@ -293,6 +295,13 @@ class PipeworksConfig(BaseSettings):
         description="Port for the uvicorn ASGI server.",
         ge=1024,
         le=65535,
+    )
+    disable_http_cache: bool = Field(
+        default=False,
+        description=(
+            "Disable browser caching for HTML, API, and static responses.  "
+            "Useful for local development when verifying frontend changes."
+        ),
     )
 
     def __init__(self, **kwargs):

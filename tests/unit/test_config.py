@@ -66,6 +66,17 @@ class TestConfigDefaults:
         )
         assert cfg.server_port == 7860
 
+    def test_default_disable_http_cache(self, monkeypatch):
+        """HTTP cache disabling should be off by default."""
+        monkeypatch.delenv("PIPEWORKS_DISABLE_HTTP_CACHE", raising=False)
+        cfg = PipeworksConfig(
+            _env_file=None,
+            models_dir="/tmp/test_models",
+            outputs_dir="/tmp/test_outputs",
+            gallery_dir="/tmp/test_gallery",
+        )
+        assert cfg.disable_http_cache is False
+
     def test_default_performance_flags(self, test_config: PipeworksConfig):
         """All performance optimisation flags should default to False."""
         assert test_config.enable_attention_slicing is False
@@ -141,6 +152,17 @@ class TestConfigValidation:
             gallery_dir=str(temp_dir / "gallery"),
         )
         assert cfg.server_port == 8080
+
+    def test_disable_http_cache_env_override(self, monkeypatch, temp_dir: Path):
+        """Environment variable should enable no-cache headers."""
+        monkeypatch.setenv("PIPEWORKS_DISABLE_HTTP_CACHE", "true")
+        cfg = PipeworksConfig(
+            _env_file=None,
+            models_dir=str(temp_dir / "models"),
+            outputs_dir=str(temp_dir / "outputs"),
+            gallery_dir=str(temp_dir / "gallery"),
+        )
+        assert cfg.disable_http_cache is True
 
     def test_invalid_torch_dtype(self):
         """Unsupported torch dtype should raise a validation error."""
