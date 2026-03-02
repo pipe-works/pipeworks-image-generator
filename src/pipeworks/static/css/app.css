@@ -210,6 +210,43 @@ html, body {
   border-bottom: 1px solid var(--col-border);
 }
 
+.ctrl-section__heading--toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: transparent;
+  border-top: none;
+  border-left: none;
+  border-right: none;
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.ctrl-section__heading--toggle:hover {
+  color: var(--col-text);
+  border-bottom-color: var(--col-border-hi);
+}
+
+.ctrl-section__chevron {
+  font-size: var(--text-sm);
+  transition: transform var(--transition-fast);
+}
+
+.ctrl-section__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.ctrl-section.is-collapsed .ctrl-section__body {
+  display: none;
+}
+
+.ctrl-section.is-collapsed .ctrl-section__chevron {
+  transform: rotate(-90deg);
+}
+
 .ctrl-row {
   display: flex;
   align-items: center;
