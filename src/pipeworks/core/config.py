@@ -127,7 +127,8 @@ class PipeworksConfig(BaseSettings):
         static_dir : Path
             Root of the web-accessible static files directory.
         data_dir : Path
-            Directory containing ``models.json`` and ``prompts.json``.
+            Directory containing ``models.json``, ``prepend.json``,
+            ``main.json``, and ``append.json``.
         gallery_dir : Path
             Directory for gallery image files (inside ``static/``).
         templates_dir : Path
@@ -262,7 +263,7 @@ class PipeworksConfig(BaseSettings):
     data_dir: Path = Field(
         default=_PACKAGE_DIR / "static" / "data",
         description=(
-            "Directory containing models.json and prompts.json configuration "
+            "Directory containing models.json plus the split prompt-library "
             "files.  Defaults to 'static/data/' inside the installed package."
         ),
     )

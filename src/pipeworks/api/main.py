@@ -9,7 +9,8 @@ Architecture
 The application follows a stateless REST pattern:
 
 - **Configuration** is loaded from JSON files on disk (``models.json``,
-  ``prompts.json``) and served to the frontend via ``GET /api/config``.
+  ``prepend.json``, ``main.json``, ``append.json``) and served to the
+  frontend via ``GET /api/config``.
 - **Image generation** is performed by :class:`~pipeworks.core.model_manager.ModelManager`,
   which manages the diffusers pipeline lifecycle.
 - **Gallery persistence** uses a single ``gallery.json`` file — no database
@@ -210,6 +211,86 @@ def _load_json(path: Path, default):
     return default
 
 
+def _load_prompt_list(path: Path, *, legacy_prompts: dict, legacy_key: str) -> list[dict]:
+    """Load one prompt-library file with optional legacy fallback support."""
+    data = _load_json(path, None)
+
+    prompts: list[dict] = []
+    if isinstance(data, list):
+        prompts = data
+    elif isinstance(data, dict):
+        prompts = data.get("prompts", [])
+
+    if not prompts:
+        prompts = legacy_prompts.get(legacy_key, [])
+
+    normalized: list[dict] = []
+    for prompt in prompts:
+        if not isinstance(prompt, dict):
+            continue
+        item = dict(prompt)
+        item.setdefault("source_section", path.stem)
+        normalized.append(item)
+
+    return normalized
+
+
+def _merge_prompt_lists(*prompt_lists: list[dict]) -> list[dict]:
+    """Merge prompt lists while preserving order and de-duplicating by id."""
+    merged: list[dict] = []
+    seen_ids: set[str] = set()
+
+    for prompt_list in prompt_lists:
+        for prompt in prompt_list:
+            prompt_id = prompt.get("id")
+            if not prompt_id:
+                continue
+            if prompt_id in seen_ids:
+                logger.warning(
+                    "Duplicate prompt id '%s' detected; keeping first occurrence.", prompt_id
+                )
+                continue
+            seen_ids.add(prompt_id)
+            merged.append(prompt)
+
+    return merged
+
+
+def _load_prompt_catalog() -> dict:
+    """Load prompt libraries from split files and expose a merged selector catalog."""
+    legacy_prompts = _load_json(DATA_DIR / "prompts.json", {})
+
+    prepend_library = _load_prompt_list(
+        DATA_DIR / "prepend.json",
+        legacy_prompts=legacy_prompts,
+        legacy_key="prepend_prompts",
+    )
+    main_library = _load_prompt_list(
+        DATA_DIR / "main.json",
+        legacy_prompts=legacy_prompts,
+        legacy_key="automated_prompts",
+    )
+    append_library = _load_prompt_list(
+        DATA_DIR / "append.json",
+        legacy_prompts=legacy_prompts,
+        legacy_key="append_prompts",
+    )
+
+    merged_prompts = _merge_prompt_lists(prepend_library, main_library, append_library)
+
+    return {
+        "prepend_library": prepend_library,
+        "main_library": main_library,
+        "append_library": append_library,
+        "all_prompts": merged_prompts,
+        # Each selector gets the full merged catalog so prompts can be reused
+        # across prepend, main, and append in any order.
+        "prepend_prompts": merged_prompts,
+        "automated_prompts": merged_prompts,
+        "append_prompts": merged_prompts,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Prompt resolution helper.
 # ---------------------------------------------------------------------------
@@ -229,7 +310,8 @@ def _resolve_prompt_parts(
 
     Args:
         req: The validated generation request.
-        prompts: The loaded ``prompts.json`` data.
+        prompts: The loaded prompt catalog from ``prepend.json``,
+            ``main.json``, and ``append.json``.
         strict: If ``True``, raise :class:`HTTPException` on missing or
             invalid prompt values (used by ``/api/generate``).  If ``False``,
             silently fall back to empty strings (used by ``/api/prompt/compile``).
@@ -241,16 +323,17 @@ def _resolve_prompt_parts(
         HTTPException: (only when ``strict=True``) 400 for missing manual
             prompt, unknown automated prompt, or invalid prompt mode.
     """
+    prompt_lookup = {
+        prompt["id"]: prompt for prompt in prompts.get("all_prompts", []) if prompt.get("id")
+    }
+
     # --- Prepend resolution ------------------------------------------------
     prepend_value = ""
     if req.prepend_mode == "manual":
         prepend_value = (req.manual_prepend or "").strip()
     else:
         if req.prepend_prompt_id and req.prepend_prompt_id != "none":
-            p = next(
-                (x for x in prompts.get("prepend_prompts", []) if x["id"] == req.prepend_prompt_id),
-                None,
-            )
+            p = prompt_lookup.get(req.prepend_prompt_id)
             if p:
                 prepend_value = p["value"]
 
@@ -260,14 +343,7 @@ def _resolve_prompt_parts(
         main_scene = (req.manual_prompt or "").strip()
     elif req.prompt_mode == "automated":
         if req.automated_prompt_id and req.automated_prompt_id != "none":
-            ap = next(
-                (
-                    x
-                    for x in prompts.get("automated_prompts", [])
-                    if x["id"] == req.automated_prompt_id
-                ),
-                None,
-            )
+            ap = prompt_lookup.get(req.automated_prompt_id)
             if ap:
                 main_scene = ap["value"]
             elif strict:
@@ -287,10 +363,7 @@ def _resolve_prompt_parts(
         append_value = (req.manual_append or "").strip()
     else:
         if req.append_prompt_id and req.append_prompt_id != "none":
-            a = next(
-                (x for x in prompts.get("append_prompts", []) if x["id"] == req.append_prompt_id),
-                None,
-            )
+            a = prompt_lookup.get(req.append_prompt_id)
             if a:
                 append_value = a["value"]
 
@@ -332,19 +405,24 @@ async def get_config() -> dict:
     - ``version`` — API version string.
     - ``models`` — list of available model definitions (from ``models.json``),
       each including aspect ratios and inference parameter ranges.
-    - ``prepend_prompts`` — style prefix presets.
-    - ``automated_prompts`` — scene description presets.
-    - ``append_prompts`` — post-processing modifier presets.
+    - ``prepend_library`` — prompts loaded from ``prepend.json``.
+    - ``main_library`` — prompts loaded from ``main.json``.
+    - ``append_library`` — prompts loaded from ``append.json``.
+    - ``prepend_prompts`` / ``automated_prompts`` / ``append_prompts`` —
+      merged selector catalogs that allow any prompt to be used in any section.
 
     Returns:
-        Dictionary with keys ``version``, ``models``, ``prepend_prompts``,
-        ``automated_prompts``, and ``append_prompts``.
+        Dictionary with keys ``version``, ``models``, the three library keys,
+        and the three merged selector keys.
     """
     models = _load_json(DATA_DIR / "models.json", {"models": []})
-    prompts = _load_json(DATA_DIR / "prompts.json", {})
+    prompts = _load_prompt_catalog()
     return {
         "version": __version__,
         "models": models.get("models", []),
+        "prepend_library": prompts.get("prepend_library", []),
+        "main_library": prompts.get("main_library", []),
+        "append_library": prompts.get("append_library", []),
         "prepend_prompts": prompts.get("prepend_prompts", []),
         "automated_prompts": prompts.get("automated_prompts", []),
         "append_prompts": prompts.get("append_prompts", []),
@@ -383,7 +461,7 @@ async def generate_images(req: GenerateRequest) -> dict:
         )
 
     # --- Load configuration data -------------------------------------------
-    prompts = _load_json(DATA_DIR / "prompts.json", {})
+    prompts = _load_prompt_catalog()
     models_data = _load_json(DATA_DIR / "models.json", {"models": []})
 
     # --- Resolve model configuration ---------------------------------------
@@ -691,7 +769,7 @@ async def compile_prompt(req: GenerateRequest) -> dict:
     Returns:
         Dictionary with a single ``compiled_prompt`` key.
     """
-    prompts = _load_json(DATA_DIR / "prompts.json", {})
+    prompts = _load_prompt_catalog()
     prepend_value, main_scene, append_value = _resolve_prompt_parts(req, prompts, strict=False)
     compiled = build_prompt(
         prepend_value,

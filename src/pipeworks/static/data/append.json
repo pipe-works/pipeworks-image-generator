@@ -1,0 +1,34 @@
+{
+  "prompts": [
+    {
+      "id": "goblin_lab_notes",
+      "label": "Goblin & Lab Notes Typography",
+      "value": "Additional props: ink pots, loose scrolls, candles, stacks of crooked books, pinned notes, string-tied scraps, tiny marginal doodles in the corners. Typography: Large curved banner at top reading: \"GOBLIN & LAB NOTES\". Mood: Playful but obsessive. Slightly mad research energy. Chaotic curiosity. Scholarly goblin workshop atmosphere. Color: Muted parchment background with soft brown and ink-black linework. Very limited colour palette, mostly sepia and faded parchment tones."
+    },
+    {
+      "id": "cinematic_grade",
+      "label": "Cinematic Colour Grade",
+      "value": "Cinematic colour grading: teal shadows, warm highlights, crushed blacks. Anamorphic lens flare. Film grain overlay. Aspect ratio 2.39:1 letterbox bars. Dolby Vision HDR quality. Shot on ARRI Alexa."
+    },
+    {
+      "id": "high_detail",
+      "label": "High Detail & Texture",
+      "value": "Extreme detail and texture. Every surface rendered with microscopic precision. Subsurface scattering on organic materials. Physically-based rendering. Ray-traced reflections and global illumination. 8K resolution, print-quality detail."
+    },
+    {
+      "id": "moody_atmosphere",
+      "label": "Moody Atmospheric",
+      "value": "Heavy atmospheric mood. Volumetric fog and light rays. Dramatic chiaroscuro lighting. Deep shadow pools with single strong light source. Emotional weight in every shadow. The air hangs heavy with unspoken tension."
+    },
+    {
+      "id": "golden_hour",
+      "label": "Golden Hour Light",
+      "value": "Golden hour lighting. Warm amber sunlight at low angle. Long soft shadows. Rim lighting on subjects. Lens flare from direct sun. Warm colour temperature 3200K. Magic hour atmosphere."
+    },
+    {
+      "id": "award_winning",
+      "label": "Award-Winning Quality",
+      "value": "Award-winning illustration. Featured in Spectrum Fantastic Art Annual. Best of show quality. Masterful composition, colour theory, and technical execution. The kind of work that stops you in your tracks."
+    }
+  ]
+}

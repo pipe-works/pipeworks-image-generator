@@ -23,7 +23,7 @@ FastAPI
 
 Sample Data
     ``sample_models_json`` — Minimal models.json with one model definition.
-    ``sample_prompts_json`` — Minimal prompts.json with one of each prompt type.
+    ``sample_prompt_libraries`` — Minimal split prompt-library data.
 """
 
 from __future__ import annotations
@@ -142,34 +142,36 @@ def sample_models_json() -> dict:
 
 
 @pytest.fixture
-def sample_prompts_json() -> dict:
-    """Minimal prompts.json content with one of each prompt type.
-
-    Returns:
-        Dictionary matching the prompts.json schema.
-    """
+def sample_prompt_libraries() -> dict:
+    """Minimal split prompt-library content with one prompt in each file."""
     return {
-        "prepend_prompts": [
-            {
-                "id": "oil-painting",
-                "label": "Oil Painting",
-                "value": "In a classical oil painting style.",
-            },
-        ],
-        "automated_prompts": [
-            {
-                "id": "goblin-workshop",
-                "label": "Goblin Workshop",
-                "value": "A goblin repairing a clockwork automaton in a dimly lit workshop.",
-            },
-        ],
-        "append_prompts": [
-            {
-                "id": "high-detail",
-                "label": "High Detail",
-                "value": "Award-winning quality, 8K resolution, ultra-detailed.",
-            },
-        ],
+        "prepend": {
+            "prompts": [
+                {
+                    "id": "oil-painting",
+                    "label": "Oil Painting",
+                    "value": "In a classical oil painting style.",
+                },
+            ]
+        },
+        "main": {
+            "prompts": [
+                {
+                    "id": "goblin-workshop",
+                    "label": "Goblin Workshop",
+                    "value": "A goblin repairing a clockwork automaton in a dimly lit workshop.",
+                },
+            ]
+        },
+        "append": {
+            "prompts": [
+                {
+                    "id": "high-detail",
+                    "label": "High Detail",
+                    "value": "Award-winning quality, 8K resolution, ultra-detailed.",
+                },
+            ]
+        },
     }
 
 
@@ -177,23 +179,27 @@ def sample_prompts_json() -> dict:
 def tmp_data_dir(
     test_config: PipeworksConfig,
     sample_models_json: dict,
-    sample_prompts_json: dict,
+    sample_prompt_libraries: dict,
 ) -> Path:
-    """Write sample models.json and prompts.json to the test data directory.
+    """Write sample models.json and split prompt files to the test data directory.
 
     Args:
         test_config: Configuration with temp paths.
         sample_models_json: Sample model definitions.
-        sample_prompts_json: Sample prompt presets.
+        sample_prompt_libraries: Sample split prompt-library files.
 
     Returns:
-        Path to the data directory containing both JSON files.
+        Path to the data directory containing the test JSON files.
     """
     data_dir = test_config.data_dir
     with open(data_dir / "models.json", "w") as f:
         json.dump(sample_models_json, f)
-    with open(data_dir / "prompts.json", "w") as f:
-        json.dump(sample_prompts_json, f)
+    with open(data_dir / "prepend.json", "w") as f:
+        json.dump(sample_prompt_libraries["prepend"], f)
+    with open(data_dir / "main.json", "w") as f:
+        json.dump(sample_prompt_libraries["main"], f)
+    with open(data_dir / "append.json", "w") as f:
+        json.dump(sample_prompt_libraries["append"], f)
     return data_dir
 
 

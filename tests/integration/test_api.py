@@ -74,6 +74,14 @@ class TestGetConfig:
         assert "automated_prompts" in data
         assert "append_prompts" in data
 
+    def test_config_returns_split_prompt_libraries(self, test_client):
+        """Response should expose the three split prompt-library files."""
+        resp = test_client.get("/api/config")
+        data = resp.json()
+        assert "prepend_library" in data
+        assert "main_library" in data
+        assert "append_library" in data
+
     def test_disable_http_cache_adds_no_cache_headers(self, test_client):
         """No-cache headers should be emitted when local dev mode enables them."""
         from pipeworks.api import main as main_module
@@ -241,6 +249,16 @@ class TestGenerate:
         # The compiled prompt should contain the oil painting style text.
         assert "oil painting" in data["compiled_prompt"].lower()
 
+    def test_generate_prepend_can_use_main_library_prompt(self, test_client):
+        """Prepend should accept a prompt sourced from main.json."""
+        resp = test_client.post(
+            "/api/generate",
+            json=self._make_generate_payload(prepend_prompt_id="goblin-workshop"),
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "clockwork automaton" in data["compiled_prompt"].lower()
+
     def test_generate_with_append_prompt(self, test_client):
         """A valid append_prompt_id should be resolved into the compiled prompt."""
         resp = test_client.post(
@@ -397,6 +415,26 @@ class TestPromptCompile:
         assert resp.status_code == 200
         data = resp.json()
         assert "goblin" in data["compiled_prompt"].lower()
+
+    def test_compile_automated_can_use_append_library_prompt(self, test_client):
+        """Main scene should accept a prompt sourced from append.json."""
+        resp = test_client.post(
+            "/api/prompt/compile",
+            json={
+                "model_id": "z-image-turbo",
+                "prepend_prompt_id": "none",
+                "prompt_mode": "automated",
+                "automated_prompt_id": "high-detail",
+                "aspect_ratio_id": "1:1",
+                "width": 1024,
+                "height": 1024,
+                "steps": 4,
+                "guidance": 0.0,
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "award-winning quality" in data["compiled_prompt"].lower()
 
     def test_compile_automated_none_omits_scene(self, test_client):
         """Automated mode should allow the scene preset to be omitted."""

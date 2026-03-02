@@ -1,0 +1,44 @@
+{
+  "prompts": [
+    {
+      "id": "ledgerfall_pamphlet",
+      "label": "Ledgerfall Pamphleteer",
+      "value": "A horizontal, aged parchment poster in a whimsical Ledgerfall pamphleteer style. Hand-inked illustration with slightly crooked linework, warm sepia tones, soft ink bleed, delicate marginalia and decorative corner flourishes. The aesthetic feels like an old guild notice pinned in a goblin workshop — part lab diagram, part folklore warning. Detailed cross-hatching, old woodcut engraving texture, medieval fantasy sketchbook energy. Uneven bold lettering, hand-drawn banners, playful annotations and scattered scraps of paper."
+    },
+    {
+      "id": "oil_painting_classic",
+      "label": "Classical Oil Painting",
+      "value": "A classical oil painting in the style of the Dutch Golden Age masters. Rich chiaroscuro lighting, deep shadows, warm candlelight tones. Thick impasto brushwork, cracked varnish texture, aged canvas grain. Formal composition with dramatic tenebrism. Museum-quality rendering with meticulous attention to fabric, skin, and material surfaces."
+    },
+    {
+      "id": "ink_wash",
+      "label": "East Asian Ink Wash",
+      "value": "A traditional East Asian ink wash painting (sumi-e style). Minimal, expressive brushstrokes on aged rice paper. Negative space as compositional element. Subtle gradients from deep black to pale grey. Occasional red seal stamp motif. Meditative, sparse, deeply intentional mark-making."
+    },
+    {
+      "id": "art_nouveau",
+      "label": "Art Nouveau Poster",
+      "value": "An Art Nouveau decorative poster in the style of Alphonse Mucha. Flowing organic lines, floral and botanical motifs, ornate decorative borders. Soft pastel palette with gold accents. Elegant feminine curves, stylised natural forms. Lithographic print texture, flat colour areas with fine line detail."
+    },
+    {
+      "id": "photorealistic",
+      "label": "Photorealistic",
+      "value": "Ultra-photorealistic, shot on a high-end digital camera. Natural lighting, shallow depth of field, sharp focus on subject. Cinematic colour grading, film grain. Professional photography composition. 8K resolution quality."
+    },
+    {
+      "id": "pixel_art",
+      "label": "Pixel Art",
+      "value": "Retro pixel art style, 16-bit era aesthetic. Limited colour palette, hard pixel edges, no anti-aliasing. Isometric or side-scrolling game sprite feel. Nostalgic SNES/Amiga era visual language. Crisp, deliberate pixel placement."
+    },
+    {
+      "id": "watercolour",
+      "label": "Watercolour Illustration",
+      "value": "Delicate watercolour illustration on textured cold-press paper. Soft wet-on-wet bleeds, granulation effects, visible paper texture. Loose expressive washes, subtle colour blooms. Ink outline with watercolour fill. Botanical illustration quality."
+    },
+    {
+      "id": "concept_art",
+      "label": "Concept Art / Matte Painting",
+      "value": "Professional concept art and matte painting style. Cinematic wide-angle composition, dramatic atmospheric perspective. Detailed environment design, strong silhouette language. Used for AAA game or film pre-production. Painterly but precise, with clear narrative intent."
+    }
+  ]
+}

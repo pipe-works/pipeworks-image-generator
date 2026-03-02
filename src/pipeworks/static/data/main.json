@@ -1,0 +1,44 @@
+{
+  "prompts": [
+    {
+      "id": "goblin_workshop",
+      "label": "Goblin Workshop Scene",
+      "value": "A chaotic goblin alchemist workshop. Bubbling potions in mismatched bottles, stacks of crooked books tied with string, scattered scrolls covered in frantic handwriting. A goblin in a leather apron peers through a cracked magnifying glass at a glowing specimen. Candles dripping wax onto cluttered benches. Shelves overflowing with labelled jars of dubious contents."
+    },
+    {
+      "id": "ancient_library",
+      "label": "Ancient Library",
+      "value": "A vast ancient library stretching into impossible heights. Towering bookshelves carved from dark oak, connected by precarious spiral staircases. Dusty tomes with cracked spines, illuminated manuscripts open on reading stands. Shafts of amber light filtering through stained glass windows. A lone scholar with ink-stained fingers studies by candlelight."
+    },
+    {
+      "id": "forest_spirit",
+      "label": "Forest Spirit Encounter",
+      "value": "A luminous forest spirit emerging from the mist between ancient trees. Bioluminescent tendrils of light weave through the undergrowth. Moss-covered stones form a natural altar. Fireflies drift in slow spirals. The spirit's form is half-human, half-tree, with bark-textured skin and leaves for hair."
+    },
+    {
+      "id": "clockwork_city",
+      "label": "Clockwork City",
+      "value": "A steampunk clockwork city at dusk. Massive brass gears turn in the sky, connected by chains and drive shafts. Steam vents billow white clouds. Gas lamps flicker on cobblestone streets. Airships dock at towering mooring masts. Citizens in Victorian attire navigate the mechanical metropolis."
+    },
+    {
+      "id": "underwater_ruins",
+      "label": "Underwater Ruins",
+      "value": "Sunken ancient ruins beneath a crystal-clear tropical sea. Coral has colonised crumbling stone columns. Schools of colourful fish weave between broken archways. Shafts of sunlight pierce the water in god-rays. A massive stone face, half-buried in sand, gazes upward. Sea anemones bloom in crevices."
+    },
+    {
+      "id": "winter_market",
+      "label": "Winter Night Market",
+      "value": "A bustling medieval winter market at night. Stalls hung with lanterns and garlands. Merchants in thick furs sell exotic wares. Snow falls softly on cobblestones. The smell of spiced wine and roasting chestnuts implied through visual warmth. Children chase each other between the stalls. A bard plays near a central bonfire."
+    },
+    {
+      "id": "dragon_lair",
+      "label": "Dragon's Hoard Lair",
+      "value": "A dragon's lair deep within a volcanic mountain. Mountains of gold coins, gemstones, and ancient artefacts. A massive dragon coiled atop the hoard, one eye half-open. Lava flows in channels carved into the rock floor. Stalactites drip with mineral deposits. The air shimmers with heat."
+    },
+    {
+      "id": "celestial_observatory",
+      "label": "Celestial Observatory",
+      "value": "An ancient celestial observatory atop a mountain peak. A massive brass orrery tracks planetary movements in the domed hall. Star charts cover every surface. An astronomer in robes adjusts a telescope aimed at a comet. The dome is open to a sky blazing with stars and nebulae."
+    }
+  ]
+}
