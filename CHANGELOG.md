@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.8](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.2.7...pipeworks-image-generator-v0.2.8) (2026-03-02)
+
+
+### Features
+
+* add prompt composer clipboard actions ([054911f](https://github.com/pipe-works/pipeworks-image-generator/commit/054911fdd046b1c83dea04f7572cc24c81e2f980))
+* add prompt composer clipboard actions ([392f408](https://github.com/pipe-works/pipeworks-image-generator/commit/392f408349b35573e6d028115ac8b61f0b7a8066))
+* expand batch size and add local no-cache mode ([#29](https://github.com/pipe-works/pipeworks-image-generator/issues/29)) ([907f0c6](https://github.com/pipe-works/pipeworks-image-generator/commit/907f0c6267358e1e90e55eb23923cecd70c3e073))
+* make generation sections collapsible ([faebdab](https://github.com/pipe-works/pipeworks-image-generator/commit/faebdabec600ed43b90a377266575b56e8dda4a9))
+* make generation sections collapsible ([6ea3bd6](https://github.com/pipe-works/pipeworks-image-generator/commit/6ea3bd69b647aebccb23dca2febc8f8309f69d1d))
+* split prompt libraries by section ([#31](https://github.com/pipe-works/pipeworks-image-generator/issues/31)) ([9121c96](https://github.com/pipe-works/pipeworks-image-generator/commit/9121c96c6e8ae607749821abd2be7937f839c79a))
+
 ## [0.2.7](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.2.6...pipeworks-image-generator-v0.2.7) (2026-03-02)
 
 
