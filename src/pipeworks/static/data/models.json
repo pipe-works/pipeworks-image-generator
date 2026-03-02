@@ -24,7 +24,7 @@
         { "id": "2:3", "label": "2:3 Portrait", "width": 768, "height": 1152 }
       ],
       "default_aspect": "1:1",
-      "max_prompt_tokens": 77
+      "max_prompt_tokens": 512
     },
     {
       "id": "sd-v1-5",
