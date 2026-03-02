@@ -84,7 +84,7 @@ At the time of writing:
 
 ## Important Paths
 
-- `src/pipeworks/api/main.py`: FastAPI app, routes, lifespan, CLI entry point
+- `src/pipeworks/api/main.py`: FastAPI app, routes, prompt-library loading, lifespan, CLI entry point
 - `src/pipeworks/api/models.py`: request/response validation models
 - `src/pipeworks/api/prompt_builder.py`: prompt compilation logic
 - `src/pipeworks/core/config.py`: Pydantic settings and directory setup
@@ -97,6 +97,9 @@ At the time of writing:
 
 - `PipeworksConfig` is loaded via Pydantic Settings using `PIPEWORKS_*` environment variables and `.env`.
 - `pipeworks.api.main` resolves config paths at import time and mounts static files immediately.
+- Prompt libraries are split across `static/data/prepend.json`,
+  `static/data/main.json`, and `static/data/append.json`, then merged for UI
+  selection.
 - Gallery persistence is file-based JSON under `static/data/`, not SQLite.
 - Generated images are stored under `static/gallery/`.
 - The frontend is plain HTML/CSS/JS with no bundler or build step.

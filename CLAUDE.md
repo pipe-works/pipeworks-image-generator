@@ -111,7 +111,7 @@ src/pipeworks/
 ├── static/                # Web-accessible static assets (served at /static/)
 │   ├── css/               # Stylesheets (app.css, pipe-works-base.css, fonts)
 │   ├── js/                # Frontend JavaScript (app.js)
-│   ├── data/              # models.json, prompts.json, gallery.json
+│   ├── data/              # models.json, prepend.json, main.json, append.json, gallery.json
 │   ├── fonts/             # Woff2 font files (16 files)
 │   └── gallery/           # Generated images (gitignored, auto-created)
 └── templates/             # HTML templates

@@ -32,7 +32,7 @@ class GenerateRequest(BaseModel):
     Attributes:
         model_id: Identifier of the model to use (must match an ``id`` value
             in ``models.json``).
-        prepend_mode: Either ``"template"`` (preset from ``prompts.json``) or
+        prepend_mode: Either ``"template"`` (preset from the prompt library) or
             ``"manual"`` (user-supplied text).  Defaults to ``"template"``.
         prepend_prompt_id: Identifier of the prepend style prompt to apply.
             Use ``"none"`` to skip.  Used when ``prepend_mode`` is
@@ -45,7 +45,7 @@ class GenerateRequest(BaseModel):
             ``"manual"``.
         automated_prompt_id: Identifier of the automated scene preset.
             Optional when ``prompt_mode`` is ``"automated"``.
-        append_mode: Either ``"template"`` (preset from ``prompts.json``) or
+        append_mode: Either ``"template"`` (preset from the prompt library) or
             ``"manual"`` (user-supplied text).  Defaults to ``"template"``.
         append_prompt_id: Identifier of the append modifier.  Use
             ``"none"`` to skip.  Used when ``append_mode`` is ``"template"``.
