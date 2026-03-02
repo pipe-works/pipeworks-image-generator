@@ -126,6 +126,7 @@ def sample_models_json() -> dict:
                 "hf_id": "Tongyi-MAI/Z-Image-Turbo",
                 "label": "Z-Image Turbo",
                 "description": "Fast turbo model for quick generation.",
+                "max_prompt_tokens": 512,
                 "aspect_ratios": [
                     {"id": "1:1", "label": "Square 1:1", "width": 1024, "height": 1024},
                     {"id": "16:9", "label": "Wide 16:9", "width": 1280, "height": 720},

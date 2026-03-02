@@ -58,6 +58,14 @@ class TestGetConfig:
         assert isinstance(data["models"], list)
         assert len(data["models"]) >= 1
 
+    def test_config_exposes_z_image_prompt_limit(self, test_client):
+        """Z-Image should expose its Qwen-based 512-token prompt budget."""
+        resp = test_client.get("/api/config")
+        assert resp.status_code == 200
+        data = resp.json()
+        z_image = next(model for model in data["models"] if model["id"] == "z-image-turbo")
+        assert z_image["max_prompt_tokens"] == 512
+
     def test_config_returns_prompts(self, test_client):
         """Response should include all three prompt categories."""
         resp = test_client.get("/api/config")
