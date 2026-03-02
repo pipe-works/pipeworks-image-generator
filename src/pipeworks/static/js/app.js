@@ -13,6 +13,7 @@ import { createOutputLightboxController } from "./output-lightbox.mjs";
 "use strict";
 
 const MAX_BATCH_SIZE = 1000;
+const COPY_FEEDBACK_MS = 1200;
 const SECTION_COLLAPSE_STORAGE_PREFIX = "pw-section-collapsed:";
 
 // ── State ──────────────────────────────────────────────────────────────────────
@@ -118,6 +119,15 @@ function applyTheme(theme) {
 
 function toggleTheme() {
   applyTheme(State.theme === "dark" ? "light" : "dark");
+}
+
+function flashButtonLabel(button, activeLabel, defaultLabel, duration = COPY_FEEDBACK_MS) {
+  if (!button) return;
+
+  button.textContent = activeLabel;
+  window.setTimeout(() => {
+    button.textContent = defaultLabel;
+  }, duration);
 }
 
 function setSectionCollapsed(section, collapsed) {
@@ -312,6 +322,36 @@ function onAspectChange() {
   }
 }
 
+function setPrependMode(mode) {
+  State.prependMode = mode;
+  $("#btn-prepend-template").classList.toggle("is-active", mode === "template");
+  $("#btn-prepend-manual").classList.toggle("is-active", mode === "manual");
+  $("#prepend-template-wrap").style.display = mode === "template" ? "" : "none";
+  $("#prepend-manual-wrap").style.display = mode === "manual" ? "" : "none";
+  updateTokenCounters();
+  schedulePromptPreview();
+}
+
+function setMainPromptMode(mode) {
+  State.promptMode = mode;
+  $("#btn-mode-manual").classList.toggle("is-active", mode === "manual");
+  $("#btn-mode-auto").classList.toggle("is-active", mode === "automated");
+  $("#prompt-manual-wrap").style.display = mode === "manual" ? "" : "none";
+  $("#prompt-auto-wrap").style.display = mode === "automated" ? "" : "none";
+  updateTokenCounters();
+  schedulePromptPreview();
+}
+
+function setAppendMode(mode) {
+  State.appendMode = mode;
+  $("#btn-append-template").classList.toggle("is-active", mode === "template");
+  $("#btn-append-manual").classList.toggle("is-active", mode === "manual");
+  $("#append-template-wrap").style.display = mode === "template" ? "" : "none";
+  $("#append-manual-wrap").style.display = mode === "manual" ? "" : "none";
+  updateTokenCounters();
+  schedulePromptPreview();
+}
+
 
 // ── Token estimation ──────────────────────────────────────────────────────────
 
@@ -362,6 +402,75 @@ function getPromptSectionText(section) {
   }
 
   return "";
+}
+
+function getPromptSectionDisplayName(section) {
+  if (section === "prepend") return "prepend style";
+  if (section === "main") return "main scene";
+  if (section === "append") return "append modifier";
+  return "prompt section";
+}
+
+function setPromptSectionManualText(section, text) {
+  if (section === "prepend") {
+    setPrependMode("manual");
+    const textarea = $("#txt-manual-prepend");
+    textarea.value = text;
+    textarea.focus();
+    return;
+  }
+
+  if (section === "main") {
+    setMainPromptMode("manual");
+    const textarea = $("#txt-manual-prompt");
+    textarea.value = text;
+    textarea.focus();
+    return;
+  }
+
+  if (section === "append") {
+    setAppendMode("manual");
+    const textarea = $("#txt-manual-append");
+    textarea.value = text;
+    textarea.focus();
+  }
+}
+
+async function copyPromptSection(section, button) {
+  const text = getPromptSectionText(section);
+  if (!text.trim()) {
+    toast(`No ${getPromptSectionDisplayName(section)} text to copy`, "info");
+    return;
+  }
+
+  if (!navigator.clipboard?.writeText) {
+    toast("Clipboard copy unavailable", "err");
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(text);
+    flashButtonLabel(button, "Copied", "Copy");
+  } catch (_) {
+    toast("Clipboard copy failed", "err");
+  }
+}
+
+async function pastePromptSection(section, button) {
+  if (!navigator.clipboard?.readText) {
+    toast("Clipboard paste unavailable", "err");
+    return;
+  }
+
+  try {
+    const text = await navigator.clipboard.readText();
+    setPromptSectionManualText(section, text);
+    updateTokenCounters();
+    schedulePromptPreview();
+    flashButtonLabel(button, "Pasted", "Paste");
+  } catch (_) {
+    toast("Clipboard paste failed", "err");
+  }
 }
 
 /**
@@ -1269,60 +1378,35 @@ function wireEvents() {
   $("#sel-aspect").addEventListener("change", onAspectChange);
 
   // Prepend mode toggle
-  $("#btn-prepend-template").addEventListener("click", () => {
-    State.prependMode = "template";
-    $("#btn-prepend-template").classList.add("is-active");
-    $("#btn-prepend-manual").classList.remove("is-active");
-    $("#prepend-template-wrap").style.display = "";
-    $("#prepend-manual-wrap").style.display = "none";
-    schedulePromptPreview();
-  });
-
-  $("#btn-prepend-manual").addEventListener("click", () => {
-    State.prependMode = "manual";
-    $("#btn-prepend-manual").classList.add("is-active");
-    $("#btn-prepend-template").classList.remove("is-active");
-    $("#prepend-manual-wrap").style.display = "";
-    $("#prepend-template-wrap").style.display = "none";
-    schedulePromptPreview();
-  });
+  $("#btn-prepend-template").addEventListener("click", () => setPrependMode("template"));
+  $("#btn-prepend-manual").addEventListener("click", () => setPrependMode("manual"));
 
   // Main scene prompt mode toggle
-  $("#btn-mode-manual").addEventListener("click", () => {
-    State.promptMode = "manual";
-    $("#btn-mode-manual").classList.add("is-active");
-    $("#btn-mode-auto").classList.remove("is-active");
-    $("#prompt-manual-wrap").style.display = "";
-    $("#prompt-auto-wrap").style.display = "none";
-    schedulePromptPreview();
-  });
-
-  $("#btn-mode-auto").addEventListener("click", () => {
-    State.promptMode = "automated";
-    $("#btn-mode-auto").classList.add("is-active");
-    $("#btn-mode-manual").classList.remove("is-active");
-    $("#prompt-auto-wrap").style.display = "";
-    $("#prompt-manual-wrap").style.display = "none";
-    schedulePromptPreview();
-  });
+  $("#btn-mode-manual").addEventListener("click", () => setMainPromptMode("manual"));
+  $("#btn-mode-auto").addEventListener("click", () => setMainPromptMode("automated"));
 
   // Append mode toggle
-  $("#btn-append-template").addEventListener("click", () => {
-    State.appendMode = "template";
-    $("#btn-append-template").classList.add("is-active");
-    $("#btn-append-manual").classList.remove("is-active");
-    $("#append-template-wrap").style.display = "";
-    $("#append-manual-wrap").style.display = "none";
-    schedulePromptPreview();
-  });
+  $("#btn-append-template").addEventListener("click", () => setAppendMode("template"));
+  $("#btn-append-manual").addEventListener("click", () => setAppendMode("manual"));
 
-  $("#btn-append-manual").addEventListener("click", () => {
-    State.appendMode = "manual";
-    $("#btn-append-manual").classList.add("is-active");
-    $("#btn-append-template").classList.remove("is-active");
-    $("#append-manual-wrap").style.display = "";
-    $("#append-template-wrap").style.display = "none";
-    schedulePromptPreview();
+  // Prompt section clipboard controls
+  $("#btn-copy-prepend").addEventListener("click", function () {
+    copyPromptSection("prepend", this);
+  });
+  $("#btn-paste-prepend").addEventListener("click", function () {
+    pastePromptSection("prepend", this);
+  });
+  $("#btn-copy-main").addEventListener("click", function () {
+    copyPromptSection("main", this);
+  });
+  $("#btn-paste-main").addEventListener("click", function () {
+    pastePromptSection("main", this);
+  });
+  $("#btn-copy-append").addEventListener("click", function () {
+    copyPromptSection("append", this);
+  });
+  $("#btn-paste-append").addEventListener("click", function () {
+    pastePromptSection("append", this);
   });
 
   // Prompt inputs → live preview + token counters

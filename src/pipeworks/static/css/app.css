@@ -328,6 +328,21 @@ html, body {
   flex: 1;
 }
 
+.control-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-1);
+}
+
+.control-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  flex-shrink: 0;
+}
+
 
 /* ── Token counters ──────────────────────────────────────────────────────── */
 
