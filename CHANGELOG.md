@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.10](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.2.9...pipeworks-image-generator-v0.2.10) (2026-03-02)
+
+
+### Bug Fixes
+
+* remove prompt composer paste buttons ([898cacf](https://github.com/pipe-works/pipeworks-image-generator/commit/898cacf4bf16927ed58b648bc254c67a7b822b9f))
+* remove prompt composer paste buttons ([8170ebe](https://github.com/pipe-works/pipeworks-image-generator/commit/8170ebe341c51f4e0058ab8d2d269d2ca53c24e3))
+
 ## [0.2.9](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.2.8...pipeworks-image-generator-v0.2.9) (2026-03-02)
 
 
