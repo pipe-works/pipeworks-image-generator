@@ -411,10 +411,22 @@ function getPromptSectionDisplayName(section) {
   return "prompt section";
 }
 
+function getPromptSectionTextarea(section) {
+  if (section === "prepend") return $("#txt-manual-prepend");
+  if (section === "main") return $("#txt-manual-prompt");
+  if (section === "append") return $("#txt-manual-append");
+  return null;
+}
+
+function getPasteShortcutLabel() {
+  const platform = navigator.userAgentData?.platform || navigator.platform || "";
+  return /mac/i.test(platform) ? "Cmd+V" : "Ctrl+V";
+}
+
 function setPromptSectionManualText(section, text) {
   if (section === "prepend") {
     setPrependMode("manual");
-    const textarea = $("#txt-manual-prepend");
+    const textarea = getPromptSectionTextarea(section);
     textarea.value = text;
     textarea.focus();
     return;
@@ -422,7 +434,7 @@ function setPromptSectionManualText(section, text) {
 
   if (section === "main") {
     setMainPromptMode("manual");
-    const textarea = $("#txt-manual-prompt");
+    const textarea = getPromptSectionTextarea(section);
     textarea.value = text;
     textarea.focus();
     return;
@@ -430,10 +442,27 @@ function setPromptSectionManualText(section, text) {
 
   if (section === "append") {
     setAppendMode("manual");
-    const textarea = $("#txt-manual-append");
+    const textarea = getPromptSectionTextarea(section);
     textarea.value = text;
     textarea.focus();
   }
+}
+
+function preparePromptSectionForManualPaste(section) {
+  if (section === "prepend") {
+    setPrependMode("manual");
+  } else if (section === "main") {
+    setMainPromptMode("manual");
+  } else if (section === "append") {
+    setAppendMode("manual");
+  }
+
+  const textarea = getPromptSectionTextarea(section);
+  if (!textarea) return null;
+
+  textarea.focus();
+  textarea.select();
+  return textarea;
 }
 
 async function copyPromptSection(section, button) {
@@ -457,19 +486,25 @@ async function copyPromptSection(section, button) {
 }
 
 async function pastePromptSection(section, button) {
+  const textarea = preparePromptSectionForManualPaste(section);
+  if (!textarea) return;
+
   if (!navigator.clipboard?.readText) {
-    toast("Clipboard paste unavailable", "err");
+    toast(`Clipboard read is blocked here. Press ${getPasteShortcutLabel()} to replace the section.`, "info", 2500);
+    flashButtonLabel(button, "Ready", "Paste");
     return;
   }
 
   try {
     const text = await navigator.clipboard.readText();
-    setPromptSectionManualText(section, text);
+    textarea.value = text;
+    textarea.focus();
     updateTokenCounters();
     schedulePromptPreview();
     flashButtonLabel(button, "Pasted", "Paste");
   } catch (_) {
-    toast("Clipboard paste failed", "err");
+    toast(`Clipboard read is blocked here. Press ${getPasteShortcutLabel()} to replace the section.`, "info", 2500);
+    flashButtonLabel(button, "Ready", "Paste");
   }
 }
 
