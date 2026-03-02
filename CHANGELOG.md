@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.7](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.2.6...pipeworks-image-generator-v0.2.7) (2026-03-02)
+
+
+### Bug Fixes
+
+* make prompt composer sections optional ([#27](https://github.com/pipe-works/pipeworks-image-generator/issues/27)) ([8920d90](https://github.com/pipe-works/pipeworks-image-generator/commit/8920d90b8becc530825eba7c3f481a3ad957a04d))
+
 ## [0.2.6](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.2.5...pipeworks-image-generator-v0.2.6) (2026-03-02)
 
 
