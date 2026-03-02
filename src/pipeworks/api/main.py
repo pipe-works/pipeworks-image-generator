@@ -231,19 +231,9 @@ def _resolve_prompt_parts(
     # --- Main scene resolution ---------------------------------------------
     main_scene = ""
     if req.prompt_mode == "manual":
-        if strict and (not req.manual_prompt or not req.manual_prompt.strip()):
-            raise HTTPException(
-                status_code=400,
-                detail="manual_prompt is required in manual mode",
-            )
         main_scene = (req.manual_prompt or "").strip()
     elif req.prompt_mode == "automated":
-        if strict and not req.automated_prompt_id:
-            raise HTTPException(
-                status_code=400,
-                detail="automated_prompt_id is required in automated mode",
-            )
-        if req.automated_prompt_id:
+        if req.automated_prompt_id and req.automated_prompt_id != "none":
             ap = next(
                 (
                     x
@@ -356,8 +346,8 @@ async def generate_images(req: GenerateRequest) -> dict:
         ``compiled_prompt``, and ``images`` (list of gallery entries).
 
     Raises:
-        HTTPException: 400 for invalid batch size, unknown model, missing
-            prompt, or unknown prompt mode.
+        HTTPException: 400 for invalid batch size, unknown model,
+            or unknown prompt mode.
     """
     # --- Validate batch size -----------------------------------------------
     if req.batch_size < 1 or req.batch_size > 16:

@@ -146,7 +146,7 @@ class TestGenerate:
         assert "Unknown model" in resp.json()["detail"]
 
     def test_generate_manual_missing_prompt(self, test_client):
-        """Manual mode without a prompt should return 400."""
+        """Manual mode without a prompt should still generate successfully."""
         resp = test_client.post(
             "/api/generate",
             json=self._make_generate_payload(
@@ -154,8 +154,8 @@ class TestGenerate:
                 manual_prompt="",
             ),
         )
-        assert resp.status_code == 400
-        assert "manual_prompt" in resp.json()["detail"]
+        assert resp.status_code == 200
+        assert resp.json()["success"] is True
 
     def test_generate_automated_mode(self, test_client):
         """Automated mode with a valid preset should succeed."""
@@ -172,7 +172,7 @@ class TestGenerate:
         assert data["success"] is True
 
     def test_generate_automated_missing_id(self, test_client):
-        """Automated mode without automated_prompt_id should return 400."""
+        """Automated mode without automated_prompt_id should still succeed."""
         resp = test_client.post(
             "/api/generate",
             json=self._make_generate_payload(
@@ -180,7 +180,8 @@ class TestGenerate:
                 automated_prompt_id=None,
             ),
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 200
+        assert resp.json()["success"] is True
 
     def test_generate_invalid_prompt_mode(self, test_client):
         """An invalid prompt_mode should return 400."""
@@ -335,6 +336,26 @@ class TestPromptCompile:
         assert "A test scene." in data["compiled_prompt"]
         assert "Main Scene:" in data["compiled_prompt"]
 
+    def test_compile_blank_manual_prompt_omits_main_scene_header(self, test_client):
+        """Blank manual scene text should not emit an empty Main Scene section."""
+        resp = test_client.post(
+            "/api/prompt/compile",
+            json={
+                "model_id": "z-image-turbo",
+                "prepend_prompt_id": "none",
+                "prompt_mode": "manual",
+                "manual_prompt": "",
+                "aspect_ratio_id": "1:1",
+                "width": 1024,
+                "height": 1024,
+                "steps": 4,
+                "guidance": 0.0,
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "Main Scene:" not in data["compiled_prompt"]
+
     def test_compile_automated_prompt(self, test_client):
         """Automated prompt should resolve the preset value."""
         resp = test_client.post(
@@ -354,6 +375,26 @@ class TestPromptCompile:
         assert resp.status_code == 200
         data = resp.json()
         assert "goblin" in data["compiled_prompt"].lower()
+
+    def test_compile_automated_none_omits_scene(self, test_client):
+        """Automated mode should allow the scene preset to be omitted."""
+        resp = test_client.post(
+            "/api/prompt/compile",
+            json={
+                "model_id": "z-image-turbo",
+                "prepend_prompt_id": "none",
+                "prompt_mode": "automated",
+                "automated_prompt_id": "none",
+                "aspect_ratio_id": "1:1",
+                "width": 1024,
+                "height": 1024,
+                "steps": 4,
+                "guidance": 0.0,
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "Main Scene:" not in data["compiled_prompt"]
 
     def test_compile_manual_prepend(self, test_client):
         """Manual prepend mode should include free-text prepend in compiled prompt."""
