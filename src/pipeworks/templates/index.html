@@ -55,24 +55,45 @@
         <aside class="gen-controls" id="gen-controls">
 
           <!-- Model selection -->
-          <div class="ctrl-section">
-            <div class="ctrl-section__heading">Model</div>
-            <div class="ctrl-full">
-              <label class="control-label">Diffusion Model</label>
-              <select class="select" id="sel-model" style="width:100%"></select>
-            </div>
-            <div class="model-info-card" id="model-info-card">
-              <div class="model-info-card__name" id="model-info-name">—</div>
-              <div id="model-info-desc">Select a model above</div>
-              <a class="model-info-card__link" id="model-info-link" href="#" target="_blank" rel="noopener">
-                View on HuggingFace →
-              </a>
+          <div class="ctrl-section" id="model-section" data-collapse-key="model">
+            <button
+              class="ctrl-section__heading ctrl-section__heading--toggle"
+              data-section-toggle
+              type="button"
+              aria-expanded="true"
+              aria-controls="model-section-body"
+            >
+              <span>Model</span>
+              <span class="ctrl-section__chevron">▾</span>
+            </button>
+            <div class="ctrl-section__body" id="model-section-body">
+              <div class="ctrl-full">
+                <label class="control-label">Diffusion Model</label>
+                <select class="select" id="sel-model" style="width:100%"></select>
+              </div>
+              <div class="model-info-card" id="model-info-card">
+                <div class="model-info-card__name" id="model-info-name">—</div>
+                <div id="model-info-desc">Select a model above</div>
+                <a class="model-info-card__link" id="model-info-link" href="#" target="_blank" rel="noopener">
+                  View on HuggingFace →
+                </a>
+              </div>
             </div>
           </div>
 
           <!-- Prompt composition -->
-          <div class="ctrl-section">
-            <div class="ctrl-section__heading">Prompt Composer</div>
+          <div class="ctrl-section" id="prompt-section" data-collapse-key="prompt">
+            <button
+              class="ctrl-section__heading ctrl-section__heading--toggle"
+              data-section-toggle
+              type="button"
+              aria-expanded="true"
+              aria-controls="prompt-section-body"
+            >
+              <span>Prompt Composer</span>
+              <span class="ctrl-section__chevron">▾</span>
+            </button>
+            <div class="ctrl-section__body" id="prompt-section-body">
 
             <!-- Prepend style -->
             <div>
@@ -164,11 +185,22 @@
                 Select options above to preview the compiled prompt…
               </div>
             </div>
+            </div>
           </div>
 
           <!-- Image settings -->
-          <div class="ctrl-section">
-            <div class="ctrl-section__heading">Image Settings</div>
+          <div class="ctrl-section" id="image-settings-section" data-collapse-key="image-settings">
+            <button
+              class="ctrl-section__heading ctrl-section__heading--toggle"
+              data-section-toggle
+              type="button"
+              aria-expanded="true"
+              aria-controls="image-settings-section-body"
+            >
+              <span>Image Settings</span>
+              <span class="ctrl-section__chevron">▾</span>
+            </button>
+            <div class="ctrl-section__body" id="image-settings-section-body">
 
             <!-- Aspect ratio -->
             <div class="ctrl-full">
@@ -205,11 +237,22 @@
               <label class="control-label">Scheduler / Sampler</label>
               <select class="select" id="sel-scheduler" style="width:100%"></select>
             </div>
+            </div>
           </div>
 
           <!-- Seed & batch -->
-          <div class="ctrl-section">
-            <div class="ctrl-section__heading">Seed &amp; Batch</div>
+          <div class="ctrl-section" id="seed-batch-section" data-collapse-key="seed-batch">
+            <button
+              class="ctrl-section__heading ctrl-section__heading--toggle"
+              data-section-toggle
+              type="button"
+              aria-expanded="true"
+              aria-controls="seed-batch-section-body"
+            >
+              <span>Seed &amp; Batch</span>
+              <span class="ctrl-section__chevron">▾</span>
+            </button>
+            <div class="ctrl-section__body" id="seed-batch-section-body">
 
             <!-- Seed -->
             <div>
@@ -251,6 +294,7 @@
                 <button class="batch-counter__btn" id="btn-batch-inc">+</button>
                 <span class="u-muted" style="font-size:var(--text-xs);font-family:var(--font-mono)">image(s)</span>
               </div>
+            </div>
             </div>
           </div>
 

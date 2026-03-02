@@ -13,6 +13,7 @@ import { createOutputLightboxController } from "./output-lightbox.mjs";
 "use strict";
 
 const MAX_BATCH_SIZE = 1000;
+const SECTION_COLLAPSE_STORAGE_PREFIX = "pw-section-collapsed:";
 
 // ── State ──────────────────────────────────────────────────────────────────────
 
@@ -117,6 +118,36 @@ function applyTheme(theme) {
 
 function toggleTheme() {
   applyTheme(State.theme === "dark" ? "light" : "dark");
+}
+
+function setSectionCollapsed(section, collapsed) {
+  const button = section.querySelector("[data-section-toggle]");
+  if (!button) return;
+
+  section.classList.toggle("is-collapsed", collapsed);
+  button.setAttribute("aria-expanded", collapsed ? "false" : "true");
+
+  const collapseKey = section.dataset.collapseKey;
+  if (collapseKey) {
+    localStorage.setItem(
+      `${SECTION_COLLAPSE_STORAGE_PREFIX}${collapseKey}`,
+      collapsed ? "true" : "false",
+    );
+  }
+}
+
+function toggleSection(section) {
+  setSectionCollapsed(section, !section.classList.contains("is-collapsed"));
+}
+
+function initializeCollapsibleSections() {
+  $$(".ctrl-section[data-collapse-key]").forEach(section => {
+    const collapseKey = section.dataset.collapseKey;
+    const isCollapsed = localStorage.getItem(
+      `${SECTION_COLLAPSE_STORAGE_PREFIX}${collapseKey}`,
+    ) === "true";
+    setSectionCollapsed(section, isCollapsed);
+  });
 }
 
 
@@ -1218,6 +1249,13 @@ function wireEvents() {
 
   // Theme toggle
   $("#btn-theme-toggle").addEventListener("click", toggleTheme);
+  $$("[data-section-toggle]").forEach(button => {
+    button.addEventListener("click", () => {
+      const section = button.closest(".ctrl-section");
+      if (!section) return;
+      toggleSection(section);
+    });
+  });
 
   // Tab navigation
   $$(".tab-nav__item").forEach(btn => {
@@ -1432,6 +1470,7 @@ async function init() {
   // Restore theme
   const savedTheme = localStorage.getItem("pw-theme") || "dark";
   applyTheme(savedTheme);
+  initializeCollapsibleSections();
 
   setStatus("Loading config…", true);
   wireEvents();
