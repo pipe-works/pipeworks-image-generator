@@ -903,13 +903,32 @@ html, body {
   color: var(--col-accent);
 }
 
-.batch-counter__value {
+.batch-counter__input {
   font-family: var(--font-mono);
   font-size: var(--text-base);
   font-weight: 700;
-  color: var(--col-accent);
-  min-width: 24px;
+  color: var(--col-text);
+  width: 84px;
   text-align: center;
+  border: 1px solid var(--col-border);
+  border-radius: var(--radius-sm);
+  background: var(--col-surface-2);
+  padding: 0.25rem 0.4rem;
+  appearance: textfield;
+  -moz-appearance: textfield;
+  -webkit-text-fill-color: var(--col-text);
+  caret-color: var(--col-accent);
+}
+
+.batch-counter__input:focus {
+  outline: none;
+  border-color: var(--col-accent);
+}
+
+.batch-counter__input::-webkit-outer-spin-button,
+.batch-counter__input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
 

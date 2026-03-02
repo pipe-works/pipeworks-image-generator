@@ -261,5 +261,6 @@ See `.env.example` for all available settings. Key variables:
 | `PIPEWORKS_GUIDANCE_SCALE` | `0.0` | Default guidance (0.0 for turbo) |
 | `PIPEWORKS_SERVER_HOST` | `0.0.0.0` | Server bind address |
 | `PIPEWORKS_SERVER_PORT` | `7860` | Server port |
+| `PIPEWORKS_DISABLE_HTTP_CACHE` | `false` | Disable browser caching for local frontend testing |
 | `PIPEWORKS_MODELS_DIR` | `models` | Model cache location |
 | `PIPEWORKS_OUTPUTS_DIR` | `outputs` | Generated images directory |

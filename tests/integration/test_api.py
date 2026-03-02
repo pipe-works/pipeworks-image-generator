@@ -74,6 +74,20 @@ class TestGetConfig:
         assert "automated_prompts" in data
         assert "append_prompts" in data
 
+    def test_disable_http_cache_adds_no_cache_headers(self, test_client):
+        """No-cache headers should be emitted when local dev mode enables them."""
+        from pipeworks.api import main as main_module
+
+        previous = main_module.config.disable_http_cache
+        main_module.config.disable_http_cache = True
+        try:
+            resp = test_client.get("/api/config")
+            assert resp.headers["cache-control"] == "no-store, no-cache, must-revalidate, max-age=0"
+            assert resp.headers["pragma"] == "no-cache"
+            assert resp.headers["expires"] == "0"
+        finally:
+            main_module.config.disable_http_cache = previous
+
 
 # ---------------------------------------------------------------------------
 # Generation endpoint tests.
@@ -201,12 +215,20 @@ class TestGenerate:
         assert resp.status_code == 400
 
     def test_generate_invalid_batch_size_too_large(self, test_client):
-        """batch_size above 16 should return 400."""
+        """batch_size above 1000 should return 400."""
         resp = test_client.post(
             "/api/generate",
-            json=self._make_generate_payload(batch_size=17),
+            json=self._make_generate_payload(batch_size=1001),
         )
         assert resp.status_code == 400
+
+    def test_generate_batch_size_at_upper_limit(self, test_client):
+        """batch_size of 1000 should be accepted."""
+        resp = test_client.post(
+            "/api/generate",
+            json=self._make_generate_payload(batch_size=1000),
+        )
+        assert resp.status_code == 200
 
     def test_generate_with_prepend_prompt(self, test_client):
         """A valid prepend_prompt_id should be resolved into the compiled prompt."""

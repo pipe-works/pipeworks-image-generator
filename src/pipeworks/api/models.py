@@ -58,7 +58,7 @@ class GenerateRequest(BaseModel):
         guidance: Classifier-free guidance scale.
         seed: Random seed.  ``None`` means the server picks a random seed.
         batch_size: Number of images to generate in a single request
-            (1–16 inclusive).
+            (1–1000 inclusive).
         negative_prompt: Optional text describing what to avoid.
         scheduler: Optional scheduler/sampler identifier.  Must match an
             ``id`` in the model's ``schedulers`` list from ``models.json``.
@@ -131,7 +131,7 @@ class GenerateRequest(BaseModel):
     )
     batch_size: int = Field(
         default=1,
-        description="Number of images to generate (1–16).",
+        description="Number of images to generate (1–1000).",
     )
     negative_prompt: str | None = Field(
         default=None,

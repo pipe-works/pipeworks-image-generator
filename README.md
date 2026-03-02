@@ -151,6 +151,7 @@ All settings use `PIPEWORKS_*` environment variables. See `.env.example` for the
 | `PIPEWORKS_NUM_INFERENCE_STEPS` | `9` | Default inference steps |
 | `PIPEWORKS_SERVER_HOST` | `0.0.0.0` | Server bind address |
 | `PIPEWORKS_SERVER_PORT` | `7860` | Server port |
+| `PIPEWORKS_DISABLE_HTTP_CACHE` | `false` | Disable browser caching for local frontend testing |
 | `PIPEWORKS_MODELS_DIR` | `models` | Model cache directory |
 
 ## Development

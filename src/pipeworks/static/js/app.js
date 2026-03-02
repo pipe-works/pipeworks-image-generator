@@ -12,6 +12,8 @@ import { createOutputLightboxController } from "./output-lightbox.mjs";
 
 "use strict";
 
+const MAX_BATCH_SIZE = 1000;
+
 // ── State ──────────────────────────────────────────────────────────────────────
 
 const State = {
@@ -1133,11 +1135,22 @@ function generateRandomSeed() {
 // ── Batch counter ──────────────────────────────────────────────────────────────
 
 function updateBatchDisplay() {
-  $("#lbl-batch").textContent = State.batchSize;
+  $("#inp-batch").value = String(State.batchSize);
+}
+
+function normalizeBatchSize(value) {
+  const parsed = parseInt(value, 10);
+  if (Number.isNaN(parsed)) return 1;
+  return Math.min(MAX_BATCH_SIZE, Math.max(1, parsed));
+}
+
+function onBatchInput() {
+  State.batchSize = normalizeBatchSize($("#inp-batch").value);
+  updateBatchDisplay();
 }
 
 function incBatch() {
-  if (State.batchSize < 16) {
+  if (State.batchSize < MAX_BATCH_SIZE) {
     State.batchSize++;
     updateBatchDisplay();
   }
@@ -1299,6 +1312,7 @@ function wireEvents() {
   // Batch
   $("#btn-batch-inc").addEventListener("click", incBatch);
   $("#btn-batch-dec").addEventListener("click", decBatch);
+  $("#inp-batch").addEventListener("input", onBatchInput);
 
   // Generate
   $("#btn-generate").addEventListener("click", generate);

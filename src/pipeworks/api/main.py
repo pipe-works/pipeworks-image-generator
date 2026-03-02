@@ -78,6 +78,8 @@ from pipeworks.core.model_manager import ModelManager
 
 logger = logging.getLogger(__name__)
 
+_MAX_BATCH_SIZE = 1000
+
 # ---------------------------------------------------------------------------
 # Resolve paths from the global configuration instance.
 # ---------------------------------------------------------------------------
@@ -149,6 +151,30 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def disable_http_cache_for_local_testing(request, call_next):
+    """Optionally disable browser caching for local development.
+
+    When ``PIPEWORKS_DISABLE_HTTP_CACHE=true`` the app emits no-cache headers
+    for the HTML shell, API responses, and static assets.  This keeps browser
+    refreshes honest while iterating on CSS/JS locally without changing the
+    default production caching behaviour.
+    """
+    response = await call_next(request)
+
+    if config.disable_http_cache and (
+        request.url.path == "/"
+        or request.url.path.startswith("/api/")
+        or request.url.path.startswith("/static/")
+    ):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+
+    return response
+
 
 # Mount the static directory so that CSS, JS, fonts, and gallery images are
 # served directly by FastAPI at ``/static/...``.
@@ -331,7 +357,7 @@ async def generate_images(req: GenerateRequest) -> dict:
 
     This endpoint:
 
-    1. Validates the batch size (1–16).
+    1. Validates the batch size (1–1000).
     2. Resolves the model configuration from ``models.json``.
     3. Compiles the three-part prompt (prepend + scene + append).
     4. Loads the model if not already loaded (or switches models).
@@ -350,10 +376,10 @@ async def generate_images(req: GenerateRequest) -> dict:
             or unknown prompt mode.
     """
     # --- Validate batch size -----------------------------------------------
-    if req.batch_size < 1 or req.batch_size > 16:
+    if req.batch_size < 1 or req.batch_size > _MAX_BATCH_SIZE:
         raise HTTPException(
             status_code=400,
-            detail="batch_size must be between 1 and 16",
+            detail=f"batch_size must be between 1 and {_MAX_BATCH_SIZE}",
         )
 
     # --- Load configuration data -------------------------------------------
