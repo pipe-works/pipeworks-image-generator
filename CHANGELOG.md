@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.6](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.2.5...pipeworks-image-generator-v0.2.6) (2026-03-02)
+
+
+### Bug Fixes
+
+* align z-image prompt token limit with pipeline ([#25](https://github.com/pipe-works/pipeworks-image-generator/issues/25)) ([497eab1](https://github.com/pipe-works/pipeworks-image-generator/commit/497eab109a95b396ad5dc4056b8c96c87d99a09b))
+
 ## [0.2.5](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.2.4...pipeworks-image-generator-v0.2.5) (2026-03-01)
 
 
