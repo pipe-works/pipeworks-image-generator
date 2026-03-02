@@ -146,6 +146,23 @@ async function loadConfig() {
 
 function populateControls() {
   const cfg = State.config;
+  const noneOption = { id: "none", label: "— None —" };
+
+  function populateOptionalSelect(selectEl, options) {
+    selectEl.innerHTML = "";
+
+    const normalized = [...options];
+    if (!normalized.some(option => option.id === "none")) {
+      normalized.push(noneOption);
+    }
+
+    normalized.forEach(option => {
+      const opt = el("option", { value: option.id }, option.label);
+      selectEl.appendChild(opt);
+    });
+
+    selectEl.value = "none";
+  }
 
   // Models
   const selModel = $("#sel-model");
@@ -164,27 +181,15 @@ function populateControls() {
 
   // Prepend prompts
   const selPrepend = $("#sel-prepend");
-  selPrepend.innerHTML = "";
-  cfg.prepend_prompts.forEach(p => {
-    const opt = el("option", { value: p.id }, p.label);
-    selPrepend.appendChild(opt);
-  });
+  populateOptionalSelect(selPrepend, cfg.prepend_prompts);
 
   // Automated prompts
   const selAuto = $("#sel-auto-prompt");
-  selAuto.innerHTML = "";
-  cfg.automated_prompts.forEach(p => {
-    const opt = el("option", { value: p.id }, p.label);
-    selAuto.appendChild(opt);
-  });
+  populateOptionalSelect(selAuto, cfg.automated_prompts);
 
   // Append prompts
   const selAppend = $("#sel-append");
-  selAppend.innerHTML = "";
-  cfg.append_prompts.forEach(p => {
-    const opt = el("option", { value: p.id }, p.label);
-    selAppend.appendChild(opt);
-  });
+  populateOptionalSelect(selAppend, cfg.append_prompts);
 
   // Version badge in header (populated from API, single source of truth)
   if (cfg.version) {
@@ -380,7 +385,7 @@ async function updatePromptPreview() {
 
   const payload = buildGeneratePayload();
   if (!payload) {
-    $("#prompt-preview-box").textContent = "Fill in the required fields to preview…";
+    $("#prompt-preview-box").textContent = "Configure options above to preview the compiled prompt…";
     return;
   }
 
@@ -437,14 +442,18 @@ function buildGeneratePayload() {
   if (State.prependMode === "manual") {
     payload.manual_prepend = $("#txt-manual-prepend").value.trim();
   } else {
-    payload.prepend_prompt_id = $("#sel-prepend").value;
+    const prependId = $("#sel-prepend").value;
+    payload.prepend_prompt_id = prependId || "none";
   }
 
   // Main scene: manual or automated
   if (State.promptMode === "manual") {
     payload.manual_prompt = $("#txt-manual-prompt").value.trim();
   } else {
-    payload.automated_prompt_id = $("#sel-auto-prompt").value;
+    const automatedId = $("#sel-auto-prompt").value;
+    if (automatedId && automatedId !== "none") {
+      payload.automated_prompt_id = automatedId;
+    }
   }
 
   // Append: template or manual
@@ -476,24 +485,9 @@ function buildGeneratePayload() {
 async function generate() {
   if (State.isGenerating) return;
 
-  // Validate required fields
-  if (State.prependMode === "template" && !$("#sel-prepend").value) {
-    toast("Prepend style is required", "warn");
-    return;
-  }
-
-  if (State.promptMode === "manual") {
-    const mp = $("#txt-manual-prompt").value.trim();
-    if (!mp) {
-      toast("Manual prompt is required", "warn");
-      $("#txt-manual-prompt").focus();
-      return;
-    }
-  }
-
   const payload = buildGeneratePayload();
   if (!payload) {
-    toast("Please configure all required settings", "warn");
+    toast("Please finish configuring the generator", "warn");
     return;
   }
 

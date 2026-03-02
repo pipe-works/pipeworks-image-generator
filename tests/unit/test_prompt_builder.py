@@ -110,6 +110,12 @@ class TestBuildPromptEmptyParts:
         assert "A padded scene." in result
         assert "  A padded scene.  " not in result
 
+    def test_empty_scene_omits_main_scene_header(self):
+        """An empty scene should not produce a blank Main Scene section."""
+        result = build_prompt("", "", "")
+        assert "Main Scene:" not in result
+        assert "\n\n\n\n" not in result
+
 
 class TestBuildPromptManualPrepend:
     """Test prompt compilation when prepend_mode is 'manual'."""
@@ -225,6 +231,17 @@ class TestBuildPromptBothManual:
         # scene only = 1 section.
         assert len(parts) == 1
         assert parts[0] == "Just a scene."
+
+    def test_both_manual_all_empty_returns_empty_string(self):
+        """All-empty manual prompts should compile to an empty string."""
+        result = build_prompt(
+            "",
+            "",
+            "",
+            prepend_mode="manual",
+            append_mode="manual",
+        )
+        assert result == ""
 
     def test_main_scene_header_present_when_one_template(self):
         """Main Scene header should still appear if either mode is template."""

@@ -41,10 +41,10 @@ class GenerateRequest(BaseModel):
             is ``"manual"``.
         prompt_mode: Either ``"manual"`` (user-supplied prompt) or
             ``"automated"`` (preset scene selection).
-        manual_prompt: Free-text prompt.  Required when ``prompt_mode`` is
+        manual_prompt: Free-text prompt. Optional when ``prompt_mode`` is
             ``"manual"``.
         automated_prompt_id: Identifier of the automated scene preset.
-            Required when ``prompt_mode`` is ``"automated"``.
+            Optional when ``prompt_mode`` is ``"automated"``.
         append_mode: Either ``"template"`` (preset from ``prompts.json``) or
             ``"manual"`` (user-supplied text).  Defaults to ``"template"``.
         append_prompt_id: Identifier of the append modifier.  Use
@@ -87,11 +87,11 @@ class GenerateRequest(BaseModel):
     )
     manual_prompt: str | None = Field(
         default=None,
-        description="Free-text prompt (required when prompt_mode='manual').",
+        description="Free-text prompt (optional when prompt_mode='manual').",
     )
     automated_prompt_id: str | None = Field(
         default=None,
-        description="Automated scene preset ID (required when prompt_mode='automated').",
+        description="Automated scene preset ID (optional when prompt_mode='automated').",
     )
     append_mode: str = Field(
         default="template",

@@ -37,8 +37,8 @@ Manual Structure (all manual mode)::
 
     [Manual Append Text]
 
-Each section is separated by double newlines.  Empty prepend or append
-values are silently omitted (no blank sections in the output).
+Each section is separated by double newlines.  Empty prepend, scene, or
+append values are silently omitted (no blank sections in the output).
 
 Usage
 -----
@@ -102,8 +102,8 @@ def build_prompt(
     Args:
         prepend_value: Style prefix text (e.g. "In a watercolour style.").
             Pass an empty string to omit.
-        main_scene: The primary scene description.  This is always included
-            and forms the creative core of the prompt.
+        main_scene: The primary scene description.  Pass an empty string to
+            omit it.
         append_value: Post-processing modifier text (e.g. "cinematic
             colour grade").  Pass an empty string to omit.
         prepend_mode: ``"template"`` to include the style boilerplate,
@@ -130,12 +130,15 @@ def build_prompt(
     if prepend_mode == "template":
         parts.append(_STYLE_BOILERPLATE)
 
-    # --- Main scene header + content ---------------------------------------
-    # The "Main Scene:" header is included in template mode to separate the
-    # boilerplate from the scene.  In full-manual mode it serves no purpose.
-    if prepend_mode == "template" or append_mode == "template":
-        parts.append("Main Scene:")
-    parts.append(main_scene.strip())
+    # --- Main scene header + content (optional) ----------------------------
+    # The "Main Scene:" header is included only when scene text is present
+    # and either side uses template mode to separate the boilerplate from
+    # the scene. In full-manual mode it serves no purpose.
+    stripped_scene = main_scene.strip()
+    if stripped_scene:
+        if prepend_mode == "template" or append_mode == "template":
+            parts.append("Main Scene:")
+        parts.append(stripped_scene)
 
     # --- Fixed mood boilerplate (template mode only) -----------------------
     # Sets atmosphere and tension.  Omitted in manual append mode.
