@@ -411,60 +411,6 @@ function getPromptSectionDisplayName(section) {
   return "prompt section";
 }
 
-function getPromptSectionTextarea(section) {
-  if (section === "prepend") return $("#txt-manual-prepend");
-  if (section === "main") return $("#txt-manual-prompt");
-  if (section === "append") return $("#txt-manual-append");
-  return null;
-}
-
-function getPasteShortcutLabel() {
-  const platform = navigator.userAgentData?.platform || navigator.platform || "";
-  return /mac/i.test(platform) ? "Cmd+V" : "Ctrl+V";
-}
-
-function setPromptSectionManualText(section, text) {
-  if (section === "prepend") {
-    setPrependMode("manual");
-    const textarea = getPromptSectionTextarea(section);
-    textarea.value = text;
-    textarea.focus();
-    return;
-  }
-
-  if (section === "main") {
-    setMainPromptMode("manual");
-    const textarea = getPromptSectionTextarea(section);
-    textarea.value = text;
-    textarea.focus();
-    return;
-  }
-
-  if (section === "append") {
-    setAppendMode("manual");
-    const textarea = getPromptSectionTextarea(section);
-    textarea.value = text;
-    textarea.focus();
-  }
-}
-
-function preparePromptSectionForManualPaste(section) {
-  if (section === "prepend") {
-    setPrependMode("manual");
-  } else if (section === "main") {
-    setMainPromptMode("manual");
-  } else if (section === "append") {
-    setAppendMode("manual");
-  }
-
-  const textarea = getPromptSectionTextarea(section);
-  if (!textarea) return null;
-
-  textarea.focus();
-  textarea.select();
-  return textarea;
-}
-
 async function copyPromptSection(section, button) {
   const text = getPromptSectionText(section);
   if (!text.trim()) {
@@ -482,29 +428,6 @@ async function copyPromptSection(section, button) {
     flashButtonLabel(button, "Copied", "Copy");
   } catch (_) {
     toast("Clipboard copy failed", "err");
-  }
-}
-
-async function pastePromptSection(section, button) {
-  const textarea = preparePromptSectionForManualPaste(section);
-  if (!textarea) return;
-
-  if (!navigator.clipboard?.readText) {
-    toast(`Clipboard read is blocked here. Press ${getPasteShortcutLabel()} to replace the section.`, "info", 2500);
-    flashButtonLabel(button, "Ready", "Paste");
-    return;
-  }
-
-  try {
-    const text = await navigator.clipboard.readText();
-    textarea.value = text;
-    textarea.focus();
-    updateTokenCounters();
-    schedulePromptPreview();
-    flashButtonLabel(button, "Pasted", "Paste");
-  } catch (_) {
-    toast(`Clipboard read is blocked here. Press ${getPasteShortcutLabel()} to replace the section.`, "info", 2500);
-    flashButtonLabel(button, "Ready", "Paste");
   }
 }
 
@@ -1428,20 +1351,11 @@ function wireEvents() {
   $("#btn-copy-prepend").addEventListener("click", function () {
     copyPromptSection("prepend", this);
   });
-  $("#btn-paste-prepend").addEventListener("click", function () {
-    pastePromptSection("prepend", this);
-  });
   $("#btn-copy-main").addEventListener("click", function () {
     copyPromptSection("main", this);
   });
-  $("#btn-paste-main").addEventListener("click", function () {
-    pastePromptSection("main", this);
-  });
   $("#btn-copy-append").addEventListener("click", function () {
     copyPromptSection("append", this);
-  });
-  $("#btn-paste-append").addEventListener("click", function () {
-    pastePromptSection("append", this);
   });
 
   // Prompt inputs → live preview + token counters
