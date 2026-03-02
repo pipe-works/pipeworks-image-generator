@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.9](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.2.8...pipeworks-image-generator-v0.2.9) (2026-03-02)
+
+
+### Bug Fixes
+
+* add fallback for prompt paste action ([2dfc7f0](https://github.com/pipe-works/pipeworks-image-generator/commit/2dfc7f0a7282313dcf0fcec86502bf8208958a21))
+* add fallback for prompt paste action ([b18d5e8](https://github.com/pipe-works/pipeworks-image-generator/commit/b18d5e857a4d11dbe02de3a6acf47ace0bdf1a94))
+
 ## [0.2.8](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.2.7...pipeworks-image-generator-v0.2.8) (2026-03-02)
 
 
