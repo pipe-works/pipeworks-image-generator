@@ -90,6 +90,9 @@ class TestGetConfig:
         flux_model = next(model for model in data["models"] if model["id"] == "flux-2-klein-4b")
         assert flux_model["hf_id"] == "black-forest-labs/FLUX.2-klein-4B"
         assert flux_model["max_prompt_tokens"] == 512
+        assert flux_model["default_guidance"] == 0.0
+        assert flux_model["min_guidance"] == 0.0
+        assert flux_model["max_guidance"] == 0.0
         assert "is_available" in flux_model
         assert "unavailable_reason" in flux_model
 
