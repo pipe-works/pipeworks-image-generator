@@ -505,7 +505,6 @@ async function updatePromptPreview() {
   const payload = buildGeneratePayload();
   if (!payload) {
     State.tokenCounts = { prepend: 0, main: 0, append: 0, total: 0, method: "heuristic" };
-    $("#prompt-preview-box").textContent = "Configure options above to preview the compiled prompt…";
     updateTokenCounters();
     return;
   }
@@ -518,8 +517,6 @@ async function updatePromptPreview() {
     });
     if (!res.ok) return;
     const data = await res.json();
-    const preview = $("#prompt-preview-box");
-    preview.textContent = data.compiled_prompt;
     State.tokenCounts = data.token_counts || {
       prepend: estimateTokens(getPromptSectionText("prepend")),
       main: estimateTokens(getPromptSectionText("main")),
@@ -527,9 +524,6 @@ async function updatePromptPreview() {
       total: estimateTokens(data.compiled_prompt || ""),
       method: "heuristic",
     };
-    // Also update modal if open
-    const modalText = $("#modal-prompt-text");
-    if (modalText) modalText.textContent = data.compiled_prompt;
     updateTokenCounters();
   } catch (_) {
     // Silent fail for preview
@@ -1294,16 +1288,6 @@ async function openStatsModal() {
 }
 
 
-// ── Prompt preview modal ───────────────────────────────────────────────────────
-
-async function openPromptModal() {
-  await updatePromptPreview();
-  const preview = $("#prompt-preview-box").textContent;
-  $("#modal-prompt-text").textContent = preview;
-  $("#modal-prompt").classList.remove("hidden");
-}
-
-
 // ── Seed controls ──────────────────────────────────────────────────────────────
 
 function onRandomSeedChange() {
@@ -1496,23 +1480,6 @@ function wireEvents() {
     updateOutputCount();
   });
 
-  // Prompt preview expand/collapse
-  $("#btn-expand-prompt").addEventListener("click", function () {
-    const box = $("#prompt-preview-box");
-    const isExpanded = box.classList.toggle("prompt-preview--expanded");
-    this.textContent = isExpanded ? "collapse" : "expand";
-  });
-
-  // Prompt modal
-  $("#btn-prompt-preview").addEventListener("click", openPromptModal);
-  $("#modal-prompt-close").addEventListener("click", () => $("#modal-prompt").classList.add("hidden"));
-  $("#modal-prompt-close2").addEventListener("click", () => $("#modal-prompt").classList.add("hidden"));
-  $("#modal-prompt-backdrop").addEventListener("click", () => $("#modal-prompt").classList.add("hidden"));
-  $("#btn-copy-prompt").addEventListener("click", () => {
-    const text = $("#modal-prompt-text").textContent;
-    navigator.clipboard.writeText(text).then(() => toast("Prompt copied", "ok", 1500));
-  });
-
   // Stats modal
   $("#btn-stats").addEventListener("click", openStatsModal);
   $("#modal-stats-close").addEventListener("click", () => $("#modal-stats").classList.add("hidden"));
@@ -1542,7 +1509,6 @@ function wireEvents() {
   document.addEventListener("keydown", e => {
     if (e.key === "Escape") {
       closeLightbox();
-      $("#modal-prompt").classList.add("hidden");
       $("#modal-stats").classList.add("hidden");
       return;
     }
@@ -1558,13 +1524,11 @@ function wireEvents() {
     if (!e.altKey && !e.ctrlKey && !e.metaKey && !isTypingTargetActive()) {
       const galleryDirection = resolveGalleryPaginationDirection(e.key);
       const activeTabId = getActiveTabId();
-      const promptModalOpen = !$("#modal-prompt").classList.contains("hidden");
       const statsModalOpen = !$("#modal-stats").classList.contains("hidden");
 
       if (
         galleryDirection !== 0
         && activeTabId === "gallery"
-        && !promptModalOpen
         && !statsModalOpen
       ) {
         if (galleryDirection === -1 && State.galleryPage > 1) {

@@ -24,9 +24,6 @@
     <span class="app-header__version" id="app-version"></span>
 
     <nav class="app-header__nav">
-      <button class="btn btn--secondary btn--sm" id="btn-prompt-preview" title="Preview compiled prompt">
-        ◈ Prompt
-      </button>
       <button class="btn btn--secondary btn--sm" id="btn-stats" title="Gallery statistics">
         ◈ Stats
       </button>
@@ -190,15 +187,9 @@
               ></textarea>
             </div>
 
-            <!-- Live prompt preview -->
-            <div>
-              <label class="control-label" style="display:flex;align-items:center;justify-content:space-between">
-                <span>Compiled Prompt Preview <span class="token-counter token-counter--inline" id="total-tokens">0 / -- tokens</span></span>
-                <button class="btn btn--ghost btn--sm" id="btn-expand-prompt" style="font-size:0.65rem">expand</button>
-              </label>
-              <div class="prompt-preview" id="prompt-preview-box">
-                Select options above to preview the compiled prompt…
-              </div>
+            <div class="ctrl-row">
+              <span class="control-label" style="min-width:auto">Total Prompt Tokens</span>
+              <span class="token-counter token-counter--inline" id="total-tokens">0 / -- tokens</span>
             </div>
             </div>
           </div>
@@ -560,7 +551,10 @@ Main Scene:
         <div class="lightbox__meta-value" id="lb-steps-cfg">—</div>
       </div>
       <div class="lightbox__meta-row">
-        <div class="lightbox__meta-label">Compiled Prompt</div>
+        <div class="lightbox__meta-header">
+          <div class="lightbox__meta-label">Compiled Prompt</div>
+          <button class="btn btn--secondary btn--sm" id="lb-btn-copy-prompt" type="button">Copy</button>
+        </div>
         <div class="lightbox__prompt-text" id="lb-prompt">—</div>
       </div>
       <div class="lightbox__actions">
@@ -568,23 +562,6 @@ Main Scene:
         <a class="btn btn--secondary btn--sm" id="lb-btn-download" href="#" download>↓ Download</a>
         <button class="btn btn--ghost btn--sm" id="lb-btn-delete" style="color:var(--col-err)">✕ Delete</button>
       </div>
-    </div>
-  </div>
-</div>
-
-
-<!-- ── Prompt Preview Modal ───────────────────────────────────────────────── -->
-<div class="modal hidden" id="modal-prompt">
-  <div class="modal__backdrop" id="modal-prompt-backdrop"></div>
-  <div class="modal__card" style="width:min(720px,92vw)">
-    <div class="modal__header">
-      <span style="font-family:var(--font-mono);font-weight:700;color:var(--col-accent)">◈ Compiled Prompt</span>
-      <button class="btn btn--ghost btn--sm" id="modal-prompt-close">✕</button>
-    </div>
-    <pre id="modal-prompt-text" style="font-size:var(--text-xs);max-height:60vh;overflow-y:auto;white-space:pre-wrap;word-break:break-word;background:var(--col-code-bg);border:1px solid var(--col-border);border-radius:var(--radius-sm);padding:var(--sp-3)"></pre>
-    <div class="modal__actions">
-      <button class="btn btn--secondary btn--sm" id="btn-copy-prompt">Copy</button>
-      <button class="btn btn--secondary btn--sm" id="modal-prompt-close2">Close</button>
     </div>
   </div>
 </div>
