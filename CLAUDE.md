@@ -31,8 +31,13 @@ pip install -e ".[dev]"
 pip install -e .
 ```
 
-`FLUX.2-klein-4B` requires `diffusers>=0.37.0` so
-`Flux2KleinPipeline` is available at runtime.
+`FLUX.2-klein-4B` requires a Diffusers build with
+`Flux2KleinPipeline`. Until that build is on PyPI, install
+Diffusers from GitHub:
+
+```bash
+pip install --upgrade "git+https://github.com/huggingface/diffusers.git"
+```
 
 ### Running the Application
 

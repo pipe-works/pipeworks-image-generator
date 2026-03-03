@@ -48,8 +48,12 @@ pip install -e .
 ```
 
 `FLUX.2-klein-4B` requires a Diffusers build with `Flux2KleinPipeline`
-support. The repo now declares `diffusers>=0.37.0`, so refresh your
-environment if you previously installed an older build.
+support. At the moment that support may require installing Diffusers from
+GitHub rather than PyPI:
+
+```bash
+pip install --upgrade "git+https://github.com/huggingface/diffusers.git"
+```
 
 ### Configuration (Optional)
 
