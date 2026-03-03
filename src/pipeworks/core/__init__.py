@@ -14,6 +14,9 @@ model_manager
     :class:`ModelManager` — manages the lifecycle of a single HuggingFace
     Diffusers pipeline.  Handles lazy loading, model switching, CUDA memory
     cleanup, turbo-model guidance enforcement, and deterministic seeding.
+prompt_token_counter
+    :class:`PromptTokenCounter` — counts prompt tokens using the model's
+    real tokenizer when available so UI counters match pipeline behaviour.
 
 The core package has **no dependency on HTTP or FastAPI** — it is a pure
 generation engine that the API layer wraps with REST endpoints.
@@ -29,9 +32,11 @@ from __future__ import annotations
 
 from pipeworks.core.config import PipeworksConfig, config
 from pipeworks.core.model_manager import ModelManager
+from pipeworks.core.prompt_token_counter import PromptTokenCounter
 
 __all__ = [
     "ModelManager",
     "PipeworksConfig",
+    "PromptTokenCounter",
     "config",
 ]

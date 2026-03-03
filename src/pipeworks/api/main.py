@@ -75,7 +75,8 @@ from pipeworks.api.gallery_store import (
 from pipeworks.api.models import BulkDeleteRequest, FavouriteRequest, GenerateRequest
 from pipeworks.api.prompt_builder import build_prompt
 from pipeworks.core.config import config
-from pipeworks.core.model_manager import ModelManager
+from pipeworks.core.model_manager import ModelManager, get_model_runtime_support
+from pipeworks.core.prompt_token_counter import PromptTokenCounter
 
 logger = logging.getLogger(__name__)
 
@@ -123,6 +124,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """
     # --- Startup -----------------------------------------------------------
     app.state.model_manager = ModelManager(config)
+    app.state.prompt_token_counter = PromptTokenCounter(config)
     logger.info("ModelManager initialised (no model loaded yet).")
 
     yield  # Application runs here.
@@ -254,6 +256,18 @@ def _merge_prompt_lists(*prompt_lists: list[dict]) -> list[dict]:
             merged.append(prompt)
 
     return merged
+
+
+def _annotate_models_with_runtime_support(models: list[dict]) -> list[dict]:
+    """Attach runtime availability metadata to model config entries."""
+    annotated: list[dict] = []
+    for model in models:
+        item = dict(model)
+        is_available, reason = get_model_runtime_support(item.get("hf_id", ""))
+        item["is_available"] = is_available
+        item["unavailable_reason"] = reason
+        annotated.append(item)
+    return annotated
 
 
 def _load_prompt_catalog() -> dict:
@@ -416,10 +430,11 @@ async def get_config() -> dict:
         and the three merged selector keys.
     """
     models = _load_json(DATA_DIR / "models.json", {"models": []})
+    annotated_models = _annotate_models_with_runtime_support(models.get("models", []))
     prompts = _load_prompt_catalog()
     return {
         "version": __version__,
-        "models": models.get("models", []),
+        "models": annotated_models,
         "prepend_library": prompts.get("prepend_library", []),
         "main_library": prompts.get("main_library", []),
         "append_library": prompts.get("append_library", []),
@@ -474,6 +489,13 @@ async def generate_images(req: GenerateRequest) -> dict:
         raise HTTPException(
             status_code=400,
             detail=f"Unknown model: {req.model_id}",
+        )
+
+    is_available, unavailable_reason = get_model_runtime_support(model_cfg["hf_id"])
+    if not is_available:
+        raise HTTPException(
+            status_code=503,
+            detail=unavailable_reason,
         )
 
     # --- Resolve prompt parts and compile ------------------------------------
@@ -767,9 +789,10 @@ async def compile_prompt(req: GenerateRequest) -> dict:
             fields are used).
 
     Returns:
-        Dictionary with a single ``compiled_prompt`` key.
+        Dictionary with ``compiled_prompt`` and ``token_counts``.
     """
     prompts = _load_prompt_catalog()
+    models_data = _load_json(DATA_DIR / "models.json", {"models": []})
     prepend_value, main_scene, append_value = _resolve_prompt_parts(req, prompts, strict=False)
     compiled = build_prompt(
         prepend_value,
@@ -778,7 +801,22 @@ async def compile_prompt(req: GenerateRequest) -> dict:
         prepend_mode=req.prepend_mode,
         append_mode=req.append_mode,
     )
-    return {"compiled_prompt": compiled}
+    model_cfg = next(
+        (m for m in models_data.get("models", []) if m["id"] == req.model_id),
+        None,
+    )
+    token_counter: PromptTokenCounter = app.state.prompt_token_counter
+    token_counts = token_counter.count_prompt_parts(
+        hf_id=model_cfg.get("hf_id") if model_cfg else None,
+        prepend_text=prepend_value,
+        main_text=main_scene,
+        append_text=append_value,
+        compiled_prompt=compiled,
+    )
+    return {
+        "compiled_prompt": compiled,
+        "token_counts": token_counts,
+    }
 
 
 @app.get("/api/stats")

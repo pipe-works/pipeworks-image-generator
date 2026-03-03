@@ -29,6 +29,14 @@ pyenv local pig
 pyenv exec pip install -e ".[dev]"
 ```
 
+For `FLUX.2-klein-4B`, the runtime must provide a Diffusers build that
+includes `Flux2KleinPipeline`. Until that build is published on PyPI,
+use the GitHub install:
+
+```bash
+pyenv exec pip install --upgrade "git+https://github.com/huggingface/diffusers.git"
+```
+
 If the environment is missing dependencies, install them into the active
 `pyenv` environment instead of falling back to system Python.
 

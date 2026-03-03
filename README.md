@@ -47,6 +47,14 @@ cd pipeworks-image-generator
 pip install -e .
 ```
 
+`FLUX.2-klein-4B` requires a Diffusers build with `Flux2KleinPipeline`
+support. At the moment that support may require installing Diffusers from
+GitHub rather than PyPI:
+
+```bash
+pip install --upgrade "git+https://github.com/huggingface/diffusers.git"
+```
+
 ### Configuration (Optional)
 
 ```bash
