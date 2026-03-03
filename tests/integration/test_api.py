@@ -97,6 +97,18 @@ class TestGetConfig:
         assert "is_available" in flux_model
         assert "unavailable_reason" in flux_model
 
+    def test_config_exposes_negative_prompt_support_per_model(self, test_client):
+        """Negative prompt support metadata should match actual model capability."""
+        resp = test_client.get("/api/config")
+        assert resp.status_code == 200
+        data = resp.json()
+        models_by_id = {model["id"]: model for model in data["models"]}
+
+        assert models_by_id["sd-v1-5"]["supports_negative_prompt"] is True
+        assert models_by_id["sdxl-1-0"]["supports_negative_prompt"] is True
+        assert models_by_id["z-image-turbo"]["supports_negative_prompt"] is False
+        assert models_by_id["flux-2-klein-4b"]["supports_negative_prompt"] is False
+
     def test_config_returns_prompts(self, test_client):
         """Response should include all three prompt categories."""
         resp = test_client.get("/api/config")

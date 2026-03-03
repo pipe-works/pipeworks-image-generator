@@ -168,6 +168,7 @@ export function createOutputLightboxController({
     seed: rootDocument.getElementById("lb-seed"),
     stepsCfg: rootDocument.getElementById("lb-steps-cfg"),
     prompt: rootDocument.getElementById("lb-prompt"),
+    copyPromptButton: rootDocument.getElementById("lb-btn-copy-prompt"),
     favouriteButton: rootDocument.getElementById("lb-btn-fav"),
     downloadButton: rootDocument.getElementById("lb-btn-download"),
     deleteButton: rootDocument.getElementById("lb-btn-delete"),
@@ -197,6 +198,7 @@ export function createOutputLightboxController({
     isPlaying: false,
     playbackTimerId: null,
     lastCollectionIndex: 0,
+    copyPromptLabelResetTimerId: null,
   };
 
   /**
@@ -238,6 +240,21 @@ export function createOutputLightboxController({
     if (state.playbackTimerId !== null) {
       rootWindow.clearInterval(state.playbackTimerId);
       state.playbackTimerId = null;
+    }
+  }
+
+  /**
+   * Restore the prompt-copy button label after transient feedback.
+   */
+  function resetCopyPromptButtonLabel() {
+    if (!dom.copyPromptButton) {
+      return;
+    }
+
+    dom.copyPromptButton.textContent = "Copy";
+    if (state.copyPromptLabelResetTimerId !== null) {
+      rootWindow.clearTimeout(state.copyPromptLabelResetTimerId);
+      state.copyPromptLabelResetTimerId = null;
     }
   }
 
@@ -305,6 +322,7 @@ export function createOutputLightboxController({
     const schedulerLabel = image.scheduler ? ` · ${image.scheduler}` : "";
     dom.stepsCfg.textContent = `${image.steps} steps · CFG ${image.guidance}${schedulerLabel}`;
     dom.prompt.textContent = image.compiled_prompt || "—";
+    resetCopyPromptButtonLabel();
 
     dom.downloadButton.href = image.url;
     dom.downloadButton.download = `pipeworks_${image.id.slice(0, 8)}.png`;
@@ -587,6 +605,25 @@ export function createOutputLightboxController({
       onDeleteImage(currentImage);
     }
   });
+  if (dom.copyPromptButton) {
+    dom.copyPromptButton.addEventListener("click", async () => {
+      const currentImage = getCurrentImage();
+      const promptText = currentImage?.compiled_prompt || "";
+
+      if (!promptText) {
+        return;
+      }
+
+      await navigator.clipboard.writeText(promptText);
+      dom.copyPromptButton.textContent = "Copied";
+      if (state.copyPromptLabelResetTimerId !== null) {
+        rootWindow.clearTimeout(state.copyPromptLabelResetTimerId);
+      }
+      state.copyPromptLabelResetTimerId = rootWindow.setTimeout(() => {
+        resetCopyPromptButtonLabel();
+      }, 1200);
+    });
+  }
 
   updateTransportControls();
 
