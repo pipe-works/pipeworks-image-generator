@@ -386,6 +386,24 @@ class TestTurboEnforcement:
             call_kwargs = ctx.mock_pipeline.call_args[1]
             assert call_kwargs["guidance_scale"] == 0.0
 
+    def test_flux2_klein_forces_guidance_zero(self, test_config: PipeworksConfig):
+        """FLUX.2-klein should also force guidance_scale to 0.0."""
+        with _MockContext() as ctx:
+            mgr = ModelManager(test_config)
+            mgr.load_model("black-forest-labs/FLUX.2-klein-4B")
+
+            mgr.generate(
+                prompt="test",
+                width=512,
+                height=512,
+                steps=28,
+                guidance_scale=4.0,
+                seed=42,
+            )
+
+            call_kwargs = ctx.mock_pipeline.call_args[1]
+            assert call_kwargs["guidance_scale"] == 0.0
+
 
 class TestSchedulerSwap:
     """Test scheduler swapping in generate()."""
