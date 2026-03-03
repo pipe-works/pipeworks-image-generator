@@ -156,7 +156,7 @@ def sample_models_json() -> dict:
                 "min_guidance": 0.0,
                 "max_guidance": 0.0,
                 "guidance_step": 0.1,
-                "supports_negative_prompt": True,
+                "supports_negative_prompt": False,
                 "aspect_ratios": [
                     {"id": "1:1", "label": "Square 1:1", "width": 1024, "height": 1024},
                     {"id": "16:9", "label": "Wide 16:9", "width": 1344, "height": 768},

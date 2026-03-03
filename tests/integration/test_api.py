@@ -93,6 +93,7 @@ class TestGetConfig:
         assert flux_model["default_guidance"] == 0.0
         assert flux_model["min_guidance"] == 0.0
         assert flux_model["max_guidance"] == 0.0
+        assert flux_model["supports_negative_prompt"] is False
         assert "is_available" in flux_model
         assert "unavailable_reason" in flux_model
 
