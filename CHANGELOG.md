@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.3.1](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.3.0...pipeworks-image-generator-v0.3.1) (2026-03-03)
+
+
+### Fixes
+
+* force zero guidance for flux2 klein ([#47](https://github.com/pipe-works/pipeworks-image-generator/issues/47)) ([0038441](https://github.com/pipe-works/pipeworks-image-generator/commit/0038441ff2b36e4c99b7318d2bd67e234a1a2740))
+* hide unused controls for flux2 klein ([#49](https://github.com/pipe-works/pipeworks-image-generator/issues/49)) ([79f48c6](https://github.com/pipe-works/pipeworks-image-generator/commit/79f48c6a2d72c255f066b76accbb3a56b52b2916))
+* restore negative prompts and move prompt copy to lightbox ([#50](https://github.com/pipe-works/pipeworks-image-generator/issues/50)) ([77301b8](https://github.com/pipe-works/pipeworks-image-generator/commit/77301b81d75356f5fbede98b69d661d43f0dcb2a))
+
 ## [0.3.0](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.2.11...pipeworks-image-generator-v0.3.0) (2026-03-03)
 
 
