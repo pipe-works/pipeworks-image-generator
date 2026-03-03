@@ -18,7 +18,22 @@ real model loading or GPU access occurs.  Tests cover every endpoint:
 from __future__ import annotations
 
 import json
+import threading
+import time
 from unittest.mock import patch
+
+
+class SequenceRandom:
+    """Minimal deterministic RNG stub for placeholder integration tests."""
+
+    def __init__(self, picks: list[str]):
+        self._picks = list(picks)
+
+    def choice(self, options: list[str]) -> str:
+        pick = self._picks.pop(0)
+        assert pick in options
+        return pick
+
 
 # ---------------------------------------------------------------------------
 # Index page tests.
@@ -381,6 +396,121 @@ class TestGenerate:
         assert "oil painting" in data["compiled_prompt"].lower()
         assert "8K" in data["compiled_prompt"]
 
+    def test_generate_batch_reexpands_placeholders_for_each_image(
+        self,
+        test_client,
+        mock_model_manager,
+    ):
+        """Each image in a batch should get a fresh placeholder expansion."""
+        with patch(
+            "pipeworks.api.prompt_builder._PLACEHOLDER_RANDOM",
+            SequenceRandom(["red", "blue", "green"]),
+        ):
+            resp = test_client.post(
+                "/api/generate",
+                json=self._make_generate_payload(
+                    prompt_mode="manual",
+                    manual_prompt="A {red|blue|green} automaton.",
+                    batch_size=3,
+                    seed=100,
+                ),
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        compiled_prompts = [image["compiled_prompt"] for image in data["images"]]
+
+        assert "A red automaton." in compiled_prompts[0]
+        assert "A blue automaton." in compiled_prompts[1]
+        assert "A green automaton." in compiled_prompts[2]
+        assert data["compiled_prompt"] == compiled_prompts[0]
+
+        generate_prompts = [
+            call.kwargs["prompt"] for call in mock_model_manager.generate.call_args_list[-3:]
+        ]
+        assert generate_prompts == compiled_prompts
+
+    def test_generate_expands_negative_prompt_placeholders(
+        self,
+        test_client,
+        mock_model_manager,
+    ):
+        """Negative prompt placeholders should be expanded during generation."""
+        with (
+            patch(
+                "pipeworks.api.main.get_model_runtime_support",
+                return_value=(True, None),
+            ),
+            patch(
+                "pipeworks.api.prompt_builder._PLACEHOLDER_RANDOM",
+                SequenceRandom(["red", "blur"]),
+            ),
+        ):
+            resp = test_client.post(
+                "/api/generate",
+                json=self._make_generate_payload(
+                    model_id="flux-2-klein-4b",
+                    negative_prompt="{red|blue} tint, {blur|noise}",
+                ),
+            )
+
+        assert resp.status_code == 200
+        assert mock_model_manager.generate.call_args.kwargs["negative_prompt"] == "red tint, blur"
+        assert resp.json()["images"][0]["negative_prompt"] == "red tint, blur"
+
+    def test_generate_cancel_returns_partial_batch(
+        self,
+        test_client,
+        mock_model_manager,
+    ):
+        """Cancelling a batch should return completed images only."""
+        generation_id = "gen-cancel-test"
+
+        def _slow_generate(**kwargs):
+            time.sleep(0.05)
+            from PIL import Image
+
+            return Image.new("RGB", (kwargs["width"], kwargs["height"]), color=(255, 0, 0))
+
+        mock_model_manager.generate.side_effect = _slow_generate
+
+        cancel_response = {}
+
+        def _cancel_batch():
+            time.sleep(0.01)
+            cancel_response["resp"] = test_client.post(
+                "/api/generate/cancel",
+                json={"generation_id": generation_id},
+            )
+
+        cancel_thread = threading.Thread(target=_cancel_batch)
+        cancel_thread.start()
+        try:
+            resp = test_client.post(
+                "/api/generate",
+                json=self._make_generate_payload(
+                    batch_size=3,
+                    generation_id=generation_id,
+                ),
+            )
+        finally:
+            cancel_thread.join()
+
+        assert cancel_response["resp"].status_code == 200
+        data = resp.json()
+        assert resp.status_code == 200
+        assert data["cancelled"] is True
+        assert data["completed_count"] == 1
+        assert len(data["images"]) == 1
+
+    def test_cancel_generation_unknown_id_returns_404(self, test_client):
+        """Cancelling a non-existent batch should return 404."""
+        resp = test_client.post(
+            "/api/generate/cancel",
+            json={"generation_id": "missing-generation"},
+        )
+        assert resp.status_code == 404
+
 
 # ---------------------------------------------------------------------------
 # Prompt compilation endpoint tests.
@@ -440,6 +570,33 @@ class TestPromptCompile:
         assert data["token_counts"]["main"] > 0
         assert data["token_counts"]["append"] > 0
         assert data["token_counts"]["total"] >= data["token_counts"]["main"]
+
+    def test_compile_expands_placeholders_once_per_request(self, test_client):
+        """Prompt preview should expand placeholder groups in the response text."""
+        with patch(
+            "pipeworks.api.prompt_builder._PLACEHOLDER_RANDOM",
+            SequenceRandom(["blue", "fog"]),
+        ):
+            resp = test_client.post(
+                "/api/prompt/compile",
+                json={
+                    "model_id": "z-image-turbo",
+                    "prompt_mode": "manual",
+                    "manual_prompt": "A {red|blue} automaton.",
+                    "append_mode": "manual",
+                    "manual_append": "Wrapped in {smoke|fog}.",
+                    "aspect_ratio_id": "1:1",
+                    "width": 1024,
+                    "height": 1024,
+                    "steps": 4,
+                    "guidance": 0.0,
+                },
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "A blue automaton." in data["compiled_prompt"]
+        assert "Wrapped in fog." in data["compiled_prompt"]
 
     def test_compile_blank_manual_prompt_omits_main_scene_header(self, test_client):
         """Blank manual scene text should not emit an empty Main Scene section."""

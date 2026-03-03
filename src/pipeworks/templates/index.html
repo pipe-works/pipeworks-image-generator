@@ -115,7 +115,7 @@
               <textarea
                 class="prompt-textarea"
                 id="txt-manual-prepend"
-                placeholder="Enter custom prepend style text…"
+                placeholder="Enter custom prepend style text… Use {red|blue|green} for random variants."
                 rows="3"
               ></textarea>
             </div>
@@ -141,7 +141,7 @@
               <textarea
                 class="prompt-textarea"
                 id="txt-manual-prompt"
-                placeholder="Describe your main scene here (optional)…"
+                placeholder="Describe your main scene here (optional)… Use {red|blue|green} for random variants."
                 rows="4"
               ></textarea>
             </div>
@@ -173,7 +173,7 @@
               <textarea
                 class="prompt-textarea"
                 id="txt-manual-append"
-                placeholder="Enter custom append modifier text…"
+                placeholder="Enter custom append modifier text… Use {red|blue|green} for random variants."
                 rows="3"
               ></textarea>
             </div>
@@ -185,7 +185,7 @@
               <textarea
                 class="prompt-textarea"
                 id="txt-negative-prompt"
-                placeholder="What to avoid in the image…"
+                placeholder="What to avoid in the image… Use {red|blue|green} for random variants."
                 rows="2"
               ></textarea>
             </div>
@@ -321,6 +321,14 @@
             <button class="btn btn--generate" id="btn-generate">
               ◆ Generate
             </button>
+            <button
+              class="btn btn--secondary"
+              id="btn-stop-generation"
+              type="button"
+              style="display:none;margin-top:var(--sp-2);width:100%"
+            >
+              ■ Stop After Current Image
+            </button>
           </div>
 
         </aside>
@@ -448,6 +456,9 @@
           <div class="panel__heading">Prompt Structure</div>
           <p style="font-size:var(--text-sm);color:var(--col-text-muted);line-height:1.7;margin-bottom:var(--sp-2)">
             The compiled prompt follows a fixed structure:
+          </p>
+          <p style="font-size:var(--text-xs);color:var(--col-text-muted);line-height:1.7;margin-bottom:var(--sp-2)">
+            Random variants are supported in free-text fields and prompt-library values with syntax like <code>{red|blue|green}</code>. A fresh option is chosen on each generation, including every image in a batch.
           </p>
           <pre style="font-size:var(--text-xs)">
 [Prepend Style]          ← Required dropdown selection
