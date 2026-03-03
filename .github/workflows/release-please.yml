@@ -19,5 +19,5 @@ jobs:
       release-type: python
       package-name: pipeworks-image-generator
       bump-minor-pre-major: true
-      bump-patch-for-minor-pre-major: true
+      bump-patch-for-minor-pre-major: false
     secrets: inherit
