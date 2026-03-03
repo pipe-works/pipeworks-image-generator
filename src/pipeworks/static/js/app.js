@@ -307,6 +307,9 @@ function onModelChange() {
   rngGuidance.step = model.guidance_step;
   rngGuidance.value = model.default_guidance;
   $("#lbl-guidance").textContent = model.default_guidance.toFixed(1);
+  const guidanceWrap = $("#guidance-wrap");
+  const hasAdjustableGuidance = !(model.min_guidance === 0 && model.max_guidance === 0);
+  guidanceWrap.style.display = hasAdjustableGuidance ? "" : "none";
 
   // Negative prompt visibility
   const negWrap = $("#negative-prompt-wrap");

@@ -39,7 +39,7 @@
       "min_guidance": 1.0,
       "max_guidance": 20.0,
       "guidance_step": 0.5,
-      "supports_negative_prompt": true,
+      "supports_negative_prompt": false,
       "schedulers": [
         { "id": "pndm", "label": "PNDM (Default)" },
         { "id": "dpmpp-2m-karras", "label": "DPM++ 2M Karras" }
