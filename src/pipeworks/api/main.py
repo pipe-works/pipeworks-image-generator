@@ -54,6 +54,7 @@ from __future__ import annotations
 import json
 import logging
 import random
+import threading
 import time
 import uuid
 from collections.abc import AsyncIterator
@@ -64,6 +65,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
 
 from pipeworks import __version__
 from pipeworks.api.gallery_store import (
@@ -72,8 +74,17 @@ from pipeworks.api.gallery_store import (
     paginate_gallery_entries,
     save_gallery_entries,
 )
-from pipeworks.api.models import BulkDeleteRequest, FavouriteRequest, GenerateRequest
-from pipeworks.api.prompt_builder import build_prompt
+from pipeworks.api.models import (
+    BulkDeleteRequest,
+    CancelGenerationRequest,
+    FavouriteRequest,
+    GenerateRequest,
+)
+from pipeworks.api.prompt_builder import (
+    build_prompt,
+    expand_prompt_placeholders,
+    resolve_prompt_variants,
+)
 from pipeworks.core.config import config
 from pipeworks.core.model_manager import ModelManager, get_model_runtime_support
 from pipeworks.core.prompt_token_counter import PromptTokenCounter
@@ -125,6 +136,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # --- Startup -----------------------------------------------------------
     app.state.model_manager = ModelManager(config)
     app.state.prompt_token_counter = PromptTokenCounter(config)
+    app.state.generation_cancel_events = {}
     logger.info("ModelManager initialised (no model loaded yet).")
 
     yield  # Application runs here.
@@ -384,6 +396,26 @@ def _resolve_prompt_parts(
     return prepend_value, main_scene, append_value
 
 
+def _register_generation_cancel_event(generation_id: str | None) -> threading.Event | None:
+    """Create and store a cancellation event for a generation request."""
+    if not generation_id:
+        return None
+
+    if not hasattr(app.state, "generation_cancel_events"):
+        app.state.generation_cancel_events = {}
+
+    event = threading.Event()
+    app.state.generation_cancel_events[generation_id] = event
+    return event
+
+
+def _pop_generation_cancel_event(generation_id: str | None) -> None:
+    """Remove a stored cancellation event after the request finishes."""
+    if not generation_id:
+        return
+    app.state.generation_cancel_events.pop(generation_id, None)
+
+
 # ---------------------------------------------------------------------------
 # Routes.
 # ---------------------------------------------------------------------------
@@ -498,15 +530,13 @@ async def generate_images(req: GenerateRequest) -> dict:
             detail=unavailable_reason,
         )
 
-    # --- Resolve prompt parts and compile ------------------------------------
-    prepend_value, main_scene, append_value = _resolve_prompt_parts(req, prompts, strict=True)
-    compiled_prompt = build_prompt(
-        prepend_value,
-        main_scene,
-        append_value,
-        prepend_mode=req.prepend_mode,
-        append_mode=req.append_mode,
+    # --- Resolve prompt parts once; placeholders expand per generated image --
+    raw_prepend_value, raw_main_scene, raw_append_value = _resolve_prompt_parts(
+        req,
+        prompts,
+        strict=True,
     )
+    raw_negative_prompt = (req.negative_prompt or "").strip()
 
     # --- Resolve seed ------------------------------------------------------
     # If the client did not supply a seed, pick a random one.  Each image in
@@ -517,77 +547,127 @@ async def generate_images(req: GenerateRequest) -> dict:
     model_mgr: ModelManager = app.state.model_manager
     hf_id = model_cfg["hf_id"]
 
-    # Switch models if the currently loaded model differs from the request.
-    if model_mgr.current_model_id != hf_id:
-        model_mgr.load_model(hf_id)
+    # --- Register cancellation state ---------------------------------------
+    cancel_event = _register_generation_cancel_event(req.generation_id)
+    cancelled = False
 
-    # --- Generate batch ----------------------------------------------------
-    gallery = load_gallery_entries(GALLERY_DB, GALLERY_DIR)
-    generated: list[dict] = []
+    try:
+        # Switch models if the currently loaded model differs from the request.
+        if model_mgr.current_model_id != hf_id:
+            await run_in_threadpool(model_mgr.load_model, hf_id)
 
-    for i in range(req.batch_size):
-        # Each image in the batch gets a unique, incrementing seed.
-        img_seed = base_seed + i
-        img_id = str(uuid.uuid4())
-        filename = f"{img_id}.png"
-        filepath = GALLERY_DIR / filename
+        # --- Generate batch ------------------------------------------------
+        gallery = load_gallery_entries(GALLERY_DB, GALLERY_DIR)
+        generated: list[dict] = []
+        first_compiled_prompt = ""
 
-        # Generate the image using the real diffusion pipeline.
-        image = model_mgr.generate(
-            prompt=compiled_prompt,
-            width=req.width,
-            height=req.height,
-            steps=req.steps,
-            guidance_scale=req.guidance,
-            seed=img_seed,
-            negative_prompt=req.negative_prompt,
-            scheduler=req.scheduler,
-        )
+        for i in range(req.batch_size):
+            if cancel_event and cancel_event.is_set():
+                cancelled = True
+                break
 
-        # Save the PIL image to disk as a PNG file.
-        image.save(filepath, format="PNG")
+            # Each image in the batch gets a unique, incrementing seed.
+            img_seed = base_seed + i
+            img_id = str(uuid.uuid4())
+            filename = f"{img_id}.png"
+            filepath = GALLERY_DIR / filename
+            prepend_value, main_scene, append_value = resolve_prompt_variants(
+                raw_prepend_value,
+                raw_main_scene,
+                raw_append_value,
+            )
+            compiled_prompt = build_prompt(
+                prepend_value,
+                main_scene,
+                append_value,
+                prepend_mode=req.prepend_mode,
+                append_mode=req.append_mode,
+                expand_placeholders=False,
+            )
+            negative_prompt = (
+                expand_prompt_placeholders(raw_negative_prompt) if raw_negative_prompt else None
+            )
+            if not first_compiled_prompt:
+                first_compiled_prompt = compiled_prompt
 
-        # Build the gallery metadata entry.
-        entry = {
-            "id": img_id,
-            "filename": filename,
-            "url": f"/static/gallery/{filename}",
-            "model_id": req.model_id,
-            "model_label": model_cfg["label"],
-            "compiled_prompt": compiled_prompt,
-            "prepend_prompt_id": req.prepend_prompt_id,
-            "prompt_mode": req.prompt_mode,
-            "manual_prompt": req.manual_prompt,
-            "automated_prompt_id": req.automated_prompt_id,
-            "append_prompt_id": req.append_prompt_id,
-            "aspect_ratio_id": req.aspect_ratio_id,
-            "width": req.width,
-            "height": req.height,
-            "steps": req.steps,
-            "guidance": req.guidance,
-            "seed": img_seed,
-            "negative_prompt": req.negative_prompt,
-            "is_favourite": False,
-            "created_at": time.time(),
-            "batch_index": i,
-            "batch_size": req.batch_size,
-            "batch_seed": base_seed,
-            "scheduler": req.scheduler,
-        }
+            # Generate the image using the real diffusion pipeline.
+            image = await run_in_threadpool(
+                model_mgr.generate,
+                prompt=compiled_prompt,
+                width=req.width,
+                height=req.height,
+                steps=req.steps,
+                guidance_scale=req.guidance,
+                seed=img_seed,
+                negative_prompt=negative_prompt,
+                scheduler=req.scheduler,
+            )
 
-        # Insert newest first so the gallery is in reverse-chronological order.
-        gallery.insert(0, entry)
-        generated.append(entry)
+            # Save the PIL image to disk as a PNG file.
+            image.save(filepath, format="PNG")
 
-    # Persist the updated gallery to disk.
-    save_gallery_entries(GALLERY_DB, gallery)
+            # Build the gallery metadata entry.
+            entry = {
+                "id": img_id,
+                "filename": filename,
+                "url": f"/static/gallery/{filename}",
+                "model_id": req.model_id,
+                "model_label": model_cfg["label"],
+                "compiled_prompt": compiled_prompt,
+                "prepend_prompt_id": req.prepend_prompt_id,
+                "prompt_mode": req.prompt_mode,
+                "manual_prompt": req.manual_prompt,
+                "automated_prompt_id": req.automated_prompt_id,
+                "append_prompt_id": req.append_prompt_id,
+                "aspect_ratio_id": req.aspect_ratio_id,
+                "width": req.width,
+                "height": req.height,
+                "steps": req.steps,
+                "guidance": req.guidance,
+                "seed": img_seed,
+                "negative_prompt": negative_prompt,
+                "is_favourite": False,
+                "created_at": time.time(),
+                "batch_index": i,
+                "batch_size": req.batch_size,
+                "batch_seed": base_seed,
+                "scheduler": req.scheduler,
+            }
+
+            # Insert newest first so the gallery is in reverse-chronological order.
+            gallery.insert(0, entry)
+            generated.append(entry)
+
+        # Persist the updated gallery to disk.
+        save_gallery_entries(GALLERY_DB, gallery)
+    finally:
+        _pop_generation_cancel_event(req.generation_id)
 
     return {
         "success": True,
         "batch_seed": base_seed,
-        "compiled_prompt": compiled_prompt,
+        "compiled_prompt": first_compiled_prompt,
         "images": generated,
+        "cancelled": cancelled,
+        "requested_count": req.batch_size,
+        "completed_count": len(generated),
     }
+
+
+@app.post("/api/generate/cancel")
+async def cancel_generation(req: CancelGenerationRequest) -> dict:
+    """Request cancellation of an in-flight generation batch.
+
+    Cancellation is cooperative: the current image is allowed to finish, then
+    the batch loop stops before the next image begins.
+    """
+    cancel_events: dict[str, threading.Event] = getattr(app.state, "generation_cancel_events", {})
+    event = cancel_events.get(req.generation_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Generation not found")
+
+    event.set()
+    return {"success": True, "generation_id": req.generation_id, "status": "cancelling"}
 
 
 @app.get("/api/gallery")
@@ -793,13 +873,23 @@ async def compile_prompt(req: GenerateRequest) -> dict:
     """
     prompts = _load_prompt_catalog()
     models_data = _load_json(DATA_DIR / "models.json", {"models": []})
-    prepend_value, main_scene, append_value = _resolve_prompt_parts(req, prompts, strict=False)
+    raw_prepend_value, raw_main_scene, raw_append_value = _resolve_prompt_parts(
+        req,
+        prompts,
+        strict=False,
+    )
+    prepend_value, main_scene, append_value = resolve_prompt_variants(
+        raw_prepend_value,
+        raw_main_scene,
+        raw_append_value,
+    )
     compiled = build_prompt(
         prepend_value,
         main_scene,
         append_value,
         prepend_mode=req.prepend_mode,
         append_mode=req.append_mode,
+        expand_placeholders=False,
     )
     model_cfg = next(
         (m for m in models_data.get("models", []) if m["id"] == req.model_id),

@@ -13,12 +13,28 @@ Tests cover:
 
 from __future__ import annotations
 
+import random
+
 from pipeworks.api.prompt_builder import (
     _COLOUR_BOILERPLATE,
     _MOOD_BOILERPLATE,
     _STYLE_BOILERPLATE,
     build_prompt,
+    expand_prompt_placeholders,
+    resolve_prompt_variants,
 )
+
+
+class SequenceRandom:
+    """Minimal deterministic RNG stub for placeholder expansion tests."""
+
+    def __init__(self, picks: list[str]):
+        self._picks = list(picks)
+
+    def choice(self, options: list[str]) -> str:
+        pick = self._picks.pop(0)
+        assert pick in options
+        return pick
 
 
 class TestBuildPromptFullParts:
@@ -253,3 +269,51 @@ class TestBuildPromptBothManual:
             append_mode="template",
         )
         assert "Main Scene:" in result
+
+
+class TestPromptPlaceholderExpansion:
+    """Test random placeholder expansion within prompt text."""
+
+    def test_expand_prompt_placeholders_replaces_each_group(self):
+        """Each placeholder group should be expanded independently."""
+        result = expand_prompt_placeholders(
+            "A {red|blue} dragon in a {forest|cave}.",
+            rng=SequenceRandom(["blue", "cave"]),
+        )
+        assert result == "A blue dragon in a cave."
+
+    def test_expand_prompt_placeholders_preserves_global_random_state(self):
+        """Placeholder expansion should not mutate module-level random state."""
+        random.seed(12345)
+        before = random.getstate()
+
+        expand_prompt_placeholders("A {red|blue|green} banner.")
+
+        after = random.getstate()
+        assert after == before
+
+    def test_resolve_prompt_variants_expands_all_sections(self):
+        """Prepend, scene, and append should all be expanded once."""
+        prepend_value, main_scene, append_value = resolve_prompt_variants(
+            "Style {ink|wash}",
+            "A {red|blue} automaton",
+            "With {fog|sparks}",
+            rng=SequenceRandom(["wash", "red", "sparks"]),
+        )
+        assert prepend_value == "Style wash"
+        assert main_scene == "A red automaton"
+        assert append_value == "With sparks"
+
+    def test_build_prompt_can_expand_placeholders(self):
+        """build_prompt should expand placeholders by default."""
+        result = build_prompt(
+            "Style {ink|wash}",
+            "A {red|blue} automaton.",
+            "With {fog|sparks}.",
+            prepend_mode="manual",
+            append_mode="manual",
+            rng=SequenceRandom(["wash", "blue", "fog"]),
+        )
+        assert "Style wash" in result
+        assert "A blue automaton." in result
+        assert "With fog." in result

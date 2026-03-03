@@ -53,6 +53,9 @@ Usage
 
 from __future__ import annotations
 
+import random
+import re
+
 # ---------------------------------------------------------------------------
 # Fixed boilerplate sections.
 # These are constants rather than configuration because they define the core
@@ -82,6 +85,57 @@ _COLOUR_BOILERPLATE = (
     "Very limited colour palette, mostly sepia and faded parchment tones."
 )
 
+_PLACEHOLDER_PATTERN = re.compile(r"\{([^{}]+)\}")
+_PLACEHOLDER_RANDOM = random.SystemRandom()
+
+
+def expand_prompt_placeholders(
+    text: str,
+    *,
+    rng: random.Random | random.SystemRandom | None = None,
+) -> str:
+    """Expand ``{a|b|c}`` placeholders using an isolated RNG.
+
+    Each placeholder is replaced independently. Empty options are ignored and
+    malformed placeholders are left unchanged. Placeholder expansion is
+    intentionally isolated from the module-level ``random`` state so prompt
+    variation does not perturb unrelated randomness elsewhere in the app.
+    """
+    if not text:
+        return text
+
+    resolved_rng = rng or _PLACEHOLDER_RANDOM
+
+    def _replace(match: re.Match[str]) -> str:
+        options = [option.strip() for option in match.group(1).split("|")]
+        valid_options = [option for option in options if option]
+        if not valid_options:
+            return match.group(0)
+        return resolved_rng.choice(valid_options)
+
+    expanded = text
+    for _ in range(10):
+        updated = _PLACEHOLDER_PATTERN.sub(_replace, expanded)
+        if updated == expanded:
+            break
+        expanded = updated
+    return expanded
+
+
+def resolve_prompt_variants(
+    prepend_value: str,
+    main_scene: str,
+    append_value: str,
+    *,
+    rng: random.Random | random.SystemRandom | None = None,
+) -> tuple[str, str, str]:
+    """Expand placeholders for the three variable prompt sections once."""
+    return (
+        expand_prompt_placeholders(prepend_value, rng=rng),
+        expand_prompt_placeholders(main_scene, rng=rng),
+        expand_prompt_placeholders(append_value, rng=rng),
+    )
+
 
 def build_prompt(
     prepend_value: str,
@@ -90,6 +144,8 @@ def build_prompt(
     *,
     prepend_mode: str = "template",
     append_mode: str = "template",
+    expand_placeholders: bool = True,
+    rng: random.Random | random.SystemRandom | None = None,
 ) -> str:
     """Compile the full prompt from its three variable parts.
 
@@ -110,11 +166,22 @@ def build_prompt(
             ``"manual"`` to omit it.
         append_mode: ``"template"`` to include the mood and colour
             boilerplate, ``"manual"`` to omit it.
+        expand_placeholders: When ``True``, expand ``{a|b|c}`` placeholder
+            groups before assembling the prompt.
+        rng: Optional isolated RNG to use for placeholder selection.
 
     Returns:
         The fully compiled prompt string with sections separated by double
         newlines (``\\n\\n``).
     """
+    if expand_placeholders:
+        prepend_value, main_scene, append_value = resolve_prompt_variants(
+            prepend_value,
+            main_scene,
+            append_value,
+            rng=rng,
+        )
+
     parts: list[str] = []
 
     # --- Prepend (optional) ------------------------------------------------

@@ -78,6 +78,7 @@ class TestGenerateRequest:
         assert req.automated_prompt_id is None
         assert req.seed is None
         assert req.negative_prompt is None
+        assert req.generation_id is None
 
     def test_all_fields_populated(self):
         """All fields should be settable and retrievable."""
@@ -187,6 +188,20 @@ class TestGenerateRequest:
             scheduler="dpmpp-2m-karras",
         )
         assert req.scheduler == "dpmpp-2m-karras"
+
+    def test_generation_id_can_be_set(self):
+        """Generation ID should accept a client-supplied string."""
+        req = GenerateRequest(
+            model_id="test",
+            prompt_mode="manual",
+            aspect_ratio_id="1:1",
+            width=1024,
+            height=1024,
+            steps=4,
+            guidance=0.0,
+            generation_id="gen-123",
+        )
+        assert req.generation_id == "gen-123"
 
     def test_serialisation_round_trip(self):
         """Model should serialise to dict and back without data loss."""

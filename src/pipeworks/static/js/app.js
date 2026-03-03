@@ -26,6 +26,8 @@ const State = {
   appendMode: "template",
   batchSize: 1,
   isGenerating: false,
+  currentGenerationId: null,
+  stopRequested: false,
   outputImages: [],
   galleryImages: [],
   favouriteImages: [],
@@ -622,10 +624,16 @@ async function generate() {
   }
 
   State.isGenerating = true;
+  State.stopRequested = false;
+  State.currentGenerationId = globalThis.crypto?.randomUUID?.() || `gen-${Date.now()}`;
   const btn = $("#btn-generate");
+  const stopBtn = $("#btn-stop-generation");
   btn.classList.add("is-loading");
   btn.disabled = true;
   btn.textContent = "◆ Generating…";
+  stopBtn.style.display = "";
+  stopBtn.disabled = false;
+  stopBtn.textContent = "■ Stop After Current Image";
 
   const progressWrap = $("#progress-wrap");
   progressWrap.style.display = "";
@@ -633,6 +641,7 @@ async function generate() {
   setStatus(`Generating ${State.batchSize} image(s)…`, true);
 
   try {
+    payload.generation_id = State.currentGenerationId;
     const res = await fetch("/api/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -664,18 +673,66 @@ async function generate() {
     });
 
     updateOutputCount();
-    toast(`Generated ${data.images.length} image(s)`, "ok");
-    setStatus(`Done — ${data.images.length} image(s) generated`);
+    if (data.cancelled) {
+      const completed = data.completed_count || data.images.length;
+      if (completed > 0) {
+        toast(`Stopped after ${completed} image(s)`, "info");
+        setStatus(`Stopped after ${completed} image(s)`, false);
+      } else {
+        toast("Stopped before any images completed", "info");
+        setStatus("Stopped before any images completed", false);
+      }
+    } else {
+      toast(`Generated ${data.images.length} image(s)`, "ok");
+      setStatus(`Done — ${data.images.length} image(s) generated`);
+    }
 
   } catch (e) {
     toast(`Generation failed: ${e.message}`, "err");
     setStatus("Generation failed", false);
   } finally {
     State.isGenerating = false;
+    State.currentGenerationId = null;
+    State.stopRequested = false;
     btn.classList.remove("is-loading");
     btn.disabled = false;
     btn.textContent = "◆ Generate";
+    stopBtn.style.display = "none";
+    stopBtn.disabled = true;
+    stopBtn.textContent = "■ Stop After Current Image";
     progressWrap.style.display = "none";
+  }
+}
+
+async function stopGeneration() {
+  if (!State.isGenerating || !State.currentGenerationId || State.stopRequested) return;
+
+  State.stopRequested = true;
+  const stopBtn = $("#btn-stop-generation");
+  stopBtn.disabled = true;
+  stopBtn.textContent = "■ Stopping…";
+
+  setStatus("Stopping after current image…", true);
+
+  try {
+    const res = await fetch("/api/generate/cancel", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ generation_id: State.currentGenerationId }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Unknown error" }));
+      throw new Error(err.detail || `HTTP ${res.status}`);
+    }
+
+    toast("Stop requested. Waiting for the current image to finish.", "info");
+  } catch (e) {
+    State.stopRequested = false;
+    stopBtn.disabled = false;
+    stopBtn.textContent = "■ Stop After Current Image";
+    toast(`Stop request failed: ${e.message}`, "err");
+    setStatus("Stop request failed", false);
   }
 }
 
@@ -1417,6 +1474,7 @@ function wireEvents() {
 
   // Generate
   $("#btn-generate").addEventListener("click", generate);
+  $("#btn-stop-generation").addEventListener("click", stopGeneration);
 
   // Clear output
   $("#btn-clear-output").addEventListener("click", () => {

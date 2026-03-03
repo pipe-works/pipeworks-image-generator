@@ -144,6 +144,19 @@ class GenerateRequest(BaseModel):
             "None = use model's default scheduler."
         ),
     )
+    generation_id: str | None = Field(
+        default=None,
+        description="Optional client-supplied batch identifier used for cancellation.",
+    )
+
+
+class CancelGenerationRequest(BaseModel):
+    """Request body for cancelling an in-flight generation batch."""
+
+    generation_id: str = Field(
+        ...,
+        description="Client-supplied generation batch identifier to cancel.",
+    )
 
 
 class FavouriteRequest(BaseModel):
