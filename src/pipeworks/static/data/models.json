@@ -83,6 +83,33 @@
       ],
       "default_aspect": "1:1",
       "max_prompt_tokens": 77
+    },
+    {
+      "id": "flux-2-klein-4b",
+      "label": "FLUX.2-klein-4B",
+      "hf_id": "black-forest-labs/FLUX.2-klein-4B",
+      "description": "Black Forest Labs FLUX.2 klein 4B — Qwen-based prompt encoder with 512-token context. Requires Flux2KleinPipeline support in diffusers.",
+      "hf_url": "https://huggingface.co/black-forest-labs/FLUX.2-klein-4B",
+      "default_steps": 28,
+      "min_steps": 10,
+      "max_steps": 50,
+      "default_guidance": 4.0,
+      "min_guidance": 1.0,
+      "max_guidance": 10.0,
+      "guidance_step": 0.5,
+      "supports_negative_prompt": true,
+      "aspect_ratios": [
+        { "id": "1:1", "label": "1:1 Square", "width": 1024, "height": 1024 },
+        { "id": "16:9", "label": "16:9 Landscape", "width": 1344, "height": 768 },
+        { "id": "9:16", "label": "9:16 Portrait", "width": 768, "height": 1344 },
+        { "id": "4:3", "label": "4:3 Standard", "width": 1152, "height": 896 },
+        { "id": "3:4", "label": "3:4 Portrait", "width": 896, "height": 1152 },
+        { "id": "3:2", "label": "3:2 Photo", "width": 1216, "height": 832 },
+        { "id": "2:3", "label": "2:3 Portrait", "width": 832, "height": 1216 },
+        { "id": "21:9", "label": "21:9 Ultrawide", "width": 1536, "height": 640 }
+      ],
+      "default_aspect": "1:1",
+      "max_prompt_tokens": 512
     }
   ]
 }

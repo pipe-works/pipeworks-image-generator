@@ -18,6 +18,7 @@ real model loading or GPU access occurs.  Tests cover every endpoint:
 from __future__ import annotations
 
 import json
+from unittest.mock import patch
 
 # ---------------------------------------------------------------------------
 # Index page tests.
@@ -65,6 +66,17 @@ class TestGetConfig:
         data = resp.json()
         z_image = next(model for model in data["models"] if model["id"] == "z-image-turbo")
         assert z_image["max_prompt_tokens"] == 512
+
+    def test_config_exposes_flux2_klein_model(self, test_client):
+        """FLUX.2-klein-4B should be listed with support metadata."""
+        resp = test_client.get("/api/config")
+        assert resp.status_code == 200
+        data = resp.json()
+        flux_model = next(model for model in data["models"] if model["id"] == "flux-2-klein-4b")
+        assert flux_model["hf_id"] == "black-forest-labs/FLUX.2-klein-4B"
+        assert flux_model["max_prompt_tokens"] == 512
+        assert "is_available" in flux_model
+        assert "unavailable_reason" in flux_model
 
     def test_config_returns_prompts(self, test_client):
         """Response should include all three prompt categories."""
@@ -166,6 +178,30 @@ class TestGenerate:
         )
         assert resp.status_code == 400
         assert "Unknown model" in resp.json()["detail"]
+
+    def test_generate_unavailable_flux_model_returns_503(self, test_client):
+        """Unsupported runtime models should fail cleanly instead of 500ing."""
+        with patch(
+            "pipeworks.api.main.get_model_runtime_support",
+            return_value=(False, "Flux2KleinPipeline missing"),
+        ):
+            resp = test_client.post(
+                "/api/generate",
+                json={
+                    "model_id": "flux-2-klein-4b",
+                    "prepend_prompt_id": "none",
+                    "prompt_mode": "manual",
+                    "manual_prompt": "A test scene.",
+                    "aspect_ratio_id": "1:1",
+                    "width": 1024,
+                    "height": 1024,
+                    "steps": 28,
+                    "guidance": 4.0,
+                    "batch_size": 1,
+                },
+            )
+        assert resp.status_code == 503
+        assert "Flux2KleinPipeline" in resp.json()["detail"]
 
     def test_generate_manual_missing_prompt(self, test_client):
         """Manual mode without a prompt should still generate successfully."""
@@ -373,8 +409,37 @@ class TestPromptCompile:
         assert resp.status_code == 200
         data = resp.json()
         assert "compiled_prompt" in data
+        assert data["token_counts"]["method"] == "tokenizer"
+        assert data["token_counts"]["total"] > 0
         assert "A test scene." in data["compiled_prompt"]
         assert "Main Scene:" in data["compiled_prompt"]
+
+    def test_compile_returns_flux2_token_counts(self, test_client):
+        """Prompt preview should return token counts for FLUX.2-klein-4B as well."""
+        resp = test_client.post(
+            "/api/prompt/compile",
+            json={
+                "model_id": "flux-2-klein-4b",
+                "prepend_mode": "manual",
+                "manual_prepend": "Ink wash style.",
+                "prompt_mode": "manual",
+                "manual_prompt": "A moonlit machine garden.",
+                "append_mode": "manual",
+                "manual_append": "Soft bloom.",
+                "aspect_ratio_id": "1:1",
+                "width": 1024,
+                "height": 1024,
+                "steps": 28,
+                "guidance": 4.0,
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["token_counts"]["method"] == "tokenizer"
+        assert data["token_counts"]["prepend"] > 0
+        assert data["token_counts"]["main"] > 0
+        assert data["token_counts"]["append"] > 0
+        assert data["token_counts"]["total"] >= data["token_counts"]["main"]
 
     def test_compile_blank_manual_prompt_omits_main_scene_header(self, test_client):
         """Blank manual scene text should not emit an empty Main Scene section."""

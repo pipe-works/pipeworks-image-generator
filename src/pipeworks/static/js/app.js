@@ -40,6 +40,13 @@ const State = {
   lightboxImage: null,
   lightboxContext: null,
   theme: "dark",
+  tokenCounts: {
+    prepend: 0,
+    main: 0,
+    append: 0,
+    total: 0,
+    method: "heuristic",
+  },
   selectMode: false,
   selectedIds: new Set(),
 };
@@ -211,9 +218,20 @@ function populateControls() {
   const selModel = $("#sel-model");
   selModel.innerHTML = "";
   cfg.models.forEach(m => {
-    const opt = el("option", { value: m.id }, m.label);
+    const optionAttrs = { value: m.id };
+    if (m.is_available === false) optionAttrs.disabled = "disabled";
+    const opt = el(
+      "option",
+      optionAttrs,
+      m.is_available === false ? `${m.label} (Unavailable)` : m.label,
+    );
     selModel.appendChild(opt);
   });
+
+  const firstAvailableModel = cfg.models.find(m => m.is_available !== false);
+  if (firstAvailableModel) {
+    selModel.value = firstAvailableModel.id;
+  }
 
   // Gallery model filter
   const selGalleryModel = $("#sel-gallery-model");
@@ -255,7 +273,9 @@ function onModelChange() {
 
   // Update info card
   $("#model-info-name").textContent = model.label;
-  $("#model-info-desc").textContent = model.description;
+  $("#model-info-desc").textContent = model.is_available === false
+    ? `${model.description} ${model.unavailable_reason || ""}`.trim()
+    : model.description;
   $("#model-info-link").href = model.hf_url;
 
   // Aspect ratios
@@ -305,7 +325,13 @@ function onModelChange() {
     schedWrap.style.display = "none";
   }
 
+  const generateButton = $("#btn-generate");
+  generateButton.disabled = model.is_available === false;
+
   updateStatusBar();
+  if (model.is_available === false && model.unavailable_reason) {
+    setStatus(model.unavailable_reason, false);
+  }
   updatePromptPreview();
   updateTokenCounters();
 }
@@ -355,10 +381,6 @@ function setAppendMode(mode) {
 
 // ── Token estimation ──────────────────────────────────────────────────────────
 
-/**
- * Estimate CLIP BPE token count using a ~4 chars/token heuristic.
- * Returns 0 for empty or whitespace-only text.
- */
 function estimateTokens(text) {
   const trimmed = text.trim();
   if (!trimmed) return 0;
@@ -441,15 +463,7 @@ function updateTokenCounters() {
 
   const model = State.config.models.find(m => m.id === State.selectedModel);
   const maxTokens = model ? (model.max_prompt_tokens || 77) : 77;
-
-  // Per-section estimates (user text only).
-  const prependCount = estimateTokens(getPromptSectionText("prepend"));
-  const mainCount = estimateTokens(getPromptSectionText("main"));
-  const appendCount = estimateTokens(getPromptSectionText("append"));
-
-  // Total estimate from the compiled prompt preview text.
-  const previewText = $("#prompt-preview-box").textContent || "";
-  const totalCount = estimateTokens(previewText);
+  const counts = State.tokenCounts || {};
 
   // Helper to set counter text and warn/over classes.
   function applyCounter(elId, count, limit) {
@@ -464,10 +478,10 @@ function updateTokenCounters() {
     }
   }
 
-  applyCounter("#prepend-tokens", prependCount, maxTokens);
-  applyCounter("#main-tokens", mainCount, maxTokens);
-  applyCounter("#append-tokens", appendCount, maxTokens);
-  applyCounter("#total-tokens", totalCount, maxTokens);
+  applyCounter("#prepend-tokens", counts.prepend || 0, maxTokens);
+  applyCounter("#main-tokens", counts.main || 0, maxTokens);
+  applyCounter("#append-tokens", counts.append || 0, maxTokens);
+  applyCounter("#total-tokens", counts.total || 0, maxTokens);
 }
 
 
@@ -485,7 +499,9 @@ async function updatePromptPreview() {
 
   const payload = buildGeneratePayload();
   if (!payload) {
+    State.tokenCounts = { prepend: 0, main: 0, append: 0, total: 0, method: "heuristic" };
     $("#prompt-preview-box").textContent = "Configure options above to preview the compiled prompt…";
+    updateTokenCounters();
     return;
   }
 
@@ -499,6 +515,13 @@ async function updatePromptPreview() {
     const data = await res.json();
     const preview = $("#prompt-preview-box");
     preview.textContent = data.compiled_prompt;
+    State.tokenCounts = data.token_counts || {
+      prepend: estimateTokens(getPromptSectionText("prepend")),
+      main: estimateTokens(getPromptSectionText("main")),
+      append: estimateTokens(getPromptSectionText("append")),
+      total: estimateTokens(data.compiled_prompt || ""),
+      method: "heuristic",
+    };
     // Also update modal if open
     const modalText = $("#modal-prompt-text");
     if (modalText) modalText.textContent = data.compiled_prompt;
@@ -588,6 +611,13 @@ async function generate() {
   const payload = buildGeneratePayload();
   if (!payload) {
     toast("Please finish configuring the generator", "warn");
+    return;
+  }
+
+  const model = State.config.models.find(m => m.id === State.selectedModel);
+  if (model && model.is_available === false) {
+    toast(model.unavailable_reason || "Selected model is unavailable in this runtime", "err");
+    setStatus("Selected model unavailable", false);
     return;
   }
 

@@ -31,6 +31,9 @@ pip install -e ".[dev]"
 pip install -e .
 ```
 
+`FLUX.2-klein-4B` requires `diffusers>=0.37.0` so
+`Flux2KleinPipeline` is available at runtime.
+
 ### Running the Application
 
 ```bash

@@ -114,7 +114,7 @@ def test_config(temp_dir: Path) -> PipeworksConfig:
 
 @pytest.fixture
 def sample_models_json() -> dict:
-    """Minimal models.json content with a single model definition.
+    """Minimal models.json content with representative model definitions.
 
     Returns:
         Dictionary matching the models.json schema.
@@ -126,17 +126,43 @@ def sample_models_json() -> dict:
                 "hf_id": "Tongyi-MAI/Z-Image-Turbo",
                 "label": "Z-Image Turbo",
                 "description": "Fast turbo model for quick generation.",
+                "hf_url": "https://huggingface.co/Tongyi-MAI/Z-Image-Turbo",
                 "max_prompt_tokens": 512,
+                "default_steps": 4,
+                "min_steps": 1,
+                "max_steps": 8,
+                "default_guidance": 0.0,
+                "min_guidance": 0.0,
+                "max_guidance": 3.0,
+                "guidance_step": 0.1,
+                "supports_negative_prompt": False,
                 "aspect_ratios": [
                     {"id": "1:1", "label": "Square 1:1", "width": 1024, "height": 1024},
                     {"id": "16:9", "label": "Wide 16:9", "width": 1280, "height": 720},
                 ],
-                "defaults": {
-                    "steps": 4,
-                    "guidance": 0.0,
-                    "aspect_ratio": "1:1",
-                },
-            }
+                "default_aspect": "1:1",
+            },
+            {
+                "id": "flux-2-klein-4b",
+                "hf_id": "black-forest-labs/FLUX.2-klein-4B",
+                "label": "FLUX.2-klein-4B",
+                "description": "FLUX klein model for higher quality image generation.",
+                "hf_url": "https://huggingface.co/black-forest-labs/FLUX.2-klein-4B",
+                "max_prompt_tokens": 512,
+                "default_steps": 28,
+                "min_steps": 10,
+                "max_steps": 50,
+                "default_guidance": 4.0,
+                "min_guidance": 1.0,
+                "max_guidance": 10.0,
+                "guidance_step": 0.5,
+                "supports_negative_prompt": True,
+                "aspect_ratios": [
+                    {"id": "1:1", "label": "Square 1:1", "width": 1024, "height": 1024},
+                    {"id": "16:9", "label": "Wide 16:9", "width": 1344, "height": 768},
+                ],
+                "default_aspect": "1:1",
+            },
         ]
     }
 
@@ -272,6 +298,34 @@ def mock_model_manager() -> MagicMock:
     )
 
     return mgr
+
+
+@pytest.fixture
+def mock_prompt_token_counter() -> MagicMock:
+    """Create a mock prompt token counter for compile preview responses."""
+    counter = MagicMock()
+
+    def _count_prompt_parts(
+        *,
+        hf_id: str | None,
+        prepend_text: str,
+        main_text: str,
+        append_text: str,
+        compiled_prompt: str,
+    ) -> dict:
+        def _count_words(text: str) -> int:
+            return len(text.split()) if text.strip() else 0
+
+        return {
+            "prepend": _count_words(prepend_text),
+            "main": _count_words(main_text),
+            "append": _count_words(append_text),
+            "total": _count_words(compiled_prompt),
+            "method": "tokenizer" if hf_id else "heuristic",
+        }
+
+    counter.count_prompt_parts.side_effect = _count_prompt_parts
+    return counter
 
 
 # ---------------------------------------------------------------------------
@@ -419,6 +473,7 @@ def sample_gallery_mixed_models(tmp_gallery_dir: Path, test_config: PipeworksCon
 def test_client(
     test_config: PipeworksConfig,
     mock_model_manager: MagicMock,
+    mock_prompt_token_counter: MagicMock,
     tmp_data_dir: Path,
     tmp_templates_dir: Path,
 ):
@@ -452,6 +507,7 @@ def test_client(
 
         # Inject the mock model manager onto app.state.
         app.state.model_manager = mock_model_manager
+        app.state.prompt_token_counter = mock_prompt_token_counter
 
         client = TestClient(app)
         yield client

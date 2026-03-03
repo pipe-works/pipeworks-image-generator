@@ -66,6 +66,27 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_FLUX2_KLEIN_HF_ID = "black-forest-labs/FLUX.2-klein-4B"
+
+
+def get_model_runtime_support(hf_id: str) -> tuple[bool, str | None]:
+    """Return whether the current runtime can load the requested model."""
+    if hf_id != _FLUX2_KLEIN_HF_ID:
+        return True, None
+
+    try:
+        from diffusers import Flux2KleinPipeline  # noqa: F401
+    except ImportError:
+        return (
+            False,
+            "FLUX.2-klein-4B requires a diffusers build that exposes "
+            "Flux2KleinPipeline. The official model metadata expects "
+            "diffusers>=0.37.0.dev0/source install.",
+        )
+
+    return True, None
+
+
 # ---------------------------------------------------------------------------
 # Dtype string → torch dtype mapping.
 # Kept outside the class so it is defined once and reused.  The strings
@@ -207,6 +228,10 @@ class ModelManager:
         # --- Import torch/diffusers here (lazy) ----------------------------
         import torch
         from diffusers import AutoPipelineForText2Image
+
+        is_supported, support_reason = get_model_runtime_support(hf_id)
+        if not is_supported:
+            raise RuntimeError(support_reason)
 
         # Resolve the torch dtype from the config string.
         dtype_map = _get_dtype_map()

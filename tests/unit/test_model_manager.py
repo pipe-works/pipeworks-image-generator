@@ -23,6 +23,7 @@ the module-level names don't exist until the import statement executes.
 from __future__ import annotations
 
 import sys
+import types
 from unittest.mock import MagicMock
 
 import pytest
@@ -196,6 +197,47 @@ class TestModelLoading:
 
             assert mgr.is_loaded is False
             assert mgr.current_model_id is None
+
+    def test_flux2_klein_requires_supported_diffusers_build(self, test_config: PipeworksConfig):
+        """FLUX.2-klein should raise a clear error when Flux2KleinPipeline is unavailable."""
+        import pipeworks.core.model_manager as mm
+
+        mm._DTYPE_MAP = None
+        mm._SCHEDULER_MAP = None
+
+        mock_torch = _create_mock_torch()
+        mock_pipeline, mock_auto_class = _create_mock_pipeline()
+
+        diffusers_module = types.ModuleType("diffusers")
+        diffusers_module.AutoPipelineForText2Image = mock_auto_class
+        diffusers_module.PNDMScheduler = MagicMock()
+        diffusers_module.DPMSolverMultistepScheduler = MagicMock()
+
+        saved_torch = sys.modules.get("torch")
+        saved_diffusers = sys.modules.get("diffusers")
+
+        try:
+            sys.modules["torch"] = mock_torch
+            sys.modules["diffusers"] = diffusers_module
+
+            mgr = ModelManager(test_config)
+            with pytest.raises(RuntimeError, match="Flux2KleinPipeline"):
+                mgr.load_model("black-forest-labs/FLUX.2-klein-4B")
+
+            mock_auto_class.from_pretrained.assert_not_called()
+        finally:
+            if saved_torch is not None:
+                sys.modules["torch"] = saved_torch
+            else:
+                sys.modules.pop("torch", None)
+
+            if saved_diffusers is not None:
+                sys.modules["diffusers"] = saved_diffusers
+            else:
+                sys.modules.pop("diffusers", None)
+
+            mm._DTYPE_MAP = None
+            mm._SCHEDULER_MAP = None
 
 
 class TestModelSwitching:

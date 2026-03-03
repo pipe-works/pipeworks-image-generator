@@ -29,6 +29,9 @@ pyenv local pig
 pyenv exec pip install -e ".[dev]"
 ```
 
+For `FLUX.2-klein-4B`, the runtime must provide
+`diffusers>=0.37.0` so `Flux2KleinPipeline` is available.
+
 If the environment is missing dependencies, install them into the active
 `pyenv` environment instead of falling back to system Python.
 
