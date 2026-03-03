@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.11](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.2.10...pipeworks-image-generator-v0.2.11) (2026-03-03)
+
+
+### Features
+
+* add flux2 klein model support ([942a96d](https://github.com/pipe-works/pipeworks-image-generator/commit/942a96d768124625a9dd37247ec55f202c02f342))
+* add flux2 klein model support ([aaffb82](https://github.com/pipe-works/pipeworks-image-generator/commit/aaffb823b12bcf003ef906fc9a4ffd4fc065d292))
+
+
+### Bug Fixes
+
+* keep flux runtime dependency installable ([93dab72](https://github.com/pipe-works/pipeworks-image-generator/commit/93dab72ba212c473f0d9bca09eb709ec5224269d))
+
 ## [0.2.10](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.2.9...pipeworks-image-generator-v0.2.10) (2026-03-02)
 
 
