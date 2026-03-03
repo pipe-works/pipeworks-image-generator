@@ -436,9 +436,15 @@ class TestGenerate:
         mock_model_manager,
     ):
         """Negative prompt placeholders should be expanded during generation."""
-        with patch(
-            "pipeworks.api.prompt_builder._PLACEHOLDER_RANDOM",
-            SequenceRandom(["red", "blur"]),
+        with (
+            patch(
+                "pipeworks.api.main.get_model_runtime_support",
+                return_value=(True, None),
+            ),
+            patch(
+                "pipeworks.api.prompt_builder._PLACEHOLDER_RANDOM",
+                SequenceRandom(["red", "blur"]),
+            ),
         ):
             resp = test_client.post(
                 "/api/generate",
