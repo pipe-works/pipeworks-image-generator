@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.12](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.2.11...pipeworks-image-generator-v0.2.12) (2026-03-03)
+
+
+### Features
+
+* add prompt variants and cooperative batch stop ([#40](https://github.com/pipe-works/pipeworks-image-generator/issues/40)) ([e6a6c7a](https://github.com/pipe-works/pipeworks-image-generator/commit/e6a6c7a6ed7b4357cb5b6f1d99273344d034db9d))
+
+
+### Bug Fixes
+
+* bump pre-1.0 features as minor releases ([#42](https://github.com/pipe-works/pipeworks-image-generator/issues/42)) ([147521b](https://github.com/pipe-works/pipeworks-image-generator/commit/147521b58805b336e5d98c74db453a55f7c13078))
+
 ## [0.2.11](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.2.10...pipeworks-image-generator-v0.2.11) (2026-03-03)
 
 
