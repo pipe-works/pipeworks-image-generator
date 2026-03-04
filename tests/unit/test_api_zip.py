@@ -64,12 +64,11 @@ class TestZipEndpoint:
         assert "preset_label" in prepend
         assert "text" in prepend
 
-        # Prompt section — main sub-object.
+        # Prompt section — main sub-object (same shape as prepend/append).
         main = metadata["prompt"]["main"]
         assert main["mode"] == image["prompt_mode"]
-        assert main["manual_text"] == image["manual_prompt"]
-        assert main["automated_preset_id"] == image.get("automated_prompt_id")
-        assert "automated_preset_label" in main
+        assert main["preset_id"] == image.get("automated_prompt_id")
+        assert "preset_label" in main
         assert "text" in main
 
         # Prompt section — append sub-object.
