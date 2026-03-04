@@ -966,9 +966,8 @@ async def download_image_zip(image_id: str) -> Response:
             },
             "main": {
                 "mode": prompt_mode,
-                "manual_text": entry.get("manual_prompt"),
-                "automated_preset_id": automated_id,
-                "automated_preset_label": automated_preset.get("label"),
+                "preset_id": automated_id,
+                "preset_label": automated_preset.get("label"),
                 "text": main_text,
             },
             "append": {
