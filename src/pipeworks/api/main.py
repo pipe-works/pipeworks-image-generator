@@ -33,6 +33,7 @@ POST      ``/api/prompt/compile``       Preview the compiled prompt
 GET       ``/api/gallery``              Paginated gallery listing
 GET       ``/api/gallery/{id}``         Single gallery entry
 GET       ``/api/gallery/{id}/prompt``  Compiled prompt metadata
+GET       ``/api/gallery/{id}/zip``     Download image + metadata zip
 POST      ``/api/gallery/favourite``    Toggle favourite status
 DELETE    ``/api/gallery/{id}``         Delete image and gallery entry
 GET       ``/api/stats``                Gallery statistics
@@ -51,14 +52,17 @@ Direct invocation::
 
 from __future__ import annotations
 
+import io
 import json
 import logging
 import random
 import threading
 import time
 import uuid
+import zipfile
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -66,6 +70,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
+from starlette.responses import Response
 
 from pipeworks import __version__
 from pipeworks.api.gallery_store import (
@@ -855,6 +860,102 @@ async def get_image_prompt(image_id: str) -> dict:
         "width": entry.get("width"),
         "height": entry.get("height"),
     }
+
+
+@app.get("/api/gallery/{image_id}/zip")
+async def download_image_zip(image_id: str) -> Response:
+    """Download a zip archive containing the image and structured metadata.
+
+    The zip contains two files:
+
+    - ``pipeworks_{id_short}.png`` — the generated image.
+    - ``pipeworks_{id_short}_metadata.json`` — structured metadata with
+      prompt sections listed individually (prepend, main, append) plus
+      all generation parameters.
+
+    Args:
+        image_id: UUID of the gallery image.
+
+    Returns:
+        A ``Response`` with ``application/zip`` content type.
+
+    Raises:
+        HTTPException: 404 if the image or its PNG file is not found.
+    """
+    gallery = load_gallery_entries(GALLERY_DB, GALLERY_DIR)
+    entry = next((g for g in gallery if g["id"] == image_id), None)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Image not found")
+
+    # Resolve the PNG file on disk.
+    image_path = GALLERY_DIR / entry["filename"]
+    if not image_path.exists():
+        raise HTTPException(status_code=404, detail="Image file not found on disk")
+
+    id_short = image_id[:8]
+
+    # Look up the model definition for the label.
+    models_data = _load_json(DATA_DIR / "models.json", {"models": []})
+    model_cfg = next(
+        (m for m in models_data.get("models", []) if m["id"] == entry.get("model_id")),
+        None,
+    )
+
+    # Build the structured metadata JSON.
+    created_at_ts = entry.get("created_at")
+    created_at_iso = (
+        datetime.fromtimestamp(created_at_ts, tz=UTC).isoformat() if created_at_ts else None
+    )
+
+    metadata = {
+        "id": image_id,
+        "model": {
+            "id": entry.get("model_id"),
+            "label": model_cfg["label"] if model_cfg else entry.get("model_label"),
+        },
+        "prompt": {
+            "compiled": entry.get("compiled_prompt", ""),
+            "prepend_id": entry.get("prepend_prompt_id"),
+            "mode": entry.get("prompt_mode"),
+            "manual_text": entry.get("manual_prompt"),
+            "automated_preset_id": entry.get("automated_prompt_id"),
+            "append_id": entry.get("append_prompt_id"),
+        },
+        "generation": {
+            "width": entry.get("width"),
+            "height": entry.get("height"),
+            "aspect_ratio": entry.get("aspect_ratio_id"),
+            "steps": entry.get("steps"),
+            "guidance": entry.get("guidance"),
+            "seed": entry.get("seed"),
+            "negative_prompt": entry.get("negative_prompt"),
+            "scheduler": entry.get("scheduler"),
+        },
+        "batch": {
+            "index": entry.get("batch_index"),
+            "size": entry.get("batch_size"),
+            "seed": entry.get("batch_seed"),
+        },
+        "created_at": created_at_iso,
+        "is_favourite": entry.get("is_favourite", False),
+    }
+
+    # Build the zip archive in memory.
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.write(image_path, f"pipeworks_{id_short}.png")
+        zf.writestr(
+            f"pipeworks_{id_short}_metadata.json",
+            json.dumps(metadata, indent=2),
+        )
+    buffer.seek(0)
+
+    zip_filename = f"pipeworks_{id_short}.zip"
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{zip_filename}"'},
+    )
 
 
 @app.post("/api/prompt/compile")
