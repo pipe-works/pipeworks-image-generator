@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.4.0...pipeworks-image-generator-v0.5.0) (2026-03-04)
+
+
+### Features
+
+* enrich zip metadata with full prompt section details ([#53](https://github.com/pipe-works/pipeworks-image-generator/issues/53)) ([0759efb](https://github.com/pipe-works/pipeworks-image-generator/commit/0759efb8ac5c3a7c3784f0826119b8af5ab13d27))
+
 ## [0.4.0](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.3.1...pipeworks-image-generator-v0.4.0) (2026-03-04)
 
 
