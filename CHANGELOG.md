@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.5.0...pipeworks-image-generator-v0.5.1) (2026-03-04)
+
+
+### Fixes
+
+* unify zip metadata main section to match prepend/append shape ([#55](https://github.com/pipe-works/pipeworks-image-generator/issues/55)) ([719b4b4](https://github.com/pipe-works/pipeworks-image-generator/commit/719b4b4b693dd2ec23cd4194d93e9e965820f493))
+
 ## [0.5.0](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.4.0...pipeworks-image-generator-v0.5.0) (2026-03-04)
 
 
