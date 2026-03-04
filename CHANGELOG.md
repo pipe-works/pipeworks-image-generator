@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.3.1...pipeworks-image-generator-v0.4.0) (2026-03-04)
+
+
+### Features
+
+* add Save Zip download from lightbox modal ([#51](https://github.com/pipe-works/pipeworks-image-generator/issues/51)) ([4576dda](https://github.com/pipe-works/pipeworks-image-generator/commit/4576dda125e8b43d71b3b5d2e0383df1b4c9a0e9))
+
 ## [0.3.1](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.3.0...pipeworks-image-generator-v0.3.1) (2026-03-03)
 
 
