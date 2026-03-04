@@ -171,6 +171,7 @@ export function createOutputLightboxController({
     copyPromptButton: rootDocument.getElementById("lb-btn-copy-prompt"),
     favouriteButton: rootDocument.getElementById("lb-btn-fav"),
     downloadButton: rootDocument.getElementById("lb-btn-download"),
+    zipButton: rootDocument.getElementById("lb-btn-zip"),
     deleteButton: rootDocument.getElementById("lb-btn-delete"),
     previousButton: rootDocument.getElementById("lb-btn-prev"),
     playButton: rootDocument.getElementById("lb-btn-play"),
@@ -326,6 +327,11 @@ export function createOutputLightboxController({
 
     dom.downloadButton.href = image.url;
     dom.downloadButton.download = `pipeworks_${image.id.slice(0, 8)}.png`;
+
+    if (dom.zipButton) {
+      dom.zipButton.href = `/api/gallery/${image.id}/zip`;
+      dom.zipButton.download = `pipeworks_${image.id.slice(0, 8)}.zip`;
+    }
 
     dom.favouriteButton.textContent = image.is_favourite ? "★ Unfavourite" : "☆ Favourite";
     dom.favouriteButton.classList.toggle("is-active", Boolean(image.is_favourite));

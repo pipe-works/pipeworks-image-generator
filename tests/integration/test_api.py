@@ -10,6 +10,7 @@ real model loading or GPU access occurs.  Tests cover every endpoint:
 - ``GET /api/gallery`` — Paginated gallery listing with filters.
 - ``GET /api/gallery/{id}`` — Single gallery entry.
 - ``GET /api/gallery/{id}/prompt`` — Prompt metadata.
+- ``GET /api/gallery/{id}/zip`` — Zip archive download.
 - ``POST /api/gallery/favourite`` — Favourite toggling.
 - ``DELETE /api/gallery/{id}`` — Image deletion.
 - ``GET /api/stats`` — Gallery statistics.
@@ -931,6 +932,37 @@ class TestGalleryPrompt:
     def test_get_prompt_nonexistent(self, test_client, sample_gallery):
         """GET /api/gallery/{id}/prompt with unknown ID should return 404."""
         resp = test_client.get("/api/gallery/nonexistent-id/prompt")
+        assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Zip download endpoint tests.
+# ---------------------------------------------------------------------------
+
+
+class TestZipDownload:
+    """Test GET /api/gallery/{id}/zip — zip archive download."""
+
+    def test_zip_download_success(self, test_client, sample_gallery):
+        """GET /api/gallery/{id}/zip should return a valid zip archive."""
+        import io
+        import zipfile
+
+        image = sample_gallery[0]
+        resp = test_client.get(f"/api/gallery/{image['id']}/zip")
+
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "application/zip"
+
+        with zipfile.ZipFile(io.BytesIO(resp.content)) as zf:
+            names = zf.namelist()
+            id_short = image["id"][:8]
+            assert f"pipeworks_{id_short}.png" in names
+            assert f"pipeworks_{id_short}_metadata.json" in names
+
+    def test_zip_download_not_found(self, test_client, sample_gallery):
+        """GET /api/gallery/{id}/zip should 404 for unknown image IDs."""
+        resp = test_client.get("/api/gallery/does-not-exist/zip")
         assert resp.status_code == 404
 
 
