@@ -54,13 +54,30 @@ class TestZipEndpoint:
         # Model section.
         assert metadata["model"]["id"] == image["model_id"]
 
-        # Prompt section.
+        # Prompt section — top-level compiled string.
         assert metadata["prompt"]["compiled"] == image["compiled_prompt"]
-        assert metadata["prompt"]["mode"] == image["prompt_mode"]
-        assert metadata["prompt"]["manual_text"] == image["manual_prompt"]
-        assert metadata["prompt"]["prepend_id"] == image["prepend_prompt_id"]
-        assert metadata["prompt"]["append_id"] == image["append_prompt_id"]
-        assert metadata["prompt"]["automated_preset_id"] == image.get("automated_prompt_id")
+
+        # Prompt section — prepend sub-object.
+        prepend = metadata["prompt"]["prepend"]
+        assert prepend["mode"] == image.get("prepend_mode", "template")
+        assert prepend["preset_id"] == image["prepend_prompt_id"]
+        assert "preset_label" in prepend
+        assert "text" in prepend
+
+        # Prompt section — main sub-object.
+        main = metadata["prompt"]["main"]
+        assert main["mode"] == image["prompt_mode"]
+        assert main["manual_text"] == image["manual_prompt"]
+        assert main["automated_preset_id"] == image.get("automated_prompt_id")
+        assert "automated_preset_label" in main
+        assert "text" in main
+
+        # Prompt section — append sub-object.
+        append = metadata["prompt"]["append"]
+        assert append["mode"] == image.get("append_mode", "template")
+        assert append["preset_id"] == image["append_prompt_id"]
+        assert "preset_label" in append
+        assert "text" in append
 
         # Generation section.
         assert metadata["generation"]["width"] == image["width"]

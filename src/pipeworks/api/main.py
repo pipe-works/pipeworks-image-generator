@@ -624,6 +624,10 @@ async def generate_images(req: GenerateRequest) -> dict:
                 "manual_prompt": req.manual_prompt,
                 "automated_prompt_id": req.automated_prompt_id,
                 "append_prompt_id": req.append_prompt_id,
+                "prepend_mode": req.prepend_mode,
+                "append_mode": req.append_mode,
+                "manual_prepend": req.manual_prepend,
+                "manual_append": req.manual_append,
                 "aspect_ratio_id": req.aspect_ratio_id,
                 "width": req.width,
                 "height": req.height,
@@ -907,6 +911,45 @@ async def download_image_zip(image_id: str) -> Response:
         datetime.fromtimestamp(created_at_ts, tz=UTC).isoformat() if created_at_ts else None
     )
 
+    # Load the prompt catalog so we can resolve labels and text for each
+    # prompt section.  Build a quick id→{label, value} lookup from all
+    # three libraries (prepend, main, append are merged).
+    prompts = _load_prompt_catalog()
+    prompt_lookup: dict[str, dict] = {}
+    for lib_key in ("prepend_library", "main_library", "append_library"):
+        for p in prompts.get(lib_key, []):
+            prompt_lookup[p["id"]] = {"label": p.get("label", ""), "value": p.get("value", "")}
+
+    # Determine prepend/append modes — older entries may lack these fields,
+    # so default to "template" for backwards compatibility.
+    prepend_mode = entry.get("prepend_mode", "template")
+    append_mode = entry.get("append_mode", "template")
+
+    # Resolve prepend section.
+    prepend_id = entry.get("prepend_prompt_id")
+    prepend_preset = prompt_lookup.get(prepend_id, {}) if prepend_id else {}
+    if prepend_mode == "manual":
+        prepend_text = entry.get("manual_prepend", "")
+    else:
+        prepend_text = prepend_preset.get("value", "")
+
+    # Resolve main section.
+    prompt_mode = entry.get("prompt_mode", "manual")
+    automated_id = entry.get("automated_prompt_id")
+    automated_preset = prompt_lookup.get(automated_id, {}) if automated_id else {}
+    if prompt_mode == "manual":
+        main_text = entry.get("manual_prompt", "") or ""
+    else:
+        main_text = automated_preset.get("value", "")
+
+    # Resolve append section.
+    append_id = entry.get("append_prompt_id")
+    append_preset = prompt_lookup.get(append_id, {}) if append_id else {}
+    if append_mode == "manual":
+        append_text = entry.get("manual_append", "")
+    else:
+        append_text = append_preset.get("value", "")
+
     metadata = {
         "id": image_id,
         "model": {
@@ -915,11 +958,25 @@ async def download_image_zip(image_id: str) -> Response:
         },
         "prompt": {
             "compiled": entry.get("compiled_prompt", ""),
-            "prepend_id": entry.get("prepend_prompt_id"),
-            "mode": entry.get("prompt_mode"),
-            "manual_text": entry.get("manual_prompt"),
-            "automated_preset_id": entry.get("automated_prompt_id"),
-            "append_id": entry.get("append_prompt_id"),
+            "prepend": {
+                "mode": prepend_mode,
+                "preset_id": prepend_id,
+                "preset_label": prepend_preset.get("label"),
+                "text": prepend_text,
+            },
+            "main": {
+                "mode": prompt_mode,
+                "manual_text": entry.get("manual_prompt"),
+                "automated_preset_id": automated_id,
+                "automated_preset_label": automated_preset.get("label"),
+                "text": main_text,
+            },
+            "append": {
+                "mode": append_mode,
+                "preset_id": append_id,
+                "preset_label": append_preset.get("label"),
+                "text": append_text,
+            },
         },
         "generation": {
             "width": entry.get("width"),
