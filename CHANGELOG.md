@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.9.0](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.8.0...pipeworks-image-generator-v0.9.0) (2026-03-05)
+
+
+### Features
+
+* add generation output bulk select and zip controls ([e4248a2](https://github.com/pipe-works/pipeworks-image-generator/commit/e4248a213a40c465f019808f534a1542cee8c725))
+* add output bulk select and zip controls ([b7bb303](https://github.com/pipe-works/pipeworks-image-generator/commit/b7bb303505809dbc3887d2489d4a62099977709c))
+
 ## [0.8.0](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.7.0...pipeworks-image-generator-v0.8.0) (2026-03-05)
 
 
