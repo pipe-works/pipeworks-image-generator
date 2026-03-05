@@ -190,3 +190,18 @@ class BulkDeleteRequest(BaseModel):
         min_length=1,
         description="List of gallery image UUIDs to delete (at least one required).",
     )
+
+
+class BulkZipRequest(BaseModel):
+    """Request body for the ``POST /api/gallery/bulk-zip`` endpoint.
+
+    Attributes:
+        image_ids: List of gallery image UUIDs to include in the zip.  Must
+            contain at least one ID.
+    """
+
+    image_ids: list[str] = Field(
+        ...,
+        min_length=1,
+        description="List of gallery image UUIDs to zip (at least one required).",
+    )
