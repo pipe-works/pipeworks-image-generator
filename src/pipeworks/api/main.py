@@ -84,6 +84,7 @@ from pipeworks.api.gallery_store import (
 )
 from pipeworks.api.models import (
     BulkDeleteRequest,
+    BulkZipRequest,
     CancelGenerationRequest,
     FavouriteRequest,
     GenerateRequest,
@@ -1021,6 +1022,57 @@ async def bulk_delete_images(req: BulkDeleteRequest) -> dict:
     save_gallery_entries(GALLERY_DB, gallery)
 
     return {"success": True, "deleted": deleted, "not_found": not_found}
+
+
+@app.post("/api/gallery/bulk-zip")
+async def bulk_zip_images(req: BulkZipRequest) -> Response:
+    """Download a zip archive containing the requested gallery images.
+
+    Args:
+        req: Validated :class:`BulkZipRequest` payload containing the list
+            of image UUIDs to include.
+
+    Returns:
+        A ``Response`` with ``application/zip`` content type.
+
+    Raises:
+        HTTPException: 404 if none of the requested images were found.
+    """
+    gallery = load_gallery_entries(GALLERY_DB, GALLERY_DIR)
+    gallery_by_id: dict[str, dict] = {g["id"]: g for g in gallery}
+
+    buffer = io.BytesIO()
+    included = 0
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        for image_id in req.image_ids:
+            entry = gallery_by_id.get(image_id)
+            if not entry:
+                continue
+
+            image_path = GALLERY_DIR / entry["filename"]
+            if not image_path.exists():
+                continue
+
+            id_short = entry["id"][:8]
+            metadata = _build_zip_metadata_for_entry(entry)
+
+            zf.write(image_path, f"pipeworks_{id_short}.png")
+            zf.writestr(
+                f"pipeworks_{id_short}_metadata.json",
+                json.dumps(metadata, indent=2),
+            )
+            included += 1
+
+    if included == 0:
+        raise HTTPException(status_code=404, detail="No matching images found")
+
+    buffer.seek(0)
+    zip_filename = f"pipeworks_selected_{included}.zip"
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{zip_filename}"'},
+    )
 
 
 @app.delete("/api/gallery/{image_id}")

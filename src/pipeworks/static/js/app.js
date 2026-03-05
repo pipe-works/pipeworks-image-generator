@@ -6,7 +6,6 @@
 import { getImageCardBadgeLabel } from "./gallery-context.mjs";
 import {
   formatImageCountLabel,
-  formatRunCountLabel,
   resolveGalleryPaginationDirection,
 } from "./gallery-navigation.mjs";
 import { createOutputLightboxController } from "./output-lightbox.mjs";
@@ -31,8 +30,6 @@ const State = {
   stopRequested: false,
   outputImages: [],
   galleryImages: [],
-  galleryRuns: [],
-  galleryTotalImages: 0,
   favouriteImages: [],
   galleryPage: 1,
   galleryPerPage: 20,
@@ -992,6 +989,7 @@ function updateSelectionUI() {
   const count = State.selectedIds.size;
   $("#lbl-select-count").textContent = `${count} selected`;
   $("#btn-delete-selected").disabled = count === 0;
+  $("#btn-save-selected").disabled = count === 0;
 }
 
 async function bulkDelete() {
@@ -1032,6 +1030,49 @@ async function bulkDelete() {
 
   } catch (e) {
     toast(`Bulk delete failed: ${e.message}`, "err");
+  }
+}
+
+/**
+ * Download a zip of the currently selected gallery images.
+ */
+async function downloadSelectedZip() {
+  const count = State.selectedIds.size;
+  if (count === 0) return;
+
+  const btn = $("#btn-save-selected");
+  const originalText = btn.textContent;
+  btn.textContent = "Downloading\u2026";
+  btn.disabled = true;
+
+  try {
+    const res = await fetch("/api/gallery/bulk-zip", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image_ids: [...State.selectedIds] }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Unknown error" }));
+      throw new Error(err.detail || `HTTP ${res.status}`);
+    }
+
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `pipeworks_selected_${count}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+
+    toast(`Downloaded ${count} image${count !== 1 ? "s" : ""}`, "ok", 1500);
+  } catch (e) {
+    toast(`Download failed: ${e.message}`, "err");
+  } finally {
+    btn.textContent = originalText;
+    btn.disabled = false;
   }
 }
 
@@ -1138,12 +1179,9 @@ function getActiveTabId() {
 // ── Gallery ────────────────────────────────────────────────────────────────────
 
 /**
- * Load one page of the gallery grouped by generation runs.
+ * Load one page of the gallery as a flat image grid.
  *
- * Fetches runs from the backend and renders them as grouped sections with
- * date headings, model labels, thumbnail rows, and "Save All" buttons.
- *
- * @param {number} [page=1] - One-based page of runs to load.
+ * @param {number} [page=1] - One-based page to load.
  */
 async function loadGallery(page = 1) {
   State.galleryPage = page;
@@ -1154,28 +1192,22 @@ async function loadGallery(page = 1) {
   const modelFilter = $("#sel-gallery-model").value;
 
   try {
-    let url = `/api/gallery/runs?page=${page}&per_page=${State.galleryPerPage}`;
+    let url = `/api/gallery?page=${page}&per_page=${State.galleryPerPage}`;
     if (modelFilter) url += `&model_id=${encodeURIComponent(modelFilter)}`;
 
     const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
 
-    State.galleryTotal = data.total_runs;
-    State.galleryTotalImages = data.total_images;
+    State.galleryTotal = data.total;
     State.galleryPage = data.page;
     State.galleryPages = data.pages;
-    State.galleryRuns = data.runs;
-
-    // Build a flat image list from all visible runs for lightbox navigation.
-    State.galleryImages = data.runs.flatMap(run => run.images);
+    State.galleryImages = data.images;
 
     const grid = $("#gallery-grid");
     grid.innerHTML = "";
-    grid.classList.add("gallery-grid--runs");
 
-    if (data.runs.length === 0) {
-      grid.classList.remove("gallery-grid--runs");
+    if (data.images.length === 0) {
       const empty = el("div", { className: "gallery-empty" },
         el("div", { style: { fontSize: "2rem", opacity: "0.3" } }, "◈"),
         el("div", {}, "No images found"),
@@ -1185,265 +1217,20 @@ async function loadGallery(page = 1) {
       );
       grid.appendChild(empty);
     } else {
-      let lastDate = null;
-      let isFirst = true;
-      data.runs.forEach(run => {
-        // Insert date heading when the date changes.
-        if (run.date !== lastDate) {
-          lastDate = run.date;
-          grid.appendChild(createRunDateHeading(run.date, run.created_at));
-        }
-        // Expand the first (most recent) run by default.
-        grid.appendChild(createRunGroup(run, isFirst));
-        isFirst = false;
+      const pageOffset = (data.page - 1) * State.galleryPerPage;
+      data.images.forEach((img, index) => {
+        const collectionIndex = pageOffset + index + 1;
+        grid.appendChild(createImageCard(img, "gallery", collectionIndex));
       });
     }
 
-    $("#lbl-gallery-count").textContent = formatRunCountLabel(data.total_runs, data.total_images);
+    $("#lbl-gallery-count").textContent = formatImageCountLabel(data.total);
     $("#lbl-gallery-page").textContent = `Page ${data.page} of ${data.pages}`;
     $("#btn-gallery-prev").disabled = data.page <= 1;
     $("#btn-gallery-next").disabled = data.page >= data.pages;
 
   } catch (e) {
     toast(`Gallery load failed: ${e.message}`, "err");
-  }
-}
-
-/**
- * Create a date heading element for the run-grouped gallery.
- *
- * @param {string} dateStr - ISO date string (e.g. "2026-03-05").
- * @param {number} timestamp - Unix timestamp to derive a human-readable date.
- * @returns {HTMLElement} Date heading element.
- */
-function createRunDateHeading(dateStr, timestamp) {
-  const date = new Date(timestamp * 1000);
-  const label = date.toLocaleDateString(undefined, {
-    weekday: "short",
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-  return el("div", { className: "run-date-heading" }, label);
-}
-
-/**
- * Create a DOM group for one generation run.
- *
- * Renders a clickable header bar with chevron, timestamp, model, image count,
- * and a "Save All" button.  The thumbnail row is hidden by default and
- * revealed when the header is clicked (expand/collapse toggle).
- *
- * @param {object} run - Run object from the API response.
- * @param {boolean} [expanded=false] - Whether to start expanded.
- * @returns {HTMLElement} The run group container element.
- */
-function createRunGroup(run, expanded = false) {
-  const RUN_PAGE_SIZE = 20;
-  const group = el("div", { className: `run-group${expanded ? " is-expanded" : ""}` });
-
-  // Internal state for lazy-loaded full run data.
-  let allImages = null;
-  let runPage = 1;
-  let loaded = false;
-
-  // Header bar — clickable to toggle expand/collapse.
-  const header = el("div", { className: "run-group__header" });
-
-  const chevron = el("span", { className: "run-group__chevron" }, "\u25B6");
-
-  const time = new Date(run.created_at * 1000);
-  const timeLabel = time.toLocaleTimeString(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-
-  header.appendChild(chevron);
-  header.appendChild(el("span", { className: "run-group__time" }, timeLabel));
-  header.appendChild(el("span", { className: "run-group__model" }, run.model_label));
-  header.appendChild(
-    el("span", { className: "run-group__count" },
-      `${run.total_images} image${run.total_images !== 1 ? "s" : ""}`)
-  );
-  header.appendChild(el("span", { className: "run-group__spacer" }));
-
-  const zipBtn = el("button", {
-    className: "btn btn--secondary btn--sm",
-    onclick: (e) => {
-      e.stopPropagation();
-      downloadRunZip(run.batch_seed, zipBtn);
-    },
-  }, "Save All");
-  header.appendChild(zipBtn);
-
-  header.addEventListener("click", (e) => {
-    // Don't toggle if clicking the Save All button.
-    if (e.target.closest("button")) return;
-    const willExpand = !group.classList.contains("is-expanded");
-    group.classList.toggle("is-expanded");
-    if (willExpand && !loaded) loadFullRun();
-  });
-
-  group.appendChild(header);
-
-  // Thumbnail row — hidden until expanded via CSS.
-  const imagesRow = el("div", { className: "run-group__images" });
-
-  // Pagination nav — shown below images when run has >20 images.
-  const paginationNav = el("div", { className: "run-group__pagination" });
-
-  /**
-   * Render a page of images into the images row.
-   */
-  function renderRunPage() {
-    imagesRow.innerHTML = "";
-    const totalPages = Math.ceil(allImages.length / RUN_PAGE_SIZE);
-    const start = (runPage - 1) * RUN_PAGE_SIZE;
-    const pageImages = allImages.slice(start, start + RUN_PAGE_SIZE);
-
-    pageImages.forEach((img, index) => {
-      const collectionIndex = start + index + 1;
-      imagesRow.appendChild(createImageCard(img, "gallery", collectionIndex));
-    });
-
-    // Update pagination controls.
-    if (totalPages > 1) {
-      paginationNav.classList.add("is-visible");
-      paginationNav.innerHTML = "";
-
-      const prevBtn = el("button", {
-        className: "btn btn--secondary btn--sm",
-        disabled: runPage <= 1,
-        onclick: () => { runPage--; renderRunPage(); },
-      }, "\u2190 Prev");
-
-      const nextBtn = el("button", {
-        className: "btn btn--secondary btn--sm",
-        disabled: runPage >= totalPages,
-        onclick: () => { runPage++; renderRunPage(); },
-      }, "Next \u2192");
-
-      // Page number buttons.
-      const pageNumbers = el("span", { className: "run-group__page-numbers" });
-      for (let p = 1; p <= totalPages; p++) {
-        const pageBtn = el("button", {
-          className: `btn btn--sm ${p === runPage ? "btn--primary" : "btn--ghost"}`,
-          onclick: () => { runPage = p; renderRunPage(); },
-        }, String(p));
-        pageNumbers.appendChild(pageBtn);
-      }
-
-      paginationNav.appendChild(prevBtn);
-      paginationNav.appendChild(pageNumbers);
-      paginationNav.appendChild(nextBtn);
-    } else {
-      paginationNav.classList.remove("is-visible");
-    }
-  }
-
-  /**
-   * Fetch all images for this run from the API and render them.
-   */
-  async function loadFullRun() {
-    const needsFetch = run.total_images > run.thumbnail_count;
-    if (!needsFetch) {
-      // All images already present in the initial payload.
-      allImages = run.images;
-      loaded = true;
-      renderRunPage();
-      return;
-    }
-
-    // Show loading indicator.
-    imagesRow.innerHTML = "";
-    imagesRow.appendChild(
-      el("div", { className: "run-group__loading" }, "Loading all images\u2026")
-    );
-
-    try {
-      const res = await fetch(`/api/gallery/runs/${run.batch_seed}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      allImages = data.images;
-      loaded = true;
-
-      // Update the flat gallery images list so lightbox navigation includes
-      // all images from this run.
-      const existingIds = new Set(State.galleryImages.map(i => i.id));
-      for (const img of allImages) {
-        if (!existingIds.has(img.id)) State.galleryImages.push(img);
-      }
-
-      renderRunPage();
-    } catch (e) {
-      imagesRow.innerHTML = "";
-      imagesRow.appendChild(
-        el("div", { className: "run-group__loading" }, `Failed to load: ${e.message}`)
-      );
-    }
-  }
-
-  // Initial render: show thumbnails or load full run if auto-expanded.
-  if (expanded) {
-    loadFullRun();
-  } else {
-    // Render thumbnails for collapsed preview (shown when expanded later
-    // only if all images fit in the initial payload).
-    allImages = run.images;
-    run.images.forEach((img, index) => {
-      const collectionIndex = index + 1;
-      imagesRow.appendChild(createImageCard(img, "gallery", collectionIndex));
-    });
-
-    // "+N more" overflow indicator for thumbnail preview.
-    const overflow = run.total_images - run.thumbnail_count;
-    if (overflow > 0) {
-      const overflowEl = el("div", { className: "run-group__overflow" }, `+${overflow} more`);
-      imagesRow.appendChild(overflowEl);
-    }
-  }
-
-  group.appendChild(imagesRow);
-  group.appendChild(paginationNav);
-
-  return group;
-}
-
-/**
- * Download a zip of all images in a generation run.
- *
- * @param {number|string} batchSeed - The batch_seed identifying the run.
- * @param {HTMLElement} [btn] - Optional button to show feedback on.
- */
-async function downloadRunZip(batchSeed, btn) {
-  const originalText = btn ? btn.textContent : "";
-  if (btn) {
-    btn.textContent = "Downloading…";
-    btn.disabled = true;
-  }
-
-  try {
-    const res = await fetch(`/api/gallery/runs/${batchSeed}/zip`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `pipeworks_run_${batchSeed}.zip`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-
-    toast("Run zip downloaded", "ok", 1500);
-  } catch (e) {
-    toast(`Download failed: ${e.message}`, "err");
-  } finally {
-    if (btn) {
-      btn.textContent = originalText;
-      btn.disabled = false;
-    }
   }
 }
 
@@ -1751,6 +1538,7 @@ function wireEvents() {
   // Gallery bulk selection
   $("#btn-gallery-select").addEventListener("click", toggleSelectMode);
   $("#btn-select-all").addEventListener("click", selectAllVisible);
+  $("#btn-save-selected").addEventListener("click", downloadSelectedZip);
   $("#btn-delete-selected").addEventListener("click", bulkDelete);
 
   // Favourites
