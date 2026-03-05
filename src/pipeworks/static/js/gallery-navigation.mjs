@@ -17,6 +17,19 @@ export function formatImageCountLabel(count) {
 }
 
 /**
+ * Format a user-facing label showing run and image counts.
+ *
+ * @param {number} runCount - Number of runs.
+ * @param {number} imageCount - Total number of images across all runs.
+ * @returns {string} Label such as `3 runs, 12 images`.
+ */
+export function formatRunCountLabel(runCount, imageCount) {
+  const runWord = runCount !== 1 ? "runs" : "run";
+  const imgWord = imageCount !== 1 ? "images" : "image";
+  return `${runCount} ${runWord}, ${imageCount} ${imgWord}`;
+}
+
+/**
  * Resolve gallery page hotkeys into pagination directions.
  *
  * Only `h` and `l` are handled here because the request is scoped to the main

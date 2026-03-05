@@ -519,6 +519,142 @@ def sample_gallery_mixed_models(tmp_gallery_dir: Path, test_config: PipeworksCon
     return entries
 
 
+@pytest.fixture
+def sample_gallery_with_runs(tmp_gallery_dir: Path, test_config: PipeworksConfig) -> list[dict]:
+    """Create gallery entries spanning multiple generation runs.
+
+    Creates three runs:
+    - Run A: batch_seed=1000, 4 images, z-image-turbo, today
+    - Run B: batch_seed=2000, 2 images, sdxl-base, yesterday
+    - Run C: batch_seed=3000, 1 image, z-image-turbo, yesterday
+
+    Plus one legacy entry without batch_seed.
+    """
+    import time
+    import uuid
+
+    now = time.time()
+    yesterday = now - 86400
+
+    entries: list[dict] = []
+
+    # Run A: 4 images
+    for i in range(4):
+        img_id = str(uuid.uuid4())
+        filename = f"{img_id}.png"
+        _make_test_image().save(tmp_gallery_dir / filename, format="PNG")
+        entries.append(
+            {
+                "id": img_id,
+                "filename": filename,
+                "url": f"/static/gallery/{filename}",
+                "model_id": "z-image-turbo",
+                "model_label": "Z-Image Turbo",
+                "compiled_prompt": f"Run A prompt {i}",
+                "prepend_prompt_id": "none",
+                "prompt_mode": "manual",
+                "manual_prompt": f"Run A prompt {i}",
+                "automated_prompt_id": None,
+                "append_prompt_id": "none",
+                "prepend_mode": "template",
+                "append_mode": "template",
+                "manual_prepend": None,
+                "manual_append": None,
+                "aspect_ratio_id": "1:1",
+                "width": 1024,
+                "height": 1024,
+                "steps": 4,
+                "guidance": 0.0,
+                "seed": 1000 + i,
+                "negative_prompt": None,
+                "is_favourite": i == 0,
+                "created_at": now - i,
+                "batch_index": i,
+                "batch_size": 4,
+                "batch_seed": 1000,
+            }
+        )
+
+    # Run B: 2 images
+    for i in range(2):
+        img_id = str(uuid.uuid4())
+        filename = f"{img_id}.png"
+        _make_test_image().save(tmp_gallery_dir / filename, format="PNG")
+        entries.append(
+            {
+                "id": img_id,
+                "filename": filename,
+                "url": f"/static/gallery/{filename}",
+                "model_id": "sdxl-1-0",
+                "model_label": "SD-XL 1.0",
+                "compiled_prompt": f"Run B prompt {i}",
+                "prepend_prompt_id": "none",
+                "prompt_mode": "manual",
+                "manual_prompt": f"Run B prompt {i}",
+                "automated_prompt_id": None,
+                "append_prompt_id": "none",
+                "prepend_mode": "template",
+                "append_mode": "template",
+                "manual_prepend": None,
+                "manual_append": None,
+                "aspect_ratio_id": "1:1",
+                "width": 1024,
+                "height": 1024,
+                "steps": 30,
+                "guidance": 7.5,
+                "seed": 2000 + i,
+                "negative_prompt": None,
+                "is_favourite": False,
+                "created_at": yesterday - i,
+                "batch_index": i,
+                "batch_size": 2,
+                "batch_seed": 2000,
+            }
+        )
+
+    # Run C: 1 image
+    img_id = str(uuid.uuid4())
+    filename = f"{img_id}.png"
+    _make_test_image().save(tmp_gallery_dir / filename, format="PNG")
+    entries.append(
+        {
+            "id": img_id,
+            "filename": filename,
+            "url": f"/static/gallery/{filename}",
+            "model_id": "z-image-turbo",
+            "model_label": "Z-Image Turbo",
+            "compiled_prompt": "Run C prompt",
+            "prepend_prompt_id": "none",
+            "prompt_mode": "manual",
+            "manual_prompt": "Run C prompt",
+            "automated_prompt_id": None,
+            "append_prompt_id": "none",
+            "prepend_mode": "template",
+            "append_mode": "template",
+            "manual_prepend": None,
+            "manual_append": None,
+            "aspect_ratio_id": "1:1",
+            "width": 1024,
+            "height": 1024,
+            "steps": 4,
+            "guidance": 0.0,
+            "seed": 3000,
+            "negative_prompt": None,
+            "is_favourite": False,
+            "created_at": yesterday - 100,
+            "batch_index": 0,
+            "batch_size": 1,
+            "batch_seed": 3000,
+        }
+    )
+
+    gallery_db = test_config.data_dir / "gallery.json"
+    with open(gallery_db, "w") as f:
+        json.dump(entries, f, indent=2)
+
+    return entries
+
+
 # ---------------------------------------------------------------------------
 # FastAPI TestClient fixture.
 # ---------------------------------------------------------------------------
