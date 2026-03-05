@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.0](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.5.1...pipeworks-image-generator-v0.6.0) (2026-03-05)
+
+
+### Features
+
+* group gallery by generation runs with collapsible view and bulk zip ([b342287](https://github.com/pipe-works/pipeworks-image-generator/commit/b3422876adf200e0f7fc7d1b6bbbf1e5e5ab47f1))
+* group gallery by generation runs with collapsible view and bulk zip ([58e2c7f](https://github.com/pipe-works/pipeworks-image-generator/commit/58e2c7fbe98b6d2d6d22cad6b1625c9f0e37865c))
+
 ## [0.5.1](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.5.0...pipeworks-image-generator-v0.5.1) (2026-03-04)
 
 
