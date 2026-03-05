@@ -561,8 +561,9 @@ html, body {
   box-sizing: border-box;
 }
 
-/* Show checkbox when gallery is in select mode */
-.gallery-grid--selecting .img-card__check {
+/* Show checkbox when gallery or output is in select mode */
+.gallery-grid--selecting .img-card__check,
+.gen-output__canvas--selecting .img-card__check {
   display: flex;
   align-items: center;
   justify-content: center;
