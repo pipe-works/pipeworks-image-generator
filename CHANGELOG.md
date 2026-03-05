@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.0](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.7.0...pipeworks-image-generator-v0.8.0) (2026-03-05)
+
+
+### Features
+
+* simplify gallery to flat grid with save-selected zip ([a019d72](https://github.com/pipe-works/pipeworks-image-generator/commit/a019d7256b48d2d7f01b547d915fcc5d853f0826))
+* simplify gallery to flat grid with save-selected zip ([c30a92c](https://github.com/pipe-works/pipeworks-image-generator/commit/c30a92ca27db13a7ce4e74af2338a95fe690d042))
+
 ## [0.7.0](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.6.0...pipeworks-image-generator-v0.7.0) (2026-03-05)
 
 
