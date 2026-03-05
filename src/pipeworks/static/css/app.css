@@ -818,6 +818,39 @@ html, body {
   color: var(--col-accent);
 }
 
+/* Loading indicator inside expanded run */
+.run-group__loading {
+  width: 100%;
+  text-align: center;
+  padding: var(--sp-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--col-text-dim);
+}
+
+/* Horizontal pagination nav inside expanded run — hidden when collapsed */
+.run-group__pagination {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-top: 1px solid var(--col-border);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.run-group.is-expanded .run-group__pagination.is-visible {
+  display: flex;
+}
+
+.run-group__page-numbers {
+  display: flex;
+  gap: var(--sp-1);
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
 
 /* ── Image lightbox modal ─────────────────────────────────────────────────── */
 

@@ -1239,7 +1239,13 @@ function createRunDateHeading(dateStr, timestamp) {
  * @returns {HTMLElement} The run group container element.
  */
 function createRunGroup(run, expanded = false) {
+  const RUN_PAGE_SIZE = 20;
   const group = el("div", { className: `run-group${expanded ? " is-expanded" : ""}` });
+
+  // Internal state for lazy-loaded full run data.
+  let allImages = null;
+  let runPage = 1;
+  let loaded = false;
 
   // Header bar — clickable to toggle expand/collapse.
   const header = el("div", { className: "run-group__header" });
@@ -1273,7 +1279,9 @@ function createRunGroup(run, expanded = false) {
   header.addEventListener("click", (e) => {
     // Don't toggle if clicking the Save All button.
     if (e.target.closest("button")) return;
+    const willExpand = !group.classList.contains("is-expanded");
     group.classList.toggle("is-expanded");
+    if (willExpand && !loaded) loadFullRun();
   });
 
   group.appendChild(header);
@@ -1281,23 +1289,122 @@ function createRunGroup(run, expanded = false) {
   // Thumbnail row — hidden until expanded via CSS.
   const imagesRow = el("div", { className: "run-group__images" });
 
-  run.images.forEach((img, index) => {
-    const collectionIndex = index + 1;
-    imagesRow.appendChild(createImageCard(img, "gallery", collectionIndex));
-  });
+  // Pagination nav — shown below images when run has >20 images.
+  const paginationNav = el("div", { className: "run-group__pagination" });
 
-  // "+N more" overflow indicator.
-  const overflow = run.total_images - run.thumbnail_count;
-  if (overflow > 0) {
-    const overflowEl = el("div", { className: "run-group__overflow" }, `+${overflow} more`);
-    overflowEl.addEventListener("click", () => {
-      const lastVisible = run.images[run.images.length - 1];
-      if (lastVisible) openLightbox(lastVisible, "gallery");
+  /**
+   * Render a page of images into the images row.
+   */
+  function renderRunPage() {
+    imagesRow.innerHTML = "";
+    const totalPages = Math.ceil(allImages.length / RUN_PAGE_SIZE);
+    const start = (runPage - 1) * RUN_PAGE_SIZE;
+    const pageImages = allImages.slice(start, start + RUN_PAGE_SIZE);
+
+    pageImages.forEach((img, index) => {
+      const collectionIndex = start + index + 1;
+      imagesRow.appendChild(createImageCard(img, "gallery", collectionIndex));
     });
-    imagesRow.appendChild(overflowEl);
+
+    // Update pagination controls.
+    if (totalPages > 1) {
+      paginationNav.classList.add("is-visible");
+      paginationNav.innerHTML = "";
+
+      const prevBtn = el("button", {
+        className: "btn btn--secondary btn--sm",
+        disabled: runPage <= 1,
+        onclick: () => { runPage--; renderRunPage(); },
+      }, "\u2190 Prev");
+
+      const nextBtn = el("button", {
+        className: "btn btn--secondary btn--sm",
+        disabled: runPage >= totalPages,
+        onclick: () => { runPage++; renderRunPage(); },
+      }, "Next \u2192");
+
+      // Page number buttons.
+      const pageNumbers = el("span", { className: "run-group__page-numbers" });
+      for (let p = 1; p <= totalPages; p++) {
+        const pageBtn = el("button", {
+          className: `btn btn--sm ${p === runPage ? "btn--primary" : "btn--ghost"}`,
+          onclick: () => { runPage = p; renderRunPage(); },
+        }, String(p));
+        pageNumbers.appendChild(pageBtn);
+      }
+
+      paginationNav.appendChild(prevBtn);
+      paginationNav.appendChild(pageNumbers);
+      paginationNav.appendChild(nextBtn);
+    } else {
+      paginationNav.classList.remove("is-visible");
+    }
+  }
+
+  /**
+   * Fetch all images for this run from the API and render them.
+   */
+  async function loadFullRun() {
+    const needsFetch = run.total_images > run.thumbnail_count;
+    if (!needsFetch) {
+      // All images already present in the initial payload.
+      allImages = run.images;
+      loaded = true;
+      renderRunPage();
+      return;
+    }
+
+    // Show loading indicator.
+    imagesRow.innerHTML = "";
+    imagesRow.appendChild(
+      el("div", { className: "run-group__loading" }, "Loading all images\u2026")
+    );
+
+    try {
+      const res = await fetch(`/api/gallery/runs/${run.batch_seed}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      allImages = data.images;
+      loaded = true;
+
+      // Update the flat gallery images list so lightbox navigation includes
+      // all images from this run.
+      const existingIds = new Set(State.galleryImages.map(i => i.id));
+      for (const img of allImages) {
+        if (!existingIds.has(img.id)) State.galleryImages.push(img);
+      }
+
+      renderRunPage();
+    } catch (e) {
+      imagesRow.innerHTML = "";
+      imagesRow.appendChild(
+        el("div", { className: "run-group__loading" }, `Failed to load: ${e.message}`)
+      );
+    }
+  }
+
+  // Initial render: show thumbnails or load full run if auto-expanded.
+  if (expanded) {
+    loadFullRun();
+  } else {
+    // Render thumbnails for collapsed preview (shown when expanded later
+    // only if all images fit in the initial payload).
+    allImages = run.images;
+    run.images.forEach((img, index) => {
+      const collectionIndex = index + 1;
+      imagesRow.appendChild(createImageCard(img, "gallery", collectionIndex));
+    });
+
+    // "+N more" overflow indicator for thumbnail preview.
+    const overflow = run.total_images - run.thumbnail_count;
+    if (overflow > 0) {
+      const overflowEl = el("div", { className: "run-group__overflow" }, `+${overflow} more`);
+      imagesRow.appendChild(overflowEl);
+    }
   }
 
   group.appendChild(imagesRow);
+  group.appendChild(paginationNav);
 
   return group;
 }

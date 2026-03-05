@@ -861,6 +861,30 @@ async def get_gallery_runs(
     return paginate_runs(runs, page, per_page)
 
 
+@app.get("/api/gallery/runs/{batch_seed}")
+async def get_gallery_run(batch_seed: int) -> dict:
+    """Return all images for a specific generation run.
+
+    Args:
+        batch_seed: The ``batch_seed`` identifying the generation run.
+
+    Returns:
+        Dictionary with ``batch_seed``, ``total_images``, and ``images``.
+
+    Raises:
+        HTTPException: 404 if no images match the given batch_seed.
+    """
+    gallery = load_gallery_entries(GALLERY_DB, GALLERY_DIR)
+    run_entries = get_run_entries(gallery, batch_seed)
+    if not run_entries:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return {
+        "batch_seed": batch_seed,
+        "total_images": len(run_entries),
+        "images": run_entries,
+    }
+
+
 @app.get("/api/gallery/runs/{batch_seed}/zip")
 async def download_run_zip(batch_seed: int) -> Response:
     """Download a zip archive containing all images and metadata for a run.
