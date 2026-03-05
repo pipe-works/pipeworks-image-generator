@@ -1175,3 +1175,124 @@ class TestStats:
         assert data["total_images"] == 4
         assert data["model_counts"]["z-image-turbo"] == 2
         assert data["model_counts"]["sdxl-base"] == 2
+
+
+# ---------------------------------------------------------------------------
+# Gallery runs endpoint tests.
+# ---------------------------------------------------------------------------
+
+
+class TestGalleryRuns:
+    """Test GET /api/gallery/runs — run-grouped gallery listing."""
+
+    def test_runs_empty_gallery(self, test_client):
+        """An empty gallery should return zero runs."""
+        resp = test_client.get("/api/gallery/runs")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total_runs"] == 0
+        assert data["total_images"] == 0
+        assert data["runs"] == []
+
+    def test_runs_grouping(self, test_client, sample_gallery_with_runs):
+        """Images should be grouped by batch_seed into distinct runs."""
+        resp = test_client.get("/api/gallery/runs")
+        assert resp.status_code == 200
+        data = resp.json()
+
+        # 3 runs: batch_seed 1000 (4 images), 2000 (2 images), 3000 (1 image)
+        assert data["total_runs"] == 3
+        assert data["total_images"] == 7
+
+        seeds = [r["batch_seed"] for r in data["runs"]]
+        # Newest first: Run A (today) then Run B and C (yesterday).
+        assert seeds[0] == 1000
+
+    def test_runs_pagination(self, test_client, sample_gallery_with_runs):
+        """Pagination should work on runs, not individual images."""
+        resp = test_client.get("/api/gallery/runs?per_page=1&page=1")
+        data = resp.json()
+
+        assert data["total_runs"] == 3
+        assert data["pages"] == 3
+        assert len(data["runs"]) == 1
+
+    def test_runs_model_filter(self, test_client, sample_gallery_with_runs):
+        """Model filter should exclude runs from other models."""
+        resp = test_client.get("/api/gallery/runs?model_id=sdxl-1-0")
+        data = resp.json()
+
+        assert data["total_runs"] == 1
+        assert data["runs"][0]["model_id"] == "sdxl-1-0"
+
+    def test_runs_thumbnail_limit(self, test_client, sample_gallery_with_runs):
+        """Thumbnail limit should cap images returned but not total_images."""
+        resp = test_client.get("/api/gallery/runs?thumbnail_limit=2")
+        data = resp.json()
+
+        # Run A has 4 images but should return only 2 thumbnails.
+        run_a = next(r for r in data["runs"] if r["batch_seed"] == 1000)
+        assert run_a["total_images"] == 4
+        assert run_a["thumbnail_count"] == 2
+        assert len(run_a["images"]) == 2
+
+    def test_runs_include_date_field(self, test_client, sample_gallery_with_runs):
+        """Each run should include a date string."""
+        resp = test_client.get("/api/gallery/runs")
+        data = resp.json()
+
+        for run in data["runs"]:
+            assert "date" in run
+            assert len(run["date"]) == 10  # YYYY-MM-DD
+
+
+class TestRunZipDownload:
+    """Test GET /api/gallery/runs/{batch_seed}/zip — bulk run zip download."""
+
+    def test_run_zip_contains_all_images(self, test_client, sample_gallery_with_runs):
+        """The zip should contain PNG + metadata for every image in the run."""
+        import io
+        import zipfile
+
+        resp = test_client.get("/api/gallery/runs/1000/zip")
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "application/zip"
+
+        with zipfile.ZipFile(io.BytesIO(resp.content)) as zf:
+            names = zf.namelist()
+            # Run A has 4 images, so 4 PNGs + 4 metadata JSONs = 8 files.
+            assert len(names) == 8
+
+            png_count = sum(1 for n in names if n.endswith(".png"))
+            json_count = sum(1 for n in names if n.endswith("_metadata.json"))
+            assert png_count == 4
+            assert json_count == 4
+
+    def test_run_zip_404_for_unknown_seed(self, test_client, sample_gallery_with_runs):
+        """A non-existent batch_seed should return 404."""
+        resp = test_client.get("/api/gallery/runs/999999/zip")
+        assert resp.status_code == 404
+
+    def test_run_zip_metadata_format(self, test_client, sample_gallery_with_runs):
+        """Metadata in the run zip should match the per-image zip format."""
+        import io
+        import zipfile
+
+        resp = test_client.get("/api/gallery/runs/1000/zip")
+
+        with zipfile.ZipFile(io.BytesIO(resp.content)) as zf:
+            json_files = [n for n in zf.namelist() if n.endswith("_metadata.json")]
+            metadata = json.loads(zf.read(json_files[0]))
+
+        # Same top-level structure as per-image zip.
+        assert "id" in metadata
+        assert "model" in metadata
+        assert "prompt" in metadata
+        assert "generation" in metadata
+        assert "batch" in metadata
+        assert "created_at" in metadata
+
+    def test_run_zip_content_disposition(self, test_client, sample_gallery_with_runs):
+        """The filename in Content-Disposition should include the batch_seed."""
+        resp = test_client.get("/api/gallery/runs/1000/zip")
+        assert "pipeworks_run_1000.zip" in resp.headers["content-disposition"]

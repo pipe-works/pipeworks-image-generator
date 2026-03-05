@@ -75,8 +75,11 @@ from starlette.responses import Response
 from pipeworks import __version__
 from pipeworks.api.gallery_store import (
     filter_gallery_entries,
+    get_run_entries,
+    group_entries_into_runs,
     load_gallery_entries,
     paginate_gallery_entries,
+    paginate_runs,
     save_gallery_entries,
 )
 from pipeworks.api.models import (
@@ -401,6 +404,115 @@ def _resolve_prompt_parts(
     return prepend_value, main_scene, append_value
 
 
+def _build_zip_metadata_for_entry(entry: dict) -> dict:
+    """Build the structured metadata dictionary for a gallery entry's zip.
+
+    This helper is shared by the single-image zip endpoint and the bulk run
+    zip endpoint to ensure consistent metadata format across both.
+
+    Args:
+        entry: A single gallery entry dictionary.
+
+    Returns:
+        Structured metadata dictionary ready for JSON serialisation.
+    """
+    image_id = entry["id"]
+
+    # Look up the model definition for the label.
+    models_data = _load_json(DATA_DIR / "models.json", {"models": []})
+    model_cfg = next(
+        (m for m in models_data.get("models", []) if m["id"] == entry.get("model_id")),
+        None,
+    )
+
+    created_at_ts = entry.get("created_at")
+    created_at_iso = (
+        datetime.fromtimestamp(created_at_ts, tz=UTC).isoformat() if created_at_ts else None
+    )
+
+    # Load the prompt catalog so we can resolve labels and text for each
+    # prompt section.
+    prompts = _load_prompt_catalog()
+    prompt_lookup: dict[str, dict] = {}
+    for lib_key in ("prepend_library", "main_library", "append_library"):
+        for p in prompts.get(lib_key, []):
+            prompt_lookup[p["id"]] = {"label": p.get("label", ""), "value": p.get("value", "")}
+
+    prepend_mode = entry.get("prepend_mode", "template")
+    append_mode = entry.get("append_mode", "template")
+
+    # Resolve prepend section.
+    prepend_id = entry.get("prepend_prompt_id")
+    prepend_preset = prompt_lookup.get(prepend_id, {}) if prepend_id else {}
+    if prepend_mode == "manual":
+        prepend_text = entry.get("manual_prepend", "")
+    else:
+        prepend_text = prepend_preset.get("value", "")
+
+    # Resolve main section.
+    prompt_mode = entry.get("prompt_mode", "manual")
+    automated_id = entry.get("automated_prompt_id")
+    automated_preset = prompt_lookup.get(automated_id, {}) if automated_id else {}
+    if prompt_mode == "manual":
+        main_text = entry.get("manual_prompt", "") or ""
+    else:
+        main_text = automated_preset.get("value", "")
+
+    # Resolve append section.
+    append_id = entry.get("append_prompt_id")
+    append_preset = prompt_lookup.get(append_id, {}) if append_id else {}
+    if append_mode == "manual":
+        append_text = entry.get("manual_append", "")
+    else:
+        append_text = append_preset.get("value", "")
+
+    return {
+        "id": image_id,
+        "model": {
+            "id": entry.get("model_id"),
+            "label": model_cfg["label"] if model_cfg else entry.get("model_label"),
+        },
+        "prompt": {
+            "compiled": entry.get("compiled_prompt", ""),
+            "prepend": {
+                "mode": prepend_mode,
+                "preset_id": prepend_id,
+                "preset_label": prepend_preset.get("label"),
+                "text": prepend_text,
+            },
+            "main": {
+                "mode": prompt_mode,
+                "preset_id": automated_id,
+                "preset_label": automated_preset.get("label"),
+                "text": main_text,
+            },
+            "append": {
+                "mode": append_mode,
+                "preset_id": append_id,
+                "preset_label": append_preset.get("label"),
+                "text": append_text,
+            },
+        },
+        "generation": {
+            "width": entry.get("width"),
+            "height": entry.get("height"),
+            "aspect_ratio": entry.get("aspect_ratio_id"),
+            "steps": entry.get("steps"),
+            "guidance": entry.get("guidance"),
+            "seed": entry.get("seed"),
+            "negative_prompt": entry.get("negative_prompt"),
+            "scheduler": entry.get("scheduler"),
+        },
+        "batch": {
+            "index": entry.get("batch_index"),
+            "size": entry.get("batch_size"),
+            "seed": entry.get("batch_seed"),
+        },
+        "created_at": created_at_iso,
+        "is_favourite": entry.get("is_favourite", False),
+    }
+
+
 def _register_generation_cancel_event(generation_id: str | None) -> threading.Event | None:
     """Create and store a cancellation event for a generation request."""
     if not generation_id:
@@ -713,6 +825,90 @@ async def get_gallery(
     return paginate_gallery_entries(filtered_gallery, page, per_page)
 
 
+@app.get("/api/gallery/runs")
+async def get_gallery_runs(
+    page: int = 1,
+    per_page: int = 20,
+    model_id: str | None = None,
+    thumbnail_limit: int = 6,
+) -> dict:
+    """Return gallery images grouped by generation run.
+
+    Images are grouped by ``batch_seed`` into runs, sorted by date
+    descending.  Each run includes up to ``thumbnail_limit`` image entries
+    for display, plus a ``total_images`` count for the full run.
+
+    Args:
+        page: Page number (1-indexed, paginating runs not images).
+        per_page: Number of runs per page.
+        model_id: Optional model filter.
+        thumbnail_limit: Max image entries returned per run.
+
+    Returns:
+        Paginated run listing with ``total_runs``, ``total_images``,
+        ``page``, ``pages``, and ``runs``.
+    """
+    gallery = load_gallery_entries(GALLERY_DB, GALLERY_DIR)
+    filtered = filter_gallery_entries(gallery, model_id=model_id)
+    runs = group_entries_into_runs(filtered)
+
+    # Truncate each run's images to the thumbnail limit for the response,
+    # but preserve the full total_images count.
+    for run in runs:
+        run["thumbnail_count"] = min(len(run["images"]), thumbnail_limit)
+        run["images"] = run["images"][:thumbnail_limit]
+
+    return paginate_runs(runs, page, per_page)
+
+
+@app.get("/api/gallery/runs/{batch_seed}/zip")
+async def download_run_zip(batch_seed: int) -> Response:
+    """Download a zip archive containing all images and metadata for a run.
+
+    The zip contains a flat list of ``pipeworks_{id_short}.png`` and
+    ``pipeworks_{id_short}_metadata.json`` pairs — the same format as the
+    per-image zip endpoint, but bundled for every image in the run.
+
+    Args:
+        batch_seed: The ``batch_seed`` identifying the generation run.
+
+    Returns:
+        A ``Response`` with ``application/zip`` content type.
+
+    Raises:
+        HTTPException: 404 if no images match the given batch_seed.
+    """
+    gallery = load_gallery_entries(GALLERY_DB, GALLERY_DIR)
+    run_entries = get_run_entries(gallery, batch_seed)
+
+    if not run_entries:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        for entry in run_entries:
+            image_path = GALLERY_DIR / entry["filename"]
+            if not image_path.exists():
+                continue
+
+            id_short = entry["id"][:8]
+            metadata = _build_zip_metadata_for_entry(entry)
+
+            zf.write(image_path, f"pipeworks_{id_short}.png")
+            zf.writestr(
+                f"pipeworks_{id_short}_metadata.json",
+                json.dumps(metadata, indent=2),
+            )
+    buffer.seek(0)
+
+    zip_filename = f"pipeworks_run_{batch_seed}.zip"
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{zip_filename}"'},
+    )
+
+
 @app.get("/api/gallery/{image_id}")
 async def get_image(image_id: str) -> dict:
     """Return a single gallery entry by UUID.
@@ -897,104 +1093,7 @@ async def download_image_zip(image_id: str) -> Response:
         raise HTTPException(status_code=404, detail="Image file not found on disk")
 
     id_short = image_id[:8]
-
-    # Look up the model definition for the label.
-    models_data = _load_json(DATA_DIR / "models.json", {"models": []})
-    model_cfg = next(
-        (m for m in models_data.get("models", []) if m["id"] == entry.get("model_id")),
-        None,
-    )
-
-    # Build the structured metadata JSON.
-    created_at_ts = entry.get("created_at")
-    created_at_iso = (
-        datetime.fromtimestamp(created_at_ts, tz=UTC).isoformat() if created_at_ts else None
-    )
-
-    # Load the prompt catalog so we can resolve labels and text for each
-    # prompt section.  Build a quick id→{label, value} lookup from all
-    # three libraries (prepend, main, append are merged).
-    prompts = _load_prompt_catalog()
-    prompt_lookup: dict[str, dict] = {}
-    for lib_key in ("prepend_library", "main_library", "append_library"):
-        for p in prompts.get(lib_key, []):
-            prompt_lookup[p["id"]] = {"label": p.get("label", ""), "value": p.get("value", "")}
-
-    # Determine prepend/append modes — older entries may lack these fields,
-    # so default to "template" for backwards compatibility.
-    prepend_mode = entry.get("prepend_mode", "template")
-    append_mode = entry.get("append_mode", "template")
-
-    # Resolve prepend section.
-    prepend_id = entry.get("prepend_prompt_id")
-    prepend_preset = prompt_lookup.get(prepend_id, {}) if prepend_id else {}
-    if prepend_mode == "manual":
-        prepend_text = entry.get("manual_prepend", "")
-    else:
-        prepend_text = prepend_preset.get("value", "")
-
-    # Resolve main section.
-    prompt_mode = entry.get("prompt_mode", "manual")
-    automated_id = entry.get("automated_prompt_id")
-    automated_preset = prompt_lookup.get(automated_id, {}) if automated_id else {}
-    if prompt_mode == "manual":
-        main_text = entry.get("manual_prompt", "") or ""
-    else:
-        main_text = automated_preset.get("value", "")
-
-    # Resolve append section.
-    append_id = entry.get("append_prompt_id")
-    append_preset = prompt_lookup.get(append_id, {}) if append_id else {}
-    if append_mode == "manual":
-        append_text = entry.get("manual_append", "")
-    else:
-        append_text = append_preset.get("value", "")
-
-    metadata = {
-        "id": image_id,
-        "model": {
-            "id": entry.get("model_id"),
-            "label": model_cfg["label"] if model_cfg else entry.get("model_label"),
-        },
-        "prompt": {
-            "compiled": entry.get("compiled_prompt", ""),
-            "prepend": {
-                "mode": prepend_mode,
-                "preset_id": prepend_id,
-                "preset_label": prepend_preset.get("label"),
-                "text": prepend_text,
-            },
-            "main": {
-                "mode": prompt_mode,
-                "preset_id": automated_id,
-                "preset_label": automated_preset.get("label"),
-                "text": main_text,
-            },
-            "append": {
-                "mode": append_mode,
-                "preset_id": append_id,
-                "preset_label": append_preset.get("label"),
-                "text": append_text,
-            },
-        },
-        "generation": {
-            "width": entry.get("width"),
-            "height": entry.get("height"),
-            "aspect_ratio": entry.get("aspect_ratio_id"),
-            "steps": entry.get("steps"),
-            "guidance": entry.get("guidance"),
-            "seed": entry.get("seed"),
-            "negative_prompt": entry.get("negative_prompt"),
-            "scheduler": entry.get("scheduler"),
-        },
-        "batch": {
-            "index": entry.get("batch_index"),
-            "size": entry.get("batch_size"),
-            "seed": entry.get("batch_seed"),
-        },
-        "created_at": created_at_iso,
-        "is_favourite": entry.get("is_favourite", False),
-    }
+    metadata = _build_zip_metadata_for_entry(entry)
 
     # Build the zip archive in memory.
     buffer = io.BytesIO()

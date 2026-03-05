@@ -6,6 +6,7 @@
 import { getImageCardBadgeLabel } from "./gallery-context.mjs";
 import {
   formatImageCountLabel,
+  formatRunCountLabel,
   resolveGalleryPaginationDirection,
 } from "./gallery-navigation.mjs";
 import { createOutputLightboxController } from "./output-lightbox.mjs";
@@ -30,6 +31,8 @@ const State = {
   stopRequested: false,
   outputImages: [],
   galleryImages: [],
+  galleryRuns: [],
+  galleryTotalImages: 0,
   favouriteImages: [],
   galleryPage: 1,
   galleryPerPage: 20,
@@ -1135,13 +1138,12 @@ function getActiveTabId() {
 // ── Gallery ────────────────────────────────────────────────────────────────────
 
 /**
- * Load one page of the main gallery collection and render it into the grid.
+ * Load one page of the gallery grouped by generation runs.
  *
- * Besides updating the DOM, this function also refreshes `State.galleryImages`
- * so the lightbox transport controls can navigate through exactly the same
- * gallery page the user is currently viewing.
+ * Fetches runs from the backend and renders them as grouped sections with
+ * date headings, model labels, thumbnail rows, and "Save All" buttons.
  *
- * @param {number} [page=1] - One-based gallery page to load.
+ * @param {number} [page=1] - One-based page of runs to load.
  */
 async function loadGallery(page = 1) {
   State.galleryPage = page;
@@ -1152,22 +1154,28 @@ async function loadGallery(page = 1) {
   const modelFilter = $("#sel-gallery-model").value;
 
   try {
-    let url = `/api/gallery?page=${page}&per_page=${State.galleryPerPage}`;
+    let url = `/api/gallery/runs?page=${page}&per_page=${State.galleryPerPage}`;
     if (modelFilter) url += `&model_id=${encodeURIComponent(modelFilter)}`;
 
     const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
 
-    State.galleryTotal = data.total;
+    State.galleryTotal = data.total_runs;
+    State.galleryTotalImages = data.total_images;
     State.galleryPage = data.page;
     State.galleryPages = data.pages;
-    State.galleryImages = data.images;
+    State.galleryRuns = data.runs;
+
+    // Build a flat image list from all visible runs for lightbox navigation.
+    State.galleryImages = data.runs.flatMap(run => run.images);
 
     const grid = $("#gallery-grid");
     grid.innerHTML = "";
+    grid.classList.add("gallery-grid--runs");
 
-    if (data.images.length === 0) {
+    if (data.runs.length === 0) {
+      grid.classList.remove("gallery-grid--runs");
       const empty = el("div", { className: "gallery-empty" },
         el("div", { style: { fontSize: "2rem", opacity: "0.3" } }, "◈"),
         el("div", {}, "No images found"),
@@ -1177,20 +1185,158 @@ async function loadGallery(page = 1) {
       );
       grid.appendChild(empty);
     } else {
-      const galleryOffset = (data.page - 1) * State.galleryPerPage;
-      data.images.forEach((img, index) => {
-        const collectionIndex = galleryOffset + index + 1;
-        grid.appendChild(createImageCard(img, "gallery", collectionIndex));
+      let lastDate = null;
+      let isFirst = true;
+      data.runs.forEach(run => {
+        // Insert date heading when the date changes.
+        if (run.date !== lastDate) {
+          lastDate = run.date;
+          grid.appendChild(createRunDateHeading(run.date, run.created_at));
+        }
+        // Expand the first (most recent) run by default.
+        grid.appendChild(createRunGroup(run, isFirst));
+        isFirst = false;
       });
     }
 
-    $("#lbl-gallery-count").textContent = formatImageCountLabel(data.total);
+    $("#lbl-gallery-count").textContent = formatRunCountLabel(data.total_runs, data.total_images);
     $("#lbl-gallery-page").textContent = `Page ${data.page} of ${data.pages}`;
     $("#btn-gallery-prev").disabled = data.page <= 1;
     $("#btn-gallery-next").disabled = data.page >= data.pages;
 
   } catch (e) {
     toast(`Gallery load failed: ${e.message}`, "err");
+  }
+}
+
+/**
+ * Create a date heading element for the run-grouped gallery.
+ *
+ * @param {string} dateStr - ISO date string (e.g. "2026-03-05").
+ * @param {number} timestamp - Unix timestamp to derive a human-readable date.
+ * @returns {HTMLElement} Date heading element.
+ */
+function createRunDateHeading(dateStr, timestamp) {
+  const date = new Date(timestamp * 1000);
+  const label = date.toLocaleDateString(undefined, {
+    weekday: "short",
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+  return el("div", { className: "run-date-heading" }, label);
+}
+
+/**
+ * Create a DOM group for one generation run.
+ *
+ * Renders a clickable header bar with chevron, timestamp, model, image count,
+ * and a "Save All" button.  The thumbnail row is hidden by default and
+ * revealed when the header is clicked (expand/collapse toggle).
+ *
+ * @param {object} run - Run object from the API response.
+ * @param {boolean} [expanded=false] - Whether to start expanded.
+ * @returns {HTMLElement} The run group container element.
+ */
+function createRunGroup(run, expanded = false) {
+  const group = el("div", { className: `run-group${expanded ? " is-expanded" : ""}` });
+
+  // Header bar — clickable to toggle expand/collapse.
+  const header = el("div", { className: "run-group__header" });
+
+  const chevron = el("span", { className: "run-group__chevron" }, "\u25B6");
+
+  const time = new Date(run.created_at * 1000);
+  const timeLabel = time.toLocaleTimeString(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  header.appendChild(chevron);
+  header.appendChild(el("span", { className: "run-group__time" }, timeLabel));
+  header.appendChild(el("span", { className: "run-group__model" }, run.model_label));
+  header.appendChild(
+    el("span", { className: "run-group__count" },
+      `${run.total_images} image${run.total_images !== 1 ? "s" : ""}`)
+  );
+  header.appendChild(el("span", { className: "run-group__spacer" }));
+
+  const zipBtn = el("button", {
+    className: "btn btn--secondary btn--sm",
+    onclick: (e) => {
+      e.stopPropagation();
+      downloadRunZip(run.batch_seed, zipBtn);
+    },
+  }, "Save All");
+  header.appendChild(zipBtn);
+
+  header.addEventListener("click", (e) => {
+    // Don't toggle if clicking the Save All button.
+    if (e.target.closest("button")) return;
+    group.classList.toggle("is-expanded");
+  });
+
+  group.appendChild(header);
+
+  // Thumbnail row — hidden until expanded via CSS.
+  const imagesRow = el("div", { className: "run-group__images" });
+
+  run.images.forEach((img, index) => {
+    const collectionIndex = index + 1;
+    imagesRow.appendChild(createImageCard(img, "gallery", collectionIndex));
+  });
+
+  // "+N more" overflow indicator.
+  const overflow = run.total_images - run.thumbnail_count;
+  if (overflow > 0) {
+    const overflowEl = el("div", { className: "run-group__overflow" }, `+${overflow} more`);
+    overflowEl.addEventListener("click", () => {
+      const lastVisible = run.images[run.images.length - 1];
+      if (lastVisible) openLightbox(lastVisible, "gallery");
+    });
+    imagesRow.appendChild(overflowEl);
+  }
+
+  group.appendChild(imagesRow);
+
+  return group;
+}
+
+/**
+ * Download a zip of all images in a generation run.
+ *
+ * @param {number|string} batchSeed - The batch_seed identifying the run.
+ * @param {HTMLElement} [btn] - Optional button to show feedback on.
+ */
+async function downloadRunZip(batchSeed, btn) {
+  const originalText = btn ? btn.textContent : "";
+  if (btn) {
+    btn.textContent = "Downloading…";
+    btn.disabled = true;
+  }
+
+  try {
+    const res = await fetch(`/api/gallery/runs/${batchSeed}/zip`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `pipeworks_run_${batchSeed}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+
+    toast("Run zip downloaded", "ok", 1500);
+  } catch (e) {
+    toast(`Download failed: ${e.message}`, "err");
+  } finally {
+    if (btn) {
+      btn.textContent = originalText;
+      btn.disabled = false;
+    }
   }
 }
 
