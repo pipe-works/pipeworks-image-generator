@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.6.0...pipeworks-image-generator-v0.7.0) (2026-03-05)
+
+
+### Features
+
+* show all images on run expand with paginated navigation ([#59](https://github.com/pipe-works/pipeworks-image-generator/issues/59)) ([c9e78ff](https://github.com/pipe-works/pipeworks-image-generator/commit/c9e78ff014e381ebd234c598e9d499b53f058962))
+
 ## [0.6.0](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.5.1...pipeworks-image-generator-v0.6.0) (2026-03-05)
 
 
