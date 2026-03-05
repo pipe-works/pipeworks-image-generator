@@ -51,6 +51,8 @@ const State = {
   },
   selectMode: false,
   selectedIds: new Set(),
+  outputSelectMode: false,
+  outputSelectedIds: new Set(),
 };
 
 /**
@@ -813,7 +815,9 @@ function createImageCard(img, context = "gallery", collectionIndex = null) {
   card.appendChild(overlay);
 
   card.addEventListener("click", () => {
-    if (State.selectMode) {
+    if (context === "output" && State.outputSelectMode) {
+      toggleOutputCardSelection(img.id, card);
+    } else if (context !== "output" && State.selectMode) {
       toggleCardSelection(img.id, card);
     } else {
       openLightbox(img, context);
@@ -879,6 +883,14 @@ function removeImagesAcrossCollections(imageIds) {
   State.outputImages = filterCollection(State.outputImages);
   State.galleryImages = filterCollection(State.galleryImages);
   State.favouriteImages = filterCollection(State.favouriteImages);
+
+  imageIds.forEach(imageId => {
+    State.selectedIds.delete(imageId);
+    State.outputSelectedIds.delete(imageId);
+  });
+
+  updateSelectionUI();
+  updateOutputSelectionUI();
 }
 
 
@@ -1073,6 +1085,104 @@ async function downloadSelectedZip() {
   } finally {
     btn.textContent = originalText;
     btn.disabled = false;
+  }
+}
+
+function toggleOutputSelectMode() {
+  State.outputSelectMode = !State.outputSelectMode;
+  State.outputSelectedIds.clear();
+
+  const btn = $("#btn-output-select");
+  const controls = $("#output-select-controls");
+  const canvas = $("#gen-canvas");
+
+  btn.textContent = State.outputSelectMode ? "✕ Cancel" : "☐ Select";
+  controls.classList.toggle("is-active", State.outputSelectMode);
+  canvas.classList.toggle("gen-output__canvas--selecting", State.outputSelectMode);
+
+  $$(".img-card.is-selected", canvas).forEach(c => c.classList.remove("is-selected"));
+
+  updateOutputSelectionUI();
+}
+
+function toggleOutputCardSelection(imgId, card) {
+  if (State.outputSelectedIds.has(imgId)) {
+    State.outputSelectedIds.delete(imgId);
+    card.classList.remove("is-selected");
+  } else {
+    State.outputSelectedIds.add(imgId);
+    card.classList.add("is-selected");
+  }
+  updateOutputSelectionUI();
+}
+
+function selectAllOutputVisible() {
+  const canvas = $("#gen-canvas");
+  $$(".img-card", canvas).forEach(card => {
+    const id = card.getAttribute("data-id");
+    if (id && !State.outputSelectedIds.has(id)) {
+      State.outputSelectedIds.add(id);
+      card.classList.add("is-selected");
+    }
+  });
+  updateOutputSelectionUI();
+}
+
+function getVisibleOutputImageIds() {
+  const canvas = $("#gen-canvas");
+  return [...new Set(
+    $$(".img-card", canvas)
+      .map(card => card.getAttribute("data-id"))
+      .filter(Boolean),
+  )];
+}
+
+function updateOutputSelectionUI() {
+  const selectedCount = State.outputSelectedIds.size;
+  const outputCount = getVisibleOutputImageIds().length;
+  $("#lbl-output-select-count").textContent = `${selectedCount} selected`;
+  $("#btn-output-select-all").disabled = outputCount === 0;
+  $("#btn-output-save-all").disabled = outputCount === 0;
+}
+
+async function downloadAllOutputZip() {
+  const imageIds = getVisibleOutputImageIds();
+  const count = imageIds.length;
+  if (count === 0) return;
+
+  const btn = $("#btn-output-save-all");
+  const originalText = btn.textContent;
+  btn.textContent = "Downloading\u2026";
+  btn.disabled = true;
+
+  try {
+    const res = await fetch("/api/gallery/bulk-zip", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image_ids: imageIds }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Unknown error" }));
+      throw new Error(err.detail || `HTTP ${res.status}`);
+    }
+
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `pipeworks_output_${count}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+
+    toast(`Downloaded ${count} image${count !== 1 ? "s" : ""}`, "ok", 1500);
+  } catch (e) {
+    toast(`Download failed: ${e.message}`, "err");
+  } finally {
+    btn.textContent = originalText;
+    updateOutputSelectionUI();
   }
 }
 
@@ -1505,6 +1615,13 @@ function wireEvents() {
 
   // Clear output
   $("#btn-clear-output").addEventListener("click", () => {
+    if (State.outputSelectMode) {
+      toggleOutputSelectMode();
+    } else {
+      State.outputSelectedIds.clear();
+      updateOutputSelectionUI();
+    }
+
     const canvas = $("#gen-canvas");
     canvas.innerHTML = "";
     State.outputImages = [];
@@ -1518,6 +1635,7 @@ function wireEvents() {
     );
     canvas.appendChild(placeholder);
     updateOutputCount();
+    updateOutputSelectionUI();
   });
 
   // Stats modal
@@ -1540,6 +1658,11 @@ function wireEvents() {
   $("#btn-select-all").addEventListener("click", selectAllVisible);
   $("#btn-save-selected").addEventListener("click", downloadSelectedZip);
   $("#btn-delete-selected").addEventListener("click", bulkDelete);
+
+  // Output bulk selection
+  $("#btn-output-select").addEventListener("click", toggleOutputSelectMode);
+  $("#btn-output-select-all").addEventListener("click", selectAllOutputVisible);
+  $("#btn-output-save-all").addEventListener("click", downloadAllOutputZip);
 
   // Favourites
   $("#btn-fav-refresh").addEventListener("click", () => loadFavourites(State.favPage));
@@ -1590,6 +1713,8 @@ function wireEvents() {
       if (!State.isGenerating) generate();
     }
   });
+
+  updateOutputSelectionUI();
 }
 
 
