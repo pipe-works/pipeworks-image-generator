@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.10.0](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.9.0...pipeworks-image-generator-v0.10.0) (2026-03-06)
+
+
+### Features
+
+* allow adjustable CFG guidance for FLUX.2-klein model ([7d9a44b](https://github.com/pipe-works/pipeworks-image-generator/commit/7d9a44b9ce1ec674ca0fb60aeef4831d92e1760e))
+* allow adjustable CFG guidance for FLUX.2-klein model ([def59d8](https://github.com/pipe-works/pipeworks-image-generator/commit/def59d8f15c9af4d644659ed0dab842d57c7ef51))
+
 ## [0.9.0](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.8.0...pipeworks-image-generator-v0.9.0) (2026-03-05)
 
 
