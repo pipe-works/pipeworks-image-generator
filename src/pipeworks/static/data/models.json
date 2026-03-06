@@ -95,7 +95,7 @@
       "max_steps": 50,
       "default_guidance": 0.0,
       "min_guidance": 0.0,
-      "max_guidance": 0.0,
+      "max_guidance": 10.0,
       "guidance_step": 0.1,
       "supports_negative_prompt": false,
       "aspect_ratios": [

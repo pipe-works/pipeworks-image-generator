@@ -352,14 +352,11 @@ class ModelManager:
         import torch
 
         # --- Guidance enforcement for distilled models ---------------------
-        # Distilled models like turbo pipelines and FLUX.2-klein ignore or
-        # degrade with non-zero CFG, so normalise them to 0.0 before calling
-        # into diffusers. This keeps UI defaults, request payloads, and
-        # backend behavior aligned while avoiding repeated runtime warnings.
-        if self._current_model_id and (
-            "turbo" in self._current_model_id.lower()
-            or self._current_model_id == _FLUX2_KLEIN_HF_ID
-        ):
+        # Distilled models like turbo pipelines ignore or degrade with
+        # non-zero CFG, so normalise them to 0.0 before calling into
+        # diffusers.  FLUX.2-klein defaults to 0.0 but allows user-set
+        # CFG values for experimentation.
+        if self._current_model_id and ("turbo" in self._current_model_id.lower()):
             if guidance_scale != 0.0:
                 logger.warning(
                     "Distilled model detected ('%s') — forcing guidance_scale " "from %.1f to 0.0.",
