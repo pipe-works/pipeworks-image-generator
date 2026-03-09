@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.12.0](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.11.0...pipeworks-image-generator-v0.12.0) (2026-03-09)
+
+
+### Features
+
+* **prompt-snippets:** include policy YAML text blocks in dropdowns ([6098bae](https://github.com/pipe-works/pipeworks-image-generator/commit/6098bae44eeee4e0760d6a001821a485bfa7a322))
+* **prompt-snippets:** include policy YAML text blocks in dropdowns ([2a0d1bd](https://github.com/pipe-works/pipeworks-image-generator/commit/2a0d1bd39b48c82c19defd44f4aef5df15cc757d))
+
 ## [0.11.0](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.10.0...pipeworks-image-generator-v0.11.0) (2026-03-09)
 
 
