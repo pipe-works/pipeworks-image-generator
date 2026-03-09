@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.11.0](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.10.0...pipeworks-image-generator-v0.11.0) (2026-03-09)
+
+
+### ⚠ BREAKING CHANGES
+
+* **prompt-composer:** frontend generation payload now uses section-schema fields and no longer sends legacy prompt payload keys.
+
+### Features
+
+* **policies:** add goblin canon clothing block expansions ([b8b4512](https://github.com/pipe-works/pipeworks-image-generator/commit/b8b45125bd7e3d63124f5ed182f666c26587b27c))
+* **policies:** add goblin canon clothing block expansions ([#70](https://github.com/pipe-works/pipeworks-image-generator/issues/70)) ([7f0e5ce](https://github.com/pipe-works/pipeworks-image-generator/commit/7f0e5ceb16e0e4dbd7e166a994ca4b480e028195))
+* **prompt-composer:** migrate to five-section policy schema ([502fb85](https://github.com/pipe-works/pipeworks-image-generator/commit/502fb850e44577a133f364af2ed58c0afe5b833b))
+* **prompt-composer:** migrate to five-section policy schema ([e41c106](https://github.com/pipe-works/pipeworks-image-generator/commit/e41c1062cdbdb0b7861d6ea771d8f70417464ef0))
+* **runtime:** default to Klein model and prefix server logs ([6fc4006](https://github.com/pipe-works/pipeworks-image-generator/commit/6fc40066148b7e4c5529ec8a357746c5eb3d55af))
+* **runtime:** default to Klein model and prefix server logs ([869ee00](https://github.com/pipe-works/pipeworks-image-generator/commit/869ee00be23b7cfed0469d2211f30b4a97b32715))
+
+
+### Fixes
+
+* **policies:** mirror pipeworks_web policy tree ([#68](https://github.com/pipe-works/pipeworks-image-generator/issues/68)) ([b2972f5](https://github.com/pipe-works/pipeworks-image-generator/commit/b2972f5dc30e3a28ed2f9657daf130ea241fa715))
+
 ## [0.10.0](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.9.0...pipeworks-image-generator-v0.10.0) (2026-03-06)
 
 
