@@ -1495,13 +1495,22 @@ def main() -> None:
     This function is registered as the ``pipeworks`` console script in
     ``pyproject.toml``.
     """
+    import copy
+
     import uvicorn
+
+    log_config = copy.deepcopy(uvicorn.config.LOGGING_CONFIG)
+    log_config["formatters"]["default"]["fmt"] = "img-gen %(levelprefix)s %(message)s"
+    log_config["formatters"]["access"][
+        "fmt"
+    ] = 'img-gen %(levelprefix)s %(client_addr)s - "%(request_line)s" %(status_code)s'
 
     uvicorn.run(
         "pipeworks.api.main:app",
         host=config.server_host,
         port=config.server_port,
         reload=False,
+        log_config=log_config,
     )
 
 

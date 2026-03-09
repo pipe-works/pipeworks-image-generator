@@ -15,6 +15,7 @@ import { createOutputLightboxController } from "./output-lightbox.mjs";
 const MAX_BATCH_SIZE = 1000;
 const COPY_FEEDBACK_MS = 1200;
 const SECTION_COLLAPSE_STORAGE_PREFIX = "pw-section-collapsed:";
+const DEFAULT_MODEL_ID = "flux-2-klein-4b";
 const PROMPT_SECTIONS = ["subject", "setting", "details", "lighting", "atmosphere"];
 const PROMPT_SECTION_LABELS = {
   subject: "subject",
@@ -255,7 +256,12 @@ function populateControls() {
     selModel.appendChild(opt);
   });
 
-  const firstAvailableModel = cfg.models.find(m => m.is_available !== false);
+  const preferredAvailableModel = cfg.models.find(
+    m => m.id === DEFAULT_MODEL_ID && m.is_available !== false,
+  );
+  const firstAvailableModel = preferredAvailableModel || cfg.models.find(
+    m => m.is_available !== false,
+  );
   if (firstAvailableModel) {
     selModel.value = firstAvailableModel.id;
   }
