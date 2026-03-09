@@ -20,8 +20,10 @@ from pipeworks.api.prompt_builder import (
     _MOOD_BOILERPLATE,
     _STYLE_BOILERPLATE,
     build_prompt,
+    build_structured_prompt,
     expand_prompt_placeholders,
     resolve_prompt_variants,
+    resolve_structured_prompt_variants,
 )
 
 
@@ -317,3 +319,58 @@ class TestPromptPlaceholderExpansion:
         assert "Style wash" in result
         assert "A blue automaton." in result
         assert "With fog." in result
+
+
+class TestStructuredPromptBuilder:
+    """Tests for the Subject/Setting/Details/Lighting/Atmosphere prompt schema."""
+
+    def test_build_structured_prompt_omits_empty_sections(self):
+        """Only non-empty section blocks should be emitted."""
+        result = build_structured_prompt(
+            {
+                "subject": "A goblin inventor.",
+                "setting": "",
+                "details": "Oily hands and brass tools.",
+                "lighting": "",
+                "atmosphere": "Hushed and focused.",
+            },
+            expand_placeholders=False,
+        )
+        assert "Subject:" in result
+        assert "Details:" in result
+        assert "Atmosphere:" in result
+        assert "Setting:" not in result
+        assert "Lighting:" not in result
+
+    def test_build_structured_prompt_expands_placeholders(self):
+        """Structured prompt building should expand placeholders by default."""
+        result = build_structured_prompt(
+            {
+                "subject": "A {goblin|human} inventor.",
+                "setting": "In a {workshop|laboratory}.",
+                "details": "",
+                "lighting": "",
+                "atmosphere": "",
+            },
+            rng=SequenceRandom(["human", "workshop"]),
+        )
+        assert "A human inventor." in result
+        assert "In a workshop." in result
+
+    def test_resolve_structured_prompt_variants(self):
+        """Per-section placeholder expansion should resolve each section once."""
+        resolved = resolve_structured_prompt_variants(
+            {
+                "subject": "{goblin|human}",
+                "setting": "{city|coast}",
+                "details": "{tool|ledger}",
+                "lighting": "{warm|cold}",
+                "atmosphere": "{calm|tense}",
+            },
+            rng=SequenceRandom(["goblin", "coast", "tool", "warm", "tense"]),
+        )
+        assert resolved["subject"] == "goblin"
+        assert resolved["setting"] == "coast"
+        assert resolved["details"] == "tool"
+        assert resolved["lighting"] == "warm"
+        assert resolved["atmosphere"] == "tense"

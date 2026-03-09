@@ -92,89 +92,137 @@
             </button>
             <div class="ctrl-section__body" id="prompt-section-body">
 
-            <!-- Prepend style -->
-            <div>
-              <div class="control-label-row">
-                <label class="control-label">Prepend Style</label>
-                <div class="control-actions">
-                  <button class="btn btn--secondary btn--sm" id="btn-copy-prepend" type="button">Copy</button>
+            <div class="composer-flow-label">Subject → Setting → Details → Lighting → Atmosphere</div>
+
+            <div class="ctrl-section composer-subsection" data-collapse-key="composer-subject">
+              <button class="ctrl-section__heading ctrl-section__heading--toggle" data-section-toggle type="button" aria-expanded="true">
+                <span>Subject</span>
+                <span class="ctrl-section__chevron">▾</span>
+              </button>
+              <div class="ctrl-section__body">
+                <div class="control-label-row">
+                  <label class="control-label">Subject Prompt</label>
+                  <div class="control-actions">
+                    <button class="btn btn--secondary btn--sm" id="btn-copy-subject" type="button">Copy</button>
+                  </div>
                 </div>
-              </div>
-              <div class="prompt-mode-toggle">
-                <button class="btn btn--secondary btn--sm is-active" id="btn-prepend-template" data-mode="template">Template</button>
-                <button class="btn btn--secondary btn--sm" id="btn-prepend-manual" data-mode="manual">Manual</button>
-              </div>
-            </div>
-            <div id="prepend-template-wrap">
-              <select class="select" id="sel-prepend" style="width:100%"></select>
-            </div>
-            <div id="prepend-manual-wrap" style="display:none">
-              <textarea
-                class="prompt-textarea"
-                id="txt-manual-prepend"
-                placeholder="Enter custom prepend style text… Use {red|blue|green} for random variants."
-                rows="3"
-              ></textarea>
-            </div>
-            <div class="token-counter" id="prepend-tokens">0 / -- tokens</div>
-
-            <!-- Prompt mode toggle -->
-            <div>
-              <div class="control-label-row">
-                <label class="control-label">Main Scene Mode</label>
-                <div class="control-actions">
-                  <button class="btn btn--secondary btn--sm" id="btn-copy-main" type="button">Copy</button>
+                <div class="prompt-mode-toggle">
+                  <button class="btn btn--secondary btn--sm" id="btn-subject-automated" data-mode="automated">Automated</button>
+                  <button class="btn btn--secondary btn--sm is-active" id="btn-subject-manual" data-mode="manual">Manual</button>
                 </div>
-              </div>
-              <div class="prompt-mode-toggle">
-                <button class="btn btn--secondary btn--sm is-active" id="btn-mode-manual" data-mode="manual">Manual</button>
-                <button class="btn btn--secondary btn--sm" id="btn-mode-auto" data-mode="automated">Automated</button>
-              </div>
-            </div>
-
-            <!-- Manual prompt -->
-            <div id="prompt-manual-wrap">
-              <label class="control-label">Manual Prompt</label>
-              <textarea
-                class="prompt-textarea"
-                id="txt-manual-prompt"
-                placeholder="Describe your main scene here (optional)… Use {red|blue|green} for random variants."
-                rows="4"
-              ></textarea>
-            </div>
-
-            <!-- Automated prompt -->
-            <div id="prompt-auto-wrap" style="display:none">
-              <label class="control-label">Scene Preset</label>
-              <select class="select" id="sel-auto-prompt" style="width:100%"></select>
-            </div>
-            <div class="token-counter" id="main-tokens">0 / -- tokens</div>
-
-            <!-- Append modifier -->
-            <div>
-              <div class="control-label-row">
-                <label class="control-label">Append Modifier</label>
-                <div class="control-actions">
-                  <button class="btn btn--secondary btn--sm" id="btn-copy-append" type="button">Copy</button>
+                <div id="subject-auto-wrap" style="display:none">
+                  <label class="control-label">Policy Snippets</label>
+                  <select class="select" id="sel-subject" style="width:100%"></select>
+                  <div class="composer-select-hint">Selecting an item appends it to the end of the section text.</div>
                 </div>
-              </div>
-              <div class="prompt-mode-toggle">
-                <button class="btn btn--secondary btn--sm is-active" id="btn-append-template" data-mode="template">Template</button>
-                <button class="btn btn--secondary btn--sm" id="btn-append-manual" data-mode="manual">Manual</button>
+                <textarea class="prompt-textarea" id="txt-subject" placeholder="Describe the subject (optional)… Use {red|blue|green} for random variants." rows="3"></textarea>
+                <div class="token-counter" id="subject-tokens">0 / -- tokens</div>
               </div>
             </div>
-            <div id="append-template-wrap">
-              <select class="select" id="sel-append" style="width:100%"></select>
+
+            <div class="ctrl-section composer-subsection" data-collapse-key="composer-setting">
+              <button class="ctrl-section__heading ctrl-section__heading--toggle" data-section-toggle type="button" aria-expanded="true">
+                <span>Setting</span>
+                <span class="ctrl-section__chevron">▾</span>
+              </button>
+              <div class="ctrl-section__body">
+                <div class="control-label-row">
+                  <label class="control-label">Setting Prompt</label>
+                  <div class="control-actions">
+                    <button class="btn btn--secondary btn--sm" id="btn-copy-setting" type="button">Copy</button>
+                  </div>
+                </div>
+                <div class="prompt-mode-toggle">
+                  <button class="btn btn--secondary btn--sm" id="btn-setting-automated" data-mode="automated">Automated</button>
+                  <button class="btn btn--secondary btn--sm is-active" id="btn-setting-manual" data-mode="manual">Manual</button>
+                </div>
+                <div id="setting-auto-wrap" style="display:none">
+                  <label class="control-label">Policy Snippets</label>
+                  <select class="select" id="sel-setting" style="width:100%"></select>
+                  <div class="composer-select-hint">Selecting an item appends it to the end of the section text.</div>
+                </div>
+                <textarea class="prompt-textarea" id="txt-setting" placeholder="Describe the setting (optional)… Use {red|blue|green} for random variants." rows="3"></textarea>
+                <div class="token-counter" id="setting-tokens">0 / -- tokens</div>
+              </div>
             </div>
-            <div id="append-manual-wrap" style="display:none">
-              <textarea
-                class="prompt-textarea"
-                id="txt-manual-append"
-                placeholder="Enter custom append modifier text… Use {red|blue|green} for random variants."
-                rows="3"
-              ></textarea>
+
+            <div class="ctrl-section composer-subsection" data-collapse-key="composer-details">
+              <button class="ctrl-section__heading ctrl-section__heading--toggle" data-section-toggle type="button" aria-expanded="true">
+                <span>Details</span>
+                <span class="ctrl-section__chevron">▾</span>
+              </button>
+              <div class="ctrl-section__body">
+                <div class="control-label-row">
+                  <label class="control-label">Details Prompt</label>
+                  <div class="control-actions">
+                    <button class="btn btn--secondary btn--sm" id="btn-copy-details" type="button">Copy</button>
+                  </div>
+                </div>
+                <div class="prompt-mode-toggle">
+                  <button class="btn btn--secondary btn--sm" id="btn-details-automated" data-mode="automated">Automated</button>
+                  <button class="btn btn--secondary btn--sm is-active" id="btn-details-manual" data-mode="manual">Manual</button>
+                </div>
+                <div id="details-auto-wrap" style="display:none">
+                  <label class="control-label">Policy Snippets</label>
+                  <select class="select" id="sel-details" style="width:100%"></select>
+                  <div class="composer-select-hint">Selecting an item appends it to the end of the section text.</div>
+                </div>
+                <textarea class="prompt-textarea" id="txt-details" placeholder="Describe key details (optional)… Use {red|blue|green} for random variants." rows="3"></textarea>
+                <div class="token-counter" id="details-tokens">0 / -- tokens</div>
+              </div>
             </div>
-            <div class="token-counter" id="append-tokens">0 / -- tokens</div>
+
+            <div class="ctrl-section composer-subsection" data-collapse-key="composer-lighting">
+              <button class="ctrl-section__heading ctrl-section__heading--toggle" data-section-toggle type="button" aria-expanded="true">
+                <span>Lighting</span>
+                <span class="ctrl-section__chevron">▾</span>
+              </button>
+              <div class="ctrl-section__body">
+                <div class="control-label-row">
+                  <label class="control-label">Lighting Prompt</label>
+                  <div class="control-actions">
+                    <button class="btn btn--secondary btn--sm" id="btn-copy-lighting" type="button">Copy</button>
+                  </div>
+                </div>
+                <div class="prompt-mode-toggle">
+                  <button class="btn btn--secondary btn--sm" id="btn-lighting-automated" data-mode="automated">Automated</button>
+                  <button class="btn btn--secondary btn--sm is-active" id="btn-lighting-manual" data-mode="manual">Manual</button>
+                </div>
+                <div id="lighting-auto-wrap" style="display:none">
+                  <label class="control-label">Policy Snippets</label>
+                  <select class="select" id="sel-lighting" style="width:100%"></select>
+                  <div class="composer-select-hint">Selecting an item appends it to the end of the section text.</div>
+                </div>
+                <textarea class="prompt-textarea" id="txt-lighting" placeholder="Describe lighting (optional)… Use {red|blue|green} for random variants." rows="3"></textarea>
+                <div class="token-counter" id="lighting-tokens">0 / -- tokens</div>
+              </div>
+            </div>
+
+            <div class="ctrl-section composer-subsection" data-collapse-key="composer-atmosphere">
+              <button class="ctrl-section__heading ctrl-section__heading--toggle" data-section-toggle type="button" aria-expanded="true">
+                <span>Atmosphere</span>
+                <span class="ctrl-section__chevron">▾</span>
+              </button>
+              <div class="ctrl-section__body">
+                <div class="control-label-row">
+                  <label class="control-label">Atmosphere Prompt</label>
+                  <div class="control-actions">
+                    <button class="btn btn--secondary btn--sm" id="btn-copy-atmosphere" type="button">Copy</button>
+                  </div>
+                </div>
+                <div class="prompt-mode-toggle">
+                  <button class="btn btn--secondary btn--sm" id="btn-atmosphere-automated" data-mode="automated">Automated</button>
+                  <button class="btn btn--secondary btn--sm is-active" id="btn-atmosphere-manual" data-mode="manual">Manual</button>
+                </div>
+                <div id="atmosphere-auto-wrap" style="display:none">
+                  <label class="control-label">Policy Snippets</label>
+                  <select class="select" id="sel-atmosphere" style="width:100%"></select>
+                  <div class="composer-select-hint">Selecting an item appends it to the end of the section text.</div>
+                </div>
+                <textarea class="prompt-textarea" id="txt-atmosphere" placeholder="Describe atmosphere (optional)… Use {red|blue|green} for random variants." rows="3"></textarea>
+                <div class="token-counter" id="atmosphere-tokens">0 / -- tokens</div>
+              </div>
+            </div>
 
             <!-- Negative prompt (conditional) -->
             <div id="negative-prompt-wrap">
@@ -456,19 +504,26 @@
         <div class="panel" style="margin-bottom:var(--sp-4)">
           <div class="panel__heading">Prompt Structure</div>
           <p style="font-size:var(--text-sm);color:var(--col-text-muted);line-height:1.7;margin-bottom:var(--sp-2)">
-            The compiled prompt follows a fixed structure:
+            The compiled prompt follows a five-section composer:
           </p>
           <p style="font-size:var(--text-xs);color:var(--col-text-muted);line-height:1.7;margin-bottom:var(--sp-2)">
-            Random variants are supported in free-text fields and prompt-library values with syntax like <code>{red|blue|green}</code>. A fresh option is chosen on each generation, including every image in a batch.
+            Every section is optional and independent. Random variants are supported in section text using syntax like <code>{red|blue|green}</code>. A fresh option is chosen on each generation, including every image in a batch.
           </p>
           <pre style="font-size:var(--text-xs)">
-[Prepend Style]          ← Required dropdown selection
-[Style boilerplate]      ← Fixed Ledgerfall pamphleteer text
-Main Scene:
-[Manual or Automated]    ← Your scene description
-[Mood boilerplate]       ← Fixed tension/atmosphere text
-[Append Modifier]        ← Optional dropdown selection
-[Colour boilerplate]     ← Fixed parchment colour text
+Subject:
+[Optional subject text]
+
+Setting:
+[Optional setting text]
+
+Details:
+[Optional details text]
+
+Lighting:
+[Optional lighting text]
+
+Atmosphere:
+[Optional atmosphere text]
           </pre>
         </div>
 

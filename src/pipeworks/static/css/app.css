@@ -319,6 +319,31 @@ html, body {
   outline: none;
 }
 
+.composer-flow-label {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--col-text-dim);
+  margin-bottom: var(--sp-1);
+}
+
+.composer-subsection {
+  border: 1px solid var(--col-border);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-2);
+  background: var(--col-surface-2);
+}
+
+.composer-subsection .ctrl-section__heading {
+  margin-bottom: var(--sp-1);
+}
+
+.composer-select-hint {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--col-text-dim);
+  margin-top: var(--sp-1);
+}
+
 .prompt-mode-toggle {
   display: flex;
   gap: var(--sp-1);

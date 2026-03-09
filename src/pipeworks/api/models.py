@@ -82,7 +82,7 @@ class GenerateRequest(BaseModel):
         description="Free-text prepend style (used when prepend_mode='manual').",
     )
     prompt_mode: str = Field(
-        ...,
+        default="manual",
         description="Prompt mode: 'manual' or 'automated'.",
     )
     manual_prompt: str | None = Field(
@@ -104,6 +104,72 @@ class GenerateRequest(BaseModel):
     manual_append: str | None = Field(
         default=None,
         description="Free-text append modifier (used when append_mode='manual').",
+    )
+    prompt_schema_version: int | None = Field(
+        default=None,
+        description=(
+            "Optional prompt schema version " "(2 = Subject/Setting/Details/Lighting/Atmosphere)."
+        ),
+    )
+    subject_mode: str | None = Field(
+        default=None,
+        description="Subject mode: 'manual' or 'automated' (schema v2).",
+    )
+    manual_subject: str | None = Field(
+        default=None,
+        description="Free-text Subject section value (schema v2).",
+    )
+    automated_subject_prompt_id: str | None = Field(
+        default=None,
+        description="Automated Subject prompt snippet ID (schema v2).",
+    )
+    setting_mode: str | None = Field(
+        default=None,
+        description="Setting mode: 'manual' or 'automated' (schema v2).",
+    )
+    manual_setting: str | None = Field(
+        default=None,
+        description="Free-text Setting section value (schema v2).",
+    )
+    automated_setting_prompt_id: str | None = Field(
+        default=None,
+        description="Automated Setting prompt snippet ID (schema v2).",
+    )
+    details_mode: str | None = Field(
+        default=None,
+        description="Details mode: 'manual' or 'automated' (schema v2).",
+    )
+    manual_details: str | None = Field(
+        default=None,
+        description="Free-text Details section value (schema v2).",
+    )
+    automated_details_prompt_id: str | None = Field(
+        default=None,
+        description="Automated Details prompt snippet ID (schema v2).",
+    )
+    lighting_mode: str | None = Field(
+        default=None,
+        description="Lighting mode: 'manual' or 'automated' (schema v2).",
+    )
+    manual_lighting: str | None = Field(
+        default=None,
+        description="Free-text Lighting section value (schema v2).",
+    )
+    automated_lighting_prompt_id: str | None = Field(
+        default=None,
+        description="Automated Lighting prompt snippet ID (schema v2).",
+    )
+    atmosphere_mode: str | None = Field(
+        default=None,
+        description="Atmosphere mode: 'manual' or 'automated' (schema v2).",
+    )
+    manual_atmosphere: str | None = Field(
+        default=None,
+        description="Free-text Atmosphere section value (schema v2).",
+    )
+    automated_atmosphere_prompt_id: str | None = Field(
+        default=None,
+        description="Automated Atmosphere prompt snippet ID (schema v2).",
     )
     aspect_ratio_id: str = Field(
         ...,

@@ -15,15 +15,27 @@ import { createOutputLightboxController } from "./output-lightbox.mjs";
 const MAX_BATCH_SIZE = 1000;
 const COPY_FEEDBACK_MS = 1200;
 const SECTION_COLLAPSE_STORAGE_PREFIX = "pw-section-collapsed:";
+const PROMPT_SECTIONS = ["subject", "setting", "details", "lighting", "atmosphere"];
+const PROMPT_SECTION_LABELS = {
+  subject: "subject",
+  setting: "setting",
+  details: "details",
+  lighting: "lighting",
+  atmosphere: "atmosphere",
+};
 
 // ── State ──────────────────────────────────────────────────────────────────────
 
 const State = {
   config: null,
   selectedModel: null,
-  prependMode: "template",
-  promptMode: "manual",
-  appendMode: "template",
+  sectionModes: {
+    subject: "manual",
+    setting: "manual",
+    details: "manual",
+    lighting: "manual",
+    atmosphere: "manual",
+  },
   batchSize: 1,
   isGenerating: false,
   currentGenerationId: null,
@@ -43,9 +55,11 @@ const State = {
   lightboxContext: null,
   theme: "dark",
   tokenCounts: {
-    prepend: 0,
-    main: 0,
-    append: 0,
+    subject: 0,
+    setting: 0,
+    details: 0,
+    lighting: 0,
+    atmosphere: 0,
     total: 0,
     method: "heuristic",
   },
@@ -200,22 +214,31 @@ async function loadConfig() {
 
 function populateControls() {
   const cfg = State.config;
-  const noneOption = { id: "none", label: "— None —" };
+  const policyOptions = cfg.policy_prompt_options || [];
 
-  function populateOptionalSelect(selectEl, options) {
+  function populatePolicySelect(selectEl, options) {
+    if (!selectEl) return;
     selectEl.innerHTML = "";
+    selectEl.appendChild(el("option", { value: "" }, "— Add snippet from policies —"));
 
-    const normalized = [...options];
-    if (!normalized.some(option => option.id === "none")) {
-      normalized.push(noneOption);
-    }
-
-    normalized.forEach(option => {
-      const opt = el("option", { value: option.id }, option.label);
-      selectEl.appendChild(opt);
+    const grouped = new Map();
+    options.forEach(option => {
+      const group = option.group || "policies";
+      if (!grouped.has(group)) grouped.set(group, []);
+      grouped.get(group).push(option);
     });
 
-    selectEl.value = "none";
+    [...grouped.keys()].sort().forEach(group => {
+      const optGroup = document.createElement("optgroup");
+      optGroup.label = group;
+      grouped.get(group).forEach(option => {
+        const opt = el("option", { value: option.id }, option.label);
+        optGroup.appendChild(opt);
+      });
+      selectEl.appendChild(optGroup);
+    });
+
+    selectEl.value = "";
   }
 
   // Models
@@ -244,17 +267,10 @@ function populateControls() {
     selGalleryModel.appendChild(opt);
   });
 
-  // Prepend prompts
-  const selPrepend = $("#sel-prepend");
-  populateOptionalSelect(selPrepend, cfg.prepend_prompts);
-
-  // Automated prompts
-  const selAuto = $("#sel-auto-prompt");
-  populateOptionalSelect(selAuto, cfg.automated_prompts);
-
-  // Append prompts
-  const selAppend = $("#sel-append");
-  populateOptionalSelect(selAppend, cfg.append_prompts);
+  // Section snippet dropdowns sourced from policies.
+  PROMPT_SECTIONS.forEach(section => {
+    populatePolicySelect($(`#sel-${section}`), policyOptions);
+  });
 
   // Version badge in header (populated from API, single source of truth)
   if (cfg.version) {
@@ -355,32 +371,29 @@ function onAspectChange() {
   }
 }
 
-function setPrependMode(mode) {
-  State.prependMode = mode;
-  $("#btn-prepend-template").classList.toggle("is-active", mode === "template");
-  $("#btn-prepend-manual").classList.toggle("is-active", mode === "manual");
-  $("#prepend-template-wrap").style.display = mode === "template" ? "" : "none";
-  $("#prepend-manual-wrap").style.display = mode === "manual" ? "" : "none";
+function setSectionPromptMode(section, mode) {
+  State.sectionModes[section] = mode;
+  $(`#btn-${section}-automated`).classList.toggle("is-active", mode === "automated");
+  $(`#btn-${section}-manual`).classList.toggle("is-active", mode === "manual");
+  $(`#${section}-auto-wrap`).style.display = mode === "automated" ? "" : "none";
   updateTokenCounters();
   schedulePromptPreview();
 }
 
-function setMainPromptMode(mode) {
-  State.promptMode = mode;
-  $("#btn-mode-manual").classList.toggle("is-active", mode === "manual");
-  $("#btn-mode-auto").classList.toggle("is-active", mode === "automated");
-  $("#prompt-manual-wrap").style.display = mode === "manual" ? "" : "none";
-  $("#prompt-auto-wrap").style.display = mode === "automated" ? "" : "none";
-  updateTokenCounters();
-  schedulePromptPreview();
-}
+function appendPolicySnippetToSection(section, optionId) {
+  if (!optionId || !State.config) return;
+  const option = (State.config.policy_prompt_options || []).find(item => item.id === optionId);
+  if (!option || !(option.value || "").trim()) return;
 
-function setAppendMode(mode) {
-  State.appendMode = mode;
-  $("#btn-append-template").classList.toggle("is-active", mode === "template");
-  $("#btn-append-manual").classList.toggle("is-active", mode === "manual");
-  $("#append-template-wrap").style.display = mode === "template" ? "" : "none";
-  $("#append-manual-wrap").style.display = mode === "manual" ? "" : "none";
+  const textarea = $(`#txt-${section}`);
+  if (!textarea) return;
+
+  const existing = textarea.value.trimEnd();
+  const snippet = option.value.trim();
+  textarea.value = existing ? `${existing}\n${snippet}` : snippet;
+
+  const select = $(`#sel-${section}`);
+  if (select) select.value = "";
   updateTokenCounters();
   schedulePromptPreview();
 }
@@ -399,45 +412,12 @@ function estimateTokens(text) {
  * Returns the raw text string (not including boilerplate).
  */
 function getPromptSectionText(section) {
-  if (!State.config) return "";
-
-  if (section === "prepend") {
-    if (State.prependMode === "manual") {
-      return $("#txt-manual-prepend").value;
-    }
-    // Template mode: resolve selected preset value.
-    const id = $("#sel-prepend").value;
-    const preset = State.config.prepend_prompts.find(p => p.id === id);
-    return preset ? (preset.value || preset.label) : "";
-  }
-
-  if (section === "main") {
-    if (State.promptMode === "manual") {
-      return $("#txt-manual-prompt").value;
-    }
-    const id = $("#sel-auto-prompt").value;
-    const preset = State.config.automated_prompts.find(p => p.id === id);
-    return preset ? (preset.value || preset.label) : "";
-  }
-
-  if (section === "append") {
-    if (State.appendMode === "manual") {
-      return $("#txt-manual-append").value;
-    }
-    const id = $("#sel-append").value;
-    if (!id || id === "none") return "";
-    const preset = State.config.append_prompts.find(p => p.id === id);
-    return preset ? (preset.value || preset.label) : "";
-  }
-
-  return "";
+  const textarea = $(`#txt-${section}`);
+  return textarea ? textarea.value : "";
 }
 
 function getPromptSectionDisplayName(section) {
-  if (section === "prepend") return "prepend style";
-  if (section === "main") return "main scene";
-  if (section === "append") return "append modifier";
-  return "prompt section";
+  return PROMPT_SECTION_LABELS[section] || "prompt section";
 }
 
 async function copyPromptSection(section, button) {
@@ -485,9 +465,11 @@ function updateTokenCounters() {
     }
   }
 
-  applyCounter("#prepend-tokens", counts.prepend || 0, maxTokens);
-  applyCounter("#main-tokens", counts.main || 0, maxTokens);
-  applyCounter("#append-tokens", counts.append || 0, maxTokens);
+  applyCounter("#subject-tokens", counts.subject || 0, maxTokens);
+  applyCounter("#setting-tokens", counts.setting || 0, maxTokens);
+  applyCounter("#details-tokens", counts.details || 0, maxTokens);
+  applyCounter("#lighting-tokens", counts.lighting || 0, maxTokens);
+  applyCounter("#atmosphere-tokens", counts.atmosphere || 0, maxTokens);
   applyCounter("#total-tokens", counts.total || 0, maxTokens);
 }
 
@@ -506,7 +488,15 @@ async function updatePromptPreview() {
 
   const payload = buildGeneratePayload();
   if (!payload) {
-    State.tokenCounts = { prepend: 0, main: 0, append: 0, total: 0, method: "heuristic" };
+    State.tokenCounts = {
+      subject: 0,
+      setting: 0,
+      details: 0,
+      lighting: 0,
+      atmosphere: 0,
+      total: 0,
+      method: "heuristic",
+    };
     updateTokenCounters();
     return;
   }
@@ -520,9 +510,11 @@ async function updatePromptPreview() {
     if (!res.ok) return;
     const data = await res.json();
     State.tokenCounts = data.token_counts || {
-      prepend: estimateTokens(getPromptSectionText("prepend")),
-      main: estimateTokens(getPromptSectionText("main")),
-      append: estimateTokens(getPromptSectionText("append")),
+      subject: estimateTokens(getPromptSectionText("subject")),
+      setting: estimateTokens(getPromptSectionText("setting")),
+      details: estimateTokens(getPromptSectionText("details")),
+      lighting: estimateTokens(getPromptSectionText("lighting")),
+      atmosphere: estimateTokens(getPromptSectionText("atmosphere")),
       total: estimateTokens(data.compiled_prompt || ""),
       method: "heuristic",
     };
@@ -550,9 +542,7 @@ function buildGeneratePayload() {
 
   const payload = {
     model_id: State.selectedModel,
-    prepend_mode: State.prependMode,
-    prompt_mode: State.promptMode,
-    append_mode: State.appendMode,
+    prompt_schema_version: 2,
     aspect_ratio_id: aspectId,
     width: ar.width,
     height: ar.height,
@@ -562,36 +552,25 @@ function buildGeneratePayload() {
     batch_size: State.batchSize,
   };
 
-  // Prepend: template or manual
-  if (State.prependMode === "manual") {
-    payload.manual_prepend = $("#txt-manual-prepend").value.trim();
-  } else {
-    const prependId = $("#sel-prepend").value;
-    payload.prepend_prompt_id = prependId || "none";
-  }
+  // Five independent composer sections.
+  PROMPT_SECTIONS.forEach(section => {
+    const mode = State.sectionModes[section] || "manual";
+    const sectionText = (getPromptSectionText(section) || "").trim();
+    const selectedOptionId = $(`#sel-${section}`)?.value || null;
 
-  // Main scene: manual or automated
-  if (State.promptMode === "manual") {
-    payload.manual_prompt = $("#txt-manual-prompt").value.trim();
-  } else {
-    const automatedId = $("#sel-auto-prompt").value;
-    if (automatedId && automatedId !== "none") {
-      payload.automated_prompt_id = automatedId;
+    payload[`${section}_mode`] = mode;
+    payload[`manual_${section}`] = sectionText || null;
+    if (mode === "automated" && selectedOptionId) {
+      payload[`automated_${section}_prompt_id`] = selectedOptionId;
+    } else {
+      payload[`automated_${section}_prompt_id`] = null;
     }
-  }
-
-  // Append: template or manual
-  if (State.appendMode === "manual") {
-    payload.manual_append = $("#txt-manual-append").value.trim();
-  } else {
-    const appendId = $("#sel-append").value;
-    if (appendId && appendId !== "none") {
-      payload.append_prompt_id = appendId;
-    }
-  }
+  });
 
   if (model.supports_negative_prompt) {
     payload.negative_prompt = $("#txt-negative-prompt").value.trim() || null;
+  } else {
+    payload.negative_prompt = null;
   }
 
   // Scheduler (only included when the model supports it)
@@ -1559,36 +1538,25 @@ function wireEvents() {
   // Aspect ratio change
   $("#sel-aspect").addEventListener("change", onAspectChange);
 
-  // Prepend mode toggle
-  $("#btn-prepend-template").addEventListener("click", () => setPrependMode("template"));
-  $("#btn-prepend-manual").addEventListener("click", () => setPrependMode("manual"));
-
-  // Main scene prompt mode toggle
-  $("#btn-mode-manual").addEventListener("click", () => setMainPromptMode("manual"));
-  $("#btn-mode-auto").addEventListener("click", () => setMainPromptMode("automated"));
-
-  // Append mode toggle
-  $("#btn-append-template").addEventListener("click", () => setAppendMode("template"));
-  $("#btn-append-manual").addEventListener("click", () => setAppendMode("manual"));
-
-  // Prompt section clipboard controls
-  $("#btn-copy-prepend").addEventListener("click", function () {
-    copyPromptSection("prepend", this);
+  // Prompt section controls (mode, copy, textarea input, policy snippet append).
+  PROMPT_SECTIONS.forEach(section => {
+    $(`#btn-${section}-automated`).addEventListener("click", () => {
+      setSectionPromptMode(section, "automated");
+    });
+    $(`#btn-${section}-manual`).addEventListener("click", () => {
+      setSectionPromptMode(section, "manual");
+    });
+    $(`#btn-copy-${section}`).addEventListener("click", function () {
+      copyPromptSection(section, this);
+    });
+    $(`#txt-${section}`).addEventListener("input", () => {
+      updateTokenCounters();
+      schedulePromptPreview();
+    });
+    $(`#sel-${section}`).addEventListener("change", (event) => {
+      appendPolicySnippetToSection(section, event.target.value);
+    });
   });
-  $("#btn-copy-main").addEventListener("click", function () {
-    copyPromptSection("main", this);
-  });
-  $("#btn-copy-append").addEventListener("click", function () {
-    copyPromptSection("append", this);
-  });
-
-  // Prompt inputs → live preview + token counters
-  $("#txt-manual-prepend").addEventListener("input", () => { updateTokenCounters(); schedulePromptPreview(); });
-  $("#txt-manual-prompt").addEventListener("input", () => { updateTokenCounters(); schedulePromptPreview(); });
-  $("#txt-manual-append").addEventListener("input", () => { updateTokenCounters(); schedulePromptPreview(); });
-  $("#sel-prepend").addEventListener("change", () => { updateTokenCounters(); schedulePromptPreview(); });
-  $("#sel-auto-prompt").addEventListener("change", () => { updateTokenCounters(); schedulePromptPreview(); });
-  $("#sel-append").addEventListener("change", () => { updateTokenCounters(); schedulePromptPreview(); });
 
   // Sliders
   $("#rng-steps").addEventListener("input", function () {

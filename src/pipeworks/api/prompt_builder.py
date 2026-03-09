@@ -88,6 +88,15 @@ _COLOUR_BOILERPLATE = (
 _PLACEHOLDER_PATTERN = re.compile(r"\{([^{}]+)\}")
 _PLACEHOLDER_RANDOM = random.SystemRandom()
 
+SECTION_ORDER = ("subject", "setting", "details", "lighting", "atmosphere")
+SECTION_LABELS = {
+    "subject": "Subject",
+    "setting": "Setting",
+    "details": "Details",
+    "lighting": "Lighting",
+    "atmosphere": "Atmosphere",
+}
+
 
 def expand_prompt_placeholders(
     text: str,
@@ -135,6 +144,42 @@ def resolve_prompt_variants(
         expand_prompt_placeholders(main_scene, rng=rng),
         expand_prompt_placeholders(append_value, rng=rng),
     )
+
+
+def resolve_structured_prompt_variants(
+    sections: dict[str, str],
+    *,
+    rng: random.Random | random.SystemRandom | None = None,
+) -> dict[str, str]:
+    """Expand placeholders for the structured five-section prompt schema."""
+    return {
+        key: expand_prompt_placeholders(sections.get(key, ""), rng=rng) for key in SECTION_ORDER
+    }
+
+
+def build_structured_prompt(
+    sections: dict[str, str],
+    *,
+    expand_placeholders: bool = True,
+    rng: random.Random | random.SystemRandom | None = None,
+) -> str:
+    """Build a prompt from independent optional section fields.
+
+    The sections are emitted in fixed order as labeled blocks. Empty sections
+    are omitted entirely.
+    """
+    resolved_sections = (
+        resolve_structured_prompt_variants(sections, rng=rng) if expand_placeholders else sections
+    )
+
+    parts: list[str] = []
+    for key in SECTION_ORDER:
+        text = (resolved_sections.get(key) or "").strip()
+        if not text:
+            continue
+        parts.append(f"{SECTION_LABELS[key]}:\n{text}")
+
+    return "\n\n".join(parts)
 
 
 def build_prompt(
