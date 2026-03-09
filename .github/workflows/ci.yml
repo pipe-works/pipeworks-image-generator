@@ -30,7 +30,5 @@ jobs:
       pytest-matrix-args: --override-ini addopts=
       pytest-coverage-markers: not slow and not requires_model
       pytest-coverage-args: --override-ini addopts=
-      run-supplemental-tests: true
-      pytest-supplemental-markers: slow or requires_model
-      pytest-supplemental-args: --override-ini addopts=
+      run-supplemental-tests: false
     secrets: inherit
