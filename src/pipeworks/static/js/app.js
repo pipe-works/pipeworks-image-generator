@@ -216,13 +216,17 @@ async function loadConfig() {
 function populateControls() {
   const cfg = State.config;
   const policyOptions = cfg.policy_prompt_options || [];
+  const policyGroups = cfg.policy_prompt_groups || [];
 
-  function populatePolicySelect(selectEl, options) {
+  function populatePolicySelect(selectEl, options, groups) {
     if (!selectEl) return;
     selectEl.innerHTML = "";
     selectEl.appendChild(el("option", { value: "" }, "— Add snippet from policies —"));
 
     const grouped = new Map();
+    groups.forEach(group => {
+      if (group && !grouped.has(group)) grouped.set(group, []);
+    });
     options.forEach(option => {
       const group = option.group || "policies";
       if (!grouped.has(group)) grouped.set(group, []);
@@ -232,10 +236,21 @@ function populateControls() {
     [...grouped.keys()].sort().forEach(group => {
       const optGroup = document.createElement("optgroup");
       optGroup.label = group;
-      grouped.get(group).forEach(option => {
-        const opt = el("option", { value: option.id }, option.label);
-        optGroup.appendChild(opt);
-      });
+      const entries = grouped.get(group) || [];
+      if (entries.length === 0) {
+        optGroup.appendChild(
+          el(
+            "option",
+            { value: "", disabled: "disabled" },
+            "— No prompt snippets in this directory —",
+          ),
+        );
+      } else {
+        entries.forEach(option => {
+          const opt = el("option", { value: option.id }, option.label);
+          optGroup.appendChild(opt);
+        });
+      }
       selectEl.appendChild(optGroup);
     });
 
@@ -275,7 +290,7 @@ function populateControls() {
 
   // Section snippet dropdowns sourced from policies.
   PROMPT_SECTIONS.forEach(section => {
-    populatePolicySelect($(`#sel-${section}`), policyOptions);
+    populatePolicySelect($(`#sel-${section}`), policyOptions, policyGroups);
   });
 
   // Version badge in header (populated from API, single source of truth)

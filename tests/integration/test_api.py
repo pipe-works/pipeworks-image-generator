@@ -134,6 +134,33 @@ class TestGetConfig:
         assert "policy_prompt_options" in data
         assert isinstance(data["policy_prompt_options"], list)
 
+    def test_config_returns_policy_prompt_groups(self, test_client):
+        """Response should include all policy directories for dropdown groups."""
+        resp = test_client.get("/api/config")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "policy_prompt_groups" in data
+        assert isinstance(data["policy_prompt_groups"], list)
+        assert "policies" in data["policy_prompt_groups"]
+        assert "axis" in data["policy_prompt_groups"]
+        assert "image/registries" in data["policy_prompt_groups"]
+        assert "image/tone_profiles" in data["policy_prompt_groups"]
+
+    def test_config_extracts_prompt_text_from_species_yaml(self, test_client):
+        """Species YAML blocks should contribute `text` content as snippets."""
+        resp = test_client.get("/api/config")
+        assert resp.status_code == 200
+        data = resp.json()
+        options_by_id = {option["id"]: option for option in data["policy_prompt_options"]}
+
+        goblin = options_by_id.get("image/blocks/species/goblin_v1.yaml")
+        assert goblin is not None
+        assert "A goblin of pipe-works canon" in goblin["value"]
+        assert "human-like hands and feet" in goblin["value"]
+
+        # Registry YAMLs are metadata and should not appear as snippets.
+        assert "image/registries/species_registry.yaml" not in options_by_id
+
     def test_disable_http_cache_adds_no_cache_headers(self, test_client):
         """No-cache headers should be emitted when local dev mode enables them."""
         from pipeworks.api import main as main_module

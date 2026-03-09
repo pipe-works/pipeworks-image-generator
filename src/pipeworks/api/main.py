@@ -350,29 +350,86 @@ def _format_policy_label(path: Path) -> str:
     return " ".join(part.capitalize() for part in stem.split())
 
 
+def _extract_yaml_prompt_text(raw_yaml: str) -> str:
+    """Extract a prompt string from a YAML `text` field.
+
+    Supports the common forms used by policy blocks:
+    - multiline block scalars: `text: |`
+    - inline scalar: `text: some text`
+    """
+    lines = raw_yaml.splitlines()
+    for index, line in enumerate(lines):
+        stripped = line.lstrip()
+        indent = len(line) - len(stripped)
+        if not stripped.startswith("text:"):
+            continue
+
+        remainder = stripped[len("text:") :].strip()
+        if remainder and remainder[0] not in {"|", ">"}:
+            return remainder.strip("'\"").strip()
+
+        block_lines: list[str] = []
+        block_indent: int | None = None
+        for block_line in lines[index + 1 :]:
+            block_stripped = block_line.lstrip()
+            current_indent = len(block_line) - len(block_stripped)
+
+            if block_stripped == "":
+                if block_indent is not None:
+                    block_lines.append("")
+                continue
+
+            if current_indent <= indent:
+                break
+
+            if block_indent is None:
+                block_indent = current_indent
+
+            block_lines.append(block_line[block_indent:].rstrip())
+
+        return "\n".join(block_lines).strip()
+
+    return ""
+
+
 def _load_policy_prompt_options() -> list[dict]:
-    """Load all `.txt` prompt snippets from the policy tree.
+    """Load prompt snippets from the policy tree.
 
     Each option includes:
     - ``id``: stable path-like identifier relative to policy root
     - ``label``: user-facing short label from filename
     - ``value``: file contents
     - ``group``: relative directory path for UI optgroup rendering
+
+    Supported sources:
+    - `.txt` files (full file text)
+    - `.yaml`/`.yml` files that contain a prompt-bearing `text` field
     """
     policy_root = _resolve_policy_root()
     if policy_root is None:
         return []
 
     options: list[dict] = []
-    for file_path in sorted(policy_root.rglob("*.txt")):
+    supported_extensions = {".txt", ".yaml", ".yml"}
+    for file_path in sorted(path for path in policy_root.rglob("*") if path.is_file()):
+        if file_path.suffix.lower() not in supported_extensions:
+            continue
+
         rel_path = file_path.relative_to(policy_root).as_posix()
         group_rel = file_path.parent.relative_to(policy_root).as_posix()
         group = group_rel if group_rel != "." else "policies"
+
         try:
-            value = file_path.read_text(encoding="utf-8").strip()
+            raw_value = file_path.read_text(encoding="utf-8")
         except Exception as exc:
             logger.warning("Unable to read policy prompt snippet '%s': %s", file_path, exc)
             continue
+
+        if file_path.suffix.lower() == ".txt":
+            value = raw_value.strip()
+        else:
+            value = _extract_yaml_prompt_text(raw_value)
+
         if not value:
             continue
         options.append(
@@ -385,6 +442,19 @@ def _load_policy_prompt_options() -> list[dict]:
             }
         )
     return options
+
+
+def _load_policy_prompt_groups() -> list[str]:
+    """Load all policy directory paths for dropdown group mirroring."""
+    policy_root = _resolve_policy_root()
+    if policy_root is None:
+        return []
+
+    groups = ["policies"]
+    for dir_path in sorted(path for path in policy_root.rglob("*") if path.is_dir()):
+        rel_path = dir_path.relative_to(policy_root).as_posix()
+        groups.append(rel_path if rel_path != "." else "policies")
+    return groups
 
 
 # ---------------------------------------------------------------------------
@@ -732,6 +802,7 @@ async def get_config() -> dict:
     annotated_models = _annotate_models_with_runtime_support(models.get("models", []))
     prompts = _load_prompt_catalog()
     policy_prompt_options = _load_policy_prompt_options()
+    policy_prompt_groups = _load_policy_prompt_groups()
     return {
         "version": __version__,
         "models": annotated_models,
@@ -743,6 +814,7 @@ async def get_config() -> dict:
         "append_prompts": prompts.get("append_prompts", []),
         "prompt_sections": list(PROMPT_SECTION_ORDER),
         "policy_prompt_options": policy_prompt_options,
+        "policy_prompt_groups": policy_prompt_groups,
     }
 
 
