@@ -372,6 +372,35 @@ def mock_prompt_token_counter() -> MagicMock:
         }
 
     counter.count_prompt_parts.side_effect = _count_prompt_parts
+
+    def _count_prompt_sections(
+        *,
+        hf_id: str | None,
+        subject_text: str,
+        setting_text: str,
+        details_text: str,
+        lighting_text: str,
+        atmosphere_text: str,
+        compiled_prompt: str,
+    ) -> dict:
+        def _count_words(text: str) -> int:
+            return len(text.split()) if text.strip() else 0
+
+        counts = {
+            "subject": _count_words(subject_text),
+            "setting": _count_words(setting_text),
+            "details": _count_words(details_text),
+            "lighting": _count_words(lighting_text),
+            "atmosphere": _count_words(atmosphere_text),
+            "total": _count_words(compiled_prompt),
+            "method": "tokenizer" if hf_id else "heuristic",
+        }
+        counts["prepend"] = counts["subject"]
+        counts["main"] = counts["details"]
+        counts["append"] = counts["atmosphere"]
+        return counts
+
+    counter.count_prompt_sections.side_effect = _count_prompt_sections
     return counter
 
 

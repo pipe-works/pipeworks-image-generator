@@ -126,6 +126,14 @@ class TestGetConfig:
         assert "main_library" in data
         assert "append_library" in data
 
+    def test_config_returns_policy_prompt_options(self, test_client):
+        """Response should include policy-backed prompt snippet options."""
+        resp = test_client.get("/api/config")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "policy_prompt_options" in data
+        assert isinstance(data["policy_prompt_options"], list)
+
     def test_disable_http_cache_adds_no_cache_headers(self, test_client):
         """No-cache headers should be emitted when local dev mode enables them."""
         from pipeworks.api import main as main_module
@@ -560,6 +568,44 @@ class TestPromptCompile:
         assert data["token_counts"]["total"] > 0
         assert "A test scene." in data["compiled_prompt"]
         assert "Main Scene:" in data["compiled_prompt"]
+
+    def test_compile_structured_sections_prompt(self, test_client):
+        """Section-schema prompt compile should include all labeled sections."""
+        resp = test_client.post(
+            "/api/prompt/compile",
+            json={
+                "model_id": "z-image-turbo",
+                "prompt_schema_version": 2,
+                "subject_mode": "manual",
+                "manual_subject": "A goblin machinist portrait.",
+                "setting_mode": "manual",
+                "manual_setting": "Inside a cramped brass workshop.",
+                "details_mode": "manual",
+                "manual_details": "Clockwork tools and grease marks.",
+                "lighting_mode": "manual",
+                "manual_lighting": "Soft overhead lantern light.",
+                "atmosphere_mode": "manual",
+                "manual_atmosphere": "Quiet and methodical mood.",
+                "aspect_ratio_id": "1:1",
+                "width": 1024,
+                "height": 1024,
+                "steps": 4,
+                "guidance": 0.0,
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        compiled = data["compiled_prompt"]
+        assert "Subject:" in compiled
+        assert "Setting:" in compiled
+        assert "Details:" in compiled
+        assert "Lighting:" in compiled
+        assert "Atmosphere:" in compiled
+        assert data["token_counts"]["subject"] > 0
+        assert data["token_counts"]["setting"] > 0
+        assert data["token_counts"]["details"] > 0
+        assert data["token_counts"]["lighting"] > 0
+        assert data["token_counts"]["atmosphere"] > 0
 
     def test_compile_returns_flux2_token_counts(self, test_client):
         """Prompt preview should return token counts for FLUX.2-klein-4B as well."""

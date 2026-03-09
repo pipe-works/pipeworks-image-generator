@@ -90,9 +90,12 @@ from pipeworks.api.models import (
     GenerateRequest,
 )
 from pipeworks.api.prompt_builder import (
+    SECTION_ORDER,
     build_prompt,
+    build_structured_prompt,
     expand_prompt_placeholders,
     resolve_prompt_variants,
+    resolve_structured_prompt_variants,
 )
 from pipeworks.core.config import config
 from pipeworks.core.model_manager import ModelManager, get_model_runtime_support
@@ -101,6 +104,7 @@ from pipeworks.core.prompt_token_counter import PromptTokenCounter
 logger = logging.getLogger(__name__)
 
 _MAX_BATCH_SIZE = 1000
+PROMPT_SECTION_ORDER = SECTION_ORDER
 
 # ---------------------------------------------------------------------------
 # Resolve paths from the global configuration instance.
@@ -326,6 +330,63 @@ def _load_prompt_catalog() -> dict:
     }
 
 
+def _resolve_policy_root() -> Path | None:
+    """Resolve the world-policy root used for section dropdown snippets."""
+    candidates = [
+        Path.cwd() / "data/worlds/pipeworks_web/policies",
+        Path(__file__).resolve().parents[3] / "data/worlds/pipeworks_web/policies",
+    ]
+    for candidate in candidates:
+        if candidate.exists() and candidate.is_dir():
+            return candidate
+    return None
+
+
+def _format_policy_label(path: Path) -> str:
+    """Convert a policy file path into a short human-readable label."""
+    stem = path.stem.replace("_", " ").replace("-", " ").strip()
+    if not stem:
+        return path.name
+    return " ".join(part.capitalize() for part in stem.split())
+
+
+def _load_policy_prompt_options() -> list[dict]:
+    """Load all `.txt` prompt snippets from the policy tree.
+
+    Each option includes:
+    - ``id``: stable path-like identifier relative to policy root
+    - ``label``: user-facing short label from filename
+    - ``value``: file contents
+    - ``group``: relative directory path for UI optgroup rendering
+    """
+    policy_root = _resolve_policy_root()
+    if policy_root is None:
+        return []
+
+    options: list[dict] = []
+    for file_path in sorted(policy_root.rglob("*.txt")):
+        rel_path = file_path.relative_to(policy_root).as_posix()
+        group_rel = file_path.parent.relative_to(policy_root).as_posix()
+        group = group_rel if group_rel != "." else "policies"
+        try:
+            value = file_path.read_text(encoding="utf-8").strip()
+        except Exception as exc:
+            logger.warning("Unable to read policy prompt snippet '%s': %s", file_path, exc)
+            continue
+        if not value:
+            continue
+        options.append(
+            {
+                "id": rel_path,
+                "label": _format_policy_label(file_path),
+                "value": value,
+                "group": group,
+                "path": rel_path,
+            }
+        )
+    return options
+
+
 # ---------------------------------------------------------------------------
 # Prompt resolution helper.
 # ---------------------------------------------------------------------------
@@ -405,6 +466,80 @@ def _resolve_prompt_parts(
     return prepend_value, main_scene, append_value
 
 
+def _request_uses_section_schema(req: GenerateRequest) -> bool:
+    """Return True when the request includes five-section composer fields."""
+    if req.prompt_schema_version == 2:
+        return True
+
+    for section in PROMPT_SECTION_ORDER:
+        if getattr(req, f"{section}_mode", None) is not None:
+            return True
+        if getattr(req, f"manual_{section}", None):
+            return True
+        if getattr(req, f"automated_{section}_prompt_id", None):
+            return True
+    return False
+
+
+def _build_prompt_lookup(
+    prompts: dict,
+    policy_options: list[dict] | None = None,
+) -> dict[str, dict]:
+    """Build a prompt lookup map from legacy libraries and policy snippets."""
+    lookup: dict[str, dict] = {}
+    for prompt in prompts.get("all_prompts", []):
+        prompt_id = prompt.get("id")
+        if not prompt_id:
+            continue
+        lookup[prompt_id] = prompt
+
+    for option in policy_options or []:
+        option_id = option.get("id")
+        if not option_id or option_id in lookup:
+            continue
+        lookup[option_id] = option
+
+    return lookup
+
+
+def _resolve_structured_prompt_sections(
+    req: GenerateRequest,
+    prompts: dict,
+    *,
+    policy_options: list[dict] | None = None,
+    strict: bool = False,
+) -> dict[str, str]:
+    """Resolve Subject/Setting/Details/Lighting/Atmosphere values from request."""
+    prompt_lookup = _build_prompt_lookup(prompts, policy_options)
+    resolved: dict[str, str] = {}
+
+    for section in PROMPT_SECTION_ORDER:
+        mode = getattr(req, f"{section}_mode", None) or "manual"
+        manual_value = (getattr(req, f"manual_{section}", None) or "").strip()
+        prompt_id = getattr(req, f"automated_{section}_prompt_id", None)
+
+        if manual_value:
+            resolved[section] = manual_value
+            continue
+
+        if mode == "automated" and prompt_id and prompt_id != "none":
+            prompt = prompt_lookup.get(prompt_id)
+            if prompt:
+                resolved[section] = (prompt.get("value") or "").strip()
+            elif strict:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Unknown automated {section} prompt: {prompt_id}",
+                )
+            else:
+                resolved[section] = ""
+            continue
+
+        resolved[section] = ""
+
+    return resolved
+
+
 def _build_zip_metadata_for_entry(entry: dict) -> dict:
     """Build the structured metadata dictionary for a gallery entry's zip.
 
@@ -431,13 +566,10 @@ def _build_zip_metadata_for_entry(entry: dict) -> dict:
         datetime.fromtimestamp(created_at_ts, tz=UTC).isoformat() if created_at_ts else None
     )
 
-    # Load the prompt catalog so we can resolve labels and text for each
-    # prompt section.
+    # Load prompt sources so we can resolve labels/text for metadata sections.
     prompts = _load_prompt_catalog()
-    prompt_lookup: dict[str, dict] = {}
-    for lib_key in ("prepend_library", "main_library", "append_library"):
-        for p in prompts.get(lib_key, []):
-            prompt_lookup[p["id"]] = {"label": p.get("label", ""), "value": p.get("value", "")}
+    policy_options = _load_policy_prompt_options()
+    prompt_lookup = _build_prompt_lookup(prompts, policy_options)
 
     prepend_mode = entry.get("prepend_mode", "template")
     append_mode = entry.get("append_mode", "template")
@@ -467,6 +599,21 @@ def _build_zip_metadata_for_entry(entry: dict) -> dict:
     else:
         append_text = append_preset.get("value", "")
 
+    sections_metadata: dict[str, dict] = {}
+    for section in PROMPT_SECTION_ORDER:
+        section_mode = entry.get(f"{section}_mode", "manual")
+        section_id = entry.get(f"automated_{section}_prompt_id")
+        section_preset = prompt_lookup.get(section_id, {}) if section_id else {}
+        section_text = (entry.get(f"manual_{section}") or "").strip()
+        if not section_text and section_mode == "automated":
+            section_text = (section_preset.get("value") or "").strip()
+        sections_metadata[section] = {
+            "mode": section_mode,
+            "preset_id": section_id,
+            "preset_label": section_preset.get("label"),
+            "text": section_text,
+        }
+
     return {
         "id": image_id,
         "model": {
@@ -475,6 +622,8 @@ def _build_zip_metadata_for_entry(entry: dict) -> dict:
         },
         "prompt": {
             "compiled": entry.get("compiled_prompt", ""),
+            "schema_version": entry.get("prompt_schema_version", 1),
+            "sections": sections_metadata,
             "prepend": {
                 "mode": prepend_mode,
                 "preset_id": prepend_id,
@@ -582,6 +731,7 @@ async def get_config() -> dict:
     models = _load_json(DATA_DIR / "models.json", {"models": []})
     annotated_models = _annotate_models_with_runtime_support(models.get("models", []))
     prompts = _load_prompt_catalog()
+    policy_prompt_options = _load_policy_prompt_options()
     return {
         "version": __version__,
         "models": annotated_models,
@@ -591,6 +741,8 @@ async def get_config() -> dict:
         "prepend_prompts": prompts.get("prepend_prompts", []),
         "automated_prompts": prompts.get("automated_prompts", []),
         "append_prompts": prompts.get("append_prompts", []),
+        "prompt_sections": list(PROMPT_SECTION_ORDER),
+        "policy_prompt_options": policy_prompt_options,
     }
 
 
@@ -648,11 +800,21 @@ async def generate_images(req: GenerateRequest) -> dict:
             detail=unavailable_reason,
         )
 
-    # --- Resolve prompt parts once; placeholders expand per generated image --
-    raw_prepend_value, raw_main_scene, raw_append_value = _resolve_prompt_parts(
-        req,
-        prompts,
-        strict=True,
+    # --- Resolve prompt input once; placeholders expand per generated image --
+    use_section_schema = _request_uses_section_schema(req)
+    policy_prompt_options = _load_policy_prompt_options() if use_section_schema else []
+    raw_sections = (
+        _resolve_structured_prompt_sections(
+            req,
+            prompts,
+            policy_options=policy_prompt_options,
+            strict=True,
+        )
+        if use_section_schema
+        else {}
+    )
+    raw_prepend_value, raw_main_scene, raw_append_value = (
+        _resolve_prompt_parts(req, prompts, strict=True) if not use_section_schema else ("", "", "")
     )
     raw_negative_prompt = (req.negative_prompt or "").strip()
 
@@ -689,19 +851,26 @@ async def generate_images(req: GenerateRequest) -> dict:
             img_id = str(uuid.uuid4())
             filename = f"{img_id}.png"
             filepath = GALLERY_DIR / filename
-            prepend_value, main_scene, append_value = resolve_prompt_variants(
-                raw_prepend_value,
-                raw_main_scene,
-                raw_append_value,
-            )
-            compiled_prompt = build_prompt(
-                prepend_value,
-                main_scene,
-                append_value,
-                prepend_mode=req.prepend_mode,
-                append_mode=req.append_mode,
-                expand_placeholders=False,
-            )
+            if use_section_schema:
+                section_values = resolve_structured_prompt_variants(raw_sections)
+                compiled_prompt = build_structured_prompt(
+                    section_values,
+                    expand_placeholders=False,
+                )
+            else:
+                prepend_value, main_scene, append_value = resolve_prompt_variants(
+                    raw_prepend_value,
+                    raw_main_scene,
+                    raw_append_value,
+                )
+                compiled_prompt = build_prompt(
+                    prepend_value,
+                    main_scene,
+                    append_value,
+                    prepend_mode=req.prepend_mode,
+                    append_mode=req.append_mode,
+                    expand_placeholders=False,
+                )
             negative_prompt = (
                 expand_prompt_placeholders(raw_negative_prompt) if raw_negative_prompt else None
             )
@@ -732,6 +901,7 @@ async def generate_images(req: GenerateRequest) -> dict:
                 "model_id": req.model_id,
                 "model_label": model_cfg["label"],
                 "compiled_prompt": compiled_prompt,
+                "prompt_schema_version": 2 if use_section_schema else 1,
                 "prepend_prompt_id": req.prepend_prompt_id,
                 "prompt_mode": req.prompt_mode,
                 "manual_prompt": req.manual_prompt,
@@ -741,6 +911,21 @@ async def generate_images(req: GenerateRequest) -> dict:
                 "append_mode": req.append_mode,
                 "manual_prepend": req.manual_prepend,
                 "manual_append": req.manual_append,
+                "subject_mode": req.subject_mode,
+                "manual_subject": req.manual_subject,
+                "automated_subject_prompt_id": req.automated_subject_prompt_id,
+                "setting_mode": req.setting_mode,
+                "manual_setting": req.manual_setting,
+                "automated_setting_prompt_id": req.automated_setting_prompt_id,
+                "details_mode": req.details_mode,
+                "manual_details": req.manual_details,
+                "automated_details_prompt_id": req.automated_details_prompt_id,
+                "lighting_mode": req.lighting_mode,
+                "manual_lighting": req.manual_lighting,
+                "automated_lighting_prompt_id": req.automated_lighting_prompt_id,
+                "atmosphere_mode": req.atmosphere_mode,
+                "manual_atmosphere": req.manual_atmosphere,
+                "automated_atmosphere_prompt_id": req.automated_atmosphere_prompt_id,
                 "aspect_ratio_id": req.aspect_ratio_id,
                 "width": req.width,
                 "height": req.height,
@@ -1205,36 +1390,61 @@ async def compile_prompt(req: GenerateRequest) -> dict:
     """
     prompts = _load_prompt_catalog()
     models_data = _load_json(DATA_DIR / "models.json", {"models": []})
-    raw_prepend_value, raw_main_scene, raw_append_value = _resolve_prompt_parts(
-        req,
-        prompts,
-        strict=False,
-    )
-    prepend_value, main_scene, append_value = resolve_prompt_variants(
-        raw_prepend_value,
-        raw_main_scene,
-        raw_append_value,
-    )
-    compiled = build_prompt(
-        prepend_value,
-        main_scene,
-        append_value,
-        prepend_mode=req.prepend_mode,
-        append_mode=req.append_mode,
-        expand_placeholders=False,
-    )
+    use_section_schema = _request_uses_section_schema(req)
+    if use_section_schema:
+        raw_sections = _resolve_structured_prompt_sections(
+            req,
+            prompts,
+            policy_options=_load_policy_prompt_options(),
+            strict=False,
+        )
+        resolved_sections = resolve_structured_prompt_variants(raw_sections)
+        compiled = build_structured_prompt(
+            resolved_sections,
+            expand_placeholders=False,
+        )
+    else:
+        raw_prepend_value, raw_main_scene, raw_append_value = _resolve_prompt_parts(
+            req,
+            prompts,
+            strict=False,
+        )
+        prepend_value, main_scene, append_value = resolve_prompt_variants(
+            raw_prepend_value,
+            raw_main_scene,
+            raw_append_value,
+        )
+        compiled = build_prompt(
+            prepend_value,
+            main_scene,
+            append_value,
+            prepend_mode=req.prepend_mode,
+            append_mode=req.append_mode,
+            expand_placeholders=False,
+        )
     model_cfg = next(
         (m for m in models_data.get("models", []) if m["id"] == req.model_id),
         None,
     )
     token_counter: PromptTokenCounter = app.state.prompt_token_counter
-    token_counts = token_counter.count_prompt_parts(
-        hf_id=model_cfg.get("hf_id") if model_cfg else None,
-        prepend_text=prepend_value,
-        main_text=main_scene,
-        append_text=append_value,
-        compiled_prompt=compiled,
-    )
+    if use_section_schema:
+        token_counts = token_counter.count_prompt_sections(
+            hf_id=model_cfg.get("hf_id") if model_cfg else None,
+            subject_text=resolved_sections.get("subject", ""),
+            setting_text=resolved_sections.get("setting", ""),
+            details_text=resolved_sections.get("details", ""),
+            lighting_text=resolved_sections.get("lighting", ""),
+            atmosphere_text=resolved_sections.get("atmosphere", ""),
+            compiled_prompt=compiled,
+        )
+    else:
+        token_counts = token_counter.count_prompt_parts(
+            hf_id=model_cfg.get("hf_id") if model_cfg else None,
+            prepend_text=prepend_value,
+            main_text=main_scene,
+            append_text=append_value,
+            compiled_prompt=compiled,
+        )
     return {
         "compiled_prompt": compiled,
         "token_counts": token_counts,
