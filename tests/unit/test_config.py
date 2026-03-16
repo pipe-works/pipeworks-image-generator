@@ -174,6 +174,28 @@ class TestConfigValidation:
                 gallery_dir="/tmp/test_gallery",
             )
 
+    def test_ignores_non_pipeworks_keys_in_env_file(self, temp_dir: Path):
+        """Dotenv entries for other subsystems should not fail settings load."""
+        env_file = temp_dir / "runtime.env"
+        env_file.write_text(
+            "\n".join(
+                [
+                    "PW_POLICY_SOURCE_MODE=server_dev",
+                    "PW_POLICY_DEV_MUD_API_BASE_URL=http://127.0.0.1:8000",
+                    "PW_POLICY_PROD_MUD_API_BASE_URL=https://mud-api.example.com",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        cfg = PipeworksConfig(
+            _env_file=env_file,
+            models_dir=str(temp_dir / "models"),
+            outputs_dir=str(temp_dir / "outputs"),
+            gallery_dir=str(temp_dir / "gallery"),
+        )
+        assert cfg.device == "cuda"
+
 
 class TestConfigPathResolution:
     """Verify that path fields are properly resolved."""

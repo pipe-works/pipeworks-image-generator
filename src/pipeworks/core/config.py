@@ -169,6 +169,7 @@ class PipeworksConfig(BaseSettings):
         env_file_encoding="utf-8",
         env_prefix="PIPEWORKS_",
         case_sensitive=False,
+        extra="ignore",
     )
 
     # -- General model settings (shared across all adapters) ----------------
