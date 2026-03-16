@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.14.2](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.14.1...pipeworks-image-generator-v0.14.2) (2026-03-16)
+
+
+### Internal Changes
+
+* **api:** remove deprecated prompt/runtime compatibility paths ([#86](https://github.com/pipe-works/pipeworks-image-generator/issues/86)) ([29a7f4d](https://github.com/pipe-works/pipeworks-image-generator/commit/29a7f4d91a5b9f545c51c79301deec71f80dcf58))
+* **app:** split API/frontend monoliths and add deprecation signals ([#84](https://github.com/pipe-works/pipeworks-image-generator/issues/84)) ([741fd0f](https://github.com/pipe-works/pipeworks-image-generator/commit/741fd0fa74b7c819a33aa9407b9ded4368b068f9))
+
 ## [0.14.1](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.14.0...pipeworks-image-generator-v0.14.1) (2026-03-16)
 
 
