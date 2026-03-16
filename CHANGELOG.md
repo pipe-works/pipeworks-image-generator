@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.14.1](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.14.0...pipeworks-image-generator-v0.14.1) (2026-03-16)
+
+
+### Fixes
+
+* **gpu:** secure runtime worker settings and docs ([a057769](https://github.com/pipe-works/pipeworks-image-generator/commit/a057769dee9c133da94cf96be33b712595c07e48))
+* **gpu:** secure runtime worker settings and docs ([d19dfd6](https://github.com/pipe-works/pipeworks-image-generator/commit/d19dfd6b0e40b99c687e889b226a9e984afea2fa))
+
 ## [0.14.0](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.13.1...pipeworks-image-generator-v0.14.0) (2026-03-16)
 
 
