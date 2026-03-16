@@ -304,6 +304,111 @@ class TestGetConfig:
 
 
 # ---------------------------------------------------------------------------
+# GPU settings endpoint tests.
+# ---------------------------------------------------------------------------
+
+
+class TestGpuSettings:
+    """Test runtime-editable GPU settings endpoints."""
+
+    def test_get_gpu_settings_defaults_to_local_mode(self, test_client):
+        """GPU settings endpoint should default to local-only mode."""
+        resp = test_client.get("/api/gpu-settings")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["use_remote_gpu"] is False
+        assert data["default_gpu_worker_id"] == "local"
+        assert data["has_bearer_token"] is False
+
+    def test_update_gpu_settings_enables_remote_and_updates_api_config(self, test_client):
+        """Saving remote settings should update worker list exposed by /api/config."""
+        save_resp = test_client.post(
+            "/api/gpu-settings",
+            json={
+                "use_remote_gpu": True,
+                "remote_base_url": "http://100.107.250.105:7860",
+                "bearer_token": "test-token",
+                "remote_label": "Remote GPU (Tailscale)",
+            },
+        )
+        assert save_resp.status_code == 200
+        payload = save_resp.json()
+        assert payload["use_remote_gpu"] is True
+        assert payload["has_bearer_token"] is True
+
+        config_resp = test_client.get("/api/config")
+        assert config_resp.status_code == 200
+        config_payload = config_resp.json()
+        workers_by_id = {worker["id"]: worker for worker in config_payload["gpu_workers"]}
+        assert "remote-ts" in workers_by_id
+        assert workers_by_id["remote-ts"]["label"] == "Remote GPU (Tailscale)"
+        assert "bearer_token" not in json.dumps(config_payload)
+
+    def test_update_gpu_settings_generates_token_when_missing(self, test_client):
+        """Saving remote settings without a token should generate one."""
+        test_client.post(
+            "/api/gpu-settings",
+            json={
+                "use_remote_gpu": False,
+            },
+        )
+        resp = test_client.post(
+            "/api/gpu-settings",
+            json={
+                "use_remote_gpu": True,
+                "remote_base_url": "http://100.107.250.105:7860",
+                "bearer_token": None,
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["use_remote_gpu"] is True
+        assert data["has_bearer_token"] is True
+        assert isinstance(data.get("generated_bearer_token"), str)
+        assert len(data["generated_bearer_token"]) > 20
+
+    def test_gpu_settings_test_connection_uses_saved_token_when_not_provided(self, test_client):
+        """Health test endpoint should fall back to saved token when form token is blank."""
+        test_client.post(
+            "/api/gpu-settings",
+            json={
+                "use_remote_gpu": True,
+                "remote_base_url": "http://100.107.250.105:7860",
+                "bearer_token": "saved-token",
+            },
+        )
+
+        class _FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def read(self):
+                return b'{"success": true, "status": "ok"}'
+
+        def _fake_urlopen(request, timeout):
+            assert request.full_url == "http://100.107.250.105:7860/api/worker/health"
+            assert request.get_header("Authorization") == "Bearer saved-token"
+            assert timeout == 8
+            return _FakeResponse()
+
+        with patch("pipeworks.api.main.urlopen", side_effect=_fake_urlopen):
+            resp = test_client.post(
+                "/api/gpu-settings/test",
+                json={
+                    "remote_base_url": "http://100.107.250.105:7860",
+                    "bearer_token": None,
+                    "timeout_seconds": 8,
+                },
+            )
+
+        assert resp.status_code == 200
+        assert resp.json()["success"] is True
+
+
+# ---------------------------------------------------------------------------
 # Generation endpoint tests.
 # ---------------------------------------------------------------------------
 
@@ -356,91 +461,69 @@ class TestGenerate:
         """Remote worker mode should save returned images to local gallery metadata."""
         from PIL import Image
 
-        from pipeworks.api import main as main_module
-        from pipeworks.core.config import GpuWorkerConfig
-
-        previous_workers = main_module.config.gpu_workers
-        previous_default = main_module.config.default_gpu_worker_id
-        main_module.config.gpu_workers = [
-            GpuWorkerConfig(id="local", label="Local GPU", mode="local", enabled=True),
-            GpuWorkerConfig(
-                id="remote-a",
-                label="Remote A",
-                mode="remote",
-                base_url="https://worker.example.com",
-                bearer_token="worker-token",
-                enabled=True,
-            ),
-        ]
-        main_module.config.default_gpu_worker_id = "remote-a"
+        settings_resp = test_client.post(
+            "/api/gpu-settings",
+            json={
+                "use_remote_gpu": True,
+                "remote_label": "Remote A",
+                "remote_base_url": "https://worker.example.com",
+                "bearer_token": "worker-token",
+            },
+        )
+        assert settings_resp.status_code == 200
 
         buffer = BytesIO()
         Image.new("RGB", (1024, 1024), color=(1, 2, 3)).save(buffer, format="PNG")
         png_payload = b64encode(buffer.getvalue()).decode("utf-8")
 
-        try:
-            with patch(
-                "pipeworks.api.main._post_json_with_bearer",
-                return_value={
-                    "success": True,
-                    "cancelled": False,
-                    "completed_count": 1,
-                    "results": [{"index": 0, "seed": 123, "png_base64": png_payload}],
-                },
-            ) as worker_post:
-                resp = test_client.post(
-                    "/api/generate",
-                    json=self._make_generate_payload(
-                        gpu_worker_id="remote-a",
-                        generation_id="gen-remote-success",
-                        seed=123,
-                    ),
-                )
-        finally:
-            main_module.config.gpu_workers = previous_workers
-            main_module.config.default_gpu_worker_id = previous_default
+        with patch(
+            "pipeworks.api.main._post_json_with_bearer",
+            return_value={
+                "success": True,
+                "cancelled": False,
+                "completed_count": 1,
+                "results": [{"index": 0, "seed": 123, "png_base64": png_payload}],
+            },
+        ) as worker_post:
+            resp = test_client.post(
+                "/api/generate",
+                json=self._make_generate_payload(
+                    gpu_worker_id="remote-ts",
+                    generation_id="gen-remote-success",
+                    seed=123,
+                ),
+            )
 
         assert resp.status_code == 200
         data = resp.json()
         assert data["success"] is True
         assert data["completed_count"] == 1
-        assert data["images"][0]["compute_target_id"] == "remote-a"
+        assert data["images"][0]["compute_target_id"] == "remote-ts"
         assert data["images"][0]["compute_target_label"] == "Remote A"
         assert mock_model_manager.generate.call_count == 0
         worker_post.assert_called_once()
 
     def test_generate_remote_worker_unreachable_returns_clear_error(self, test_client):
         """Remote worker transport failures should fail fast with worker label detail."""
-        from pipeworks.api import main as main_module
-        from pipeworks.core.config import GpuWorkerConfig
+        settings_resp = test_client.post(
+            "/api/gpu-settings",
+            json={
+                "use_remote_gpu": True,
+                "remote_label": "Remote B",
+                "remote_base_url": "https://worker.example.com",
+                "bearer_token": "worker-token",
+            },
+        )
+        assert settings_resp.status_code == 200
 
-        previous_workers = main_module.config.gpu_workers
-        previous_default = main_module.config.default_gpu_worker_id
-        main_module.config.gpu_workers = [
-            GpuWorkerConfig(id="local", label="Local GPU", mode="local", enabled=True),
-            GpuWorkerConfig(
-                id="remote-b",
-                label="Remote B",
-                mode="remote",
-                base_url="https://worker.example.com",
-                bearer_token="worker-token",
-                enabled=True,
-            ),
-        ]
-        main_module.config.default_gpu_worker_id = "remote-b"
-
-        try:
-            with patch(
-                "pipeworks.api.main._post_json_with_bearer",
-                side_effect=ValueError("timed out"),
-            ):
-                resp = test_client.post(
-                    "/api/generate",
-                    json=self._make_generate_payload(gpu_worker_id="remote-b"),
-                )
-        finally:
-            main_module.config.gpu_workers = previous_workers
-            main_module.config.default_gpu_worker_id = previous_default
+        with patch(
+            "pipeworks.api.main._post_json_with_bearer",
+            side_effect=ValueError("timed out"),
+        ):
+            resp = test_client.post(
+                "/api/generate",
+                json=self._make_generate_payload(gpu_worker_id="remote-ts"),
+            )
 
         assert resp.status_code == 502
         assert "Remote B" in resp.json()["detail"]
@@ -788,23 +871,16 @@ class TestGenerate:
 
     def test_generate_cancel_forwards_to_remote_worker(self, test_client):
         """Cancel endpoint should forward cancellation to active remote worker."""
-        from pipeworks.api import main as main_module
-        from pipeworks.core.config import GpuWorkerConfig
-
-        previous_workers = main_module.config.gpu_workers
-        previous_default = main_module.config.default_gpu_worker_id
-        main_module.config.gpu_workers = [
-            GpuWorkerConfig(id="local", label="Local GPU", mode="local", enabled=True),
-            GpuWorkerConfig(
-                id="remote-c",
-                label="Remote C",
-                mode="remote",
-                base_url="https://worker.example.com",
-                bearer_token="worker-token",
-                enabled=True,
-            ),
-        ]
-        main_module.config.default_gpu_worker_id = "remote-c"
+        settings_resp = test_client.post(
+            "/api/gpu-settings",
+            json={
+                "use_remote_gpu": True,
+                "remote_label": "Remote C",
+                "remote_base_url": "https://worker.example.com",
+                "bearer_token": "worker-token",
+            },
+        )
+        assert settings_resp.status_code == 200
 
         generation_id = "gen-remote-cancel"
         worker_generate_started = threading.Event()
@@ -828,24 +904,20 @@ class TestGenerate:
             responses["generate"] = test_client.post(
                 "/api/generate",
                 json=self._make_generate_payload(
-                    gpu_worker_id="remote-c",
+                    gpu_worker_id="remote-ts",
                     generation_id=generation_id,
                 ),
             )
 
-        try:
-            with patch("pipeworks.api.main._post_json_with_bearer", side_effect=_fake_worker_post):
-                generate_thread = threading.Thread(target=_run_generate)
-                generate_thread.start()
-                worker_generate_started.wait(timeout=0.5)
-                cancel_resp = test_client.post(
-                    "/api/generate/cancel",
-                    json={"generation_id": generation_id},
-                )
-                generate_thread.join()
-        finally:
-            main_module.config.gpu_workers = previous_workers
-            main_module.config.default_gpu_worker_id = previous_default
+        with patch("pipeworks.api.main._post_json_with_bearer", side_effect=_fake_worker_post):
+            generate_thread = threading.Thread(target=_run_generate)
+            generate_thread.start()
+            worker_generate_started.wait(timeout=0.5)
+            cancel_resp = test_client.post(
+                "/api/generate/cancel",
+                json={"generation_id": generation_id},
+            )
+            generate_thread.join()
 
         assert cancel_resp.status_code == 200
         assert cancel_forwarded.is_set()

@@ -31,6 +31,7 @@ const State = {
   config: null,
   runtimeMode: null,
   runtimeAuth: null,
+  gpuSettings: null,
   policyPromptOptions: [],
   policyPromptGroups: [],
   selectedModel: null,
@@ -146,6 +147,52 @@ function updateStatusBar() {
   const seed = $("#inp-seed").value;
   const isRandom = $("#chk-random-seed").checked;
   $("#status-seed").textContent = isRandom ? "seed random" : `seed ${seed || "—"}`;
+}
+
+function setGpuSettingsStatus(message) {
+  const status = $("#gpu-settings-status");
+  if (status) {
+    status.textContent = message;
+  }
+}
+
+function syncGpuSettingsControls() {
+  const useRemote = $("#chk-use-remote-gpu")?.checked || false;
+  ["inp-remote-gpu-url", "inp-remote-gpu-token", "btn-gpu-token-generate", "btn-gpu-test"].forEach(id => {
+    const control = $(`#${id}`);
+    if (control) control.disabled = !useRemote;
+  });
+}
+
+function randomGpuToken() {
+  const bytes = new Uint8Array(24);
+  (globalThis.crypto || window.crypto).getRandomValues(bytes);
+  return [...bytes].map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+function applyGpuSettingsForm(payload) {
+  State.gpuSettings = payload || null;
+  const useRemote = Boolean(payload?.use_remote_gpu);
+  const checkbox = $("#chk-use-remote-gpu");
+  const remoteUrl = $("#inp-remote-gpu-url");
+  const remoteToken = $("#inp-remote-gpu-token");
+  if (checkbox) checkbox.checked = useRemote;
+  if (remoteUrl) remoteUrl.value = payload?.remote_base_url || "";
+
+  if (remoteToken) {
+    if (payload?.generated_bearer_token) {
+      remoteToken.value = payload.generated_bearer_token;
+      remoteToken.placeholder = "Generated token (copy to remote worker)";
+    } else if (payload?.has_bearer_token) {
+      remoteToken.value = "";
+      remoteToken.placeholder = "Saved token hidden (leave blank to keep)";
+    } else {
+      remoteToken.value = "";
+      remoteToken.placeholder = "Bearer token";
+    }
+  }
+
+  syncGpuSettingsControls();
 }
 
 function getSelectedGpuWorker() {
@@ -589,6 +636,96 @@ function populateControls() {
 
   // Trigger model change to populate aspect ratios etc.
   onModelChange();
+}
+
+async function loadGpuSettings({ silent = false } = {}) {
+  try {
+    const payload = await fetchJson("/api/gpu-settings");
+    applyGpuSettingsForm(payload);
+    if (!silent) {
+      const stateLabel = payload.use_remote_gpu ? "enabled" : "disabled";
+      setGpuSettingsStatus(`Remote GPU ${stateLabel}.`);
+    }
+  } catch (error) {
+    if (!silent) {
+      setGpuSettingsStatus(`GPU settings unavailable: ${error.message}`);
+    }
+  }
+}
+
+async function saveGpuSettings() {
+  const useRemote = $("#chk-use-remote-gpu")?.checked || false;
+  const remoteUrl = ($("#inp-remote-gpu-url")?.value || "").trim();
+  const remoteToken = ($("#inp-remote-gpu-token")?.value || "").trim();
+
+  if (useRemote && !remoteUrl) {
+    toast("Remote GPU URL is required", "warn");
+    setGpuSettingsStatus("Remote GPU URL required.");
+    return;
+  }
+
+  setGpuSettingsStatus("Saving GPU settings...");
+  const payload = await fetchJson("/api/gpu-settings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      use_remote_gpu: useRemote,
+      remote_base_url: remoteUrl || null,
+      bearer_token: remoteToken || null,
+      default_to_remote: false,
+      timeout_seconds: 240,
+    }),
+  });
+
+  applyGpuSettingsForm(payload);
+  await loadConfig();
+  setGpuSettingsStatus("GPU settings saved.");
+  setStatus("GPU settings saved.");
+  if (payload.generated_bearer_token) {
+    toast("Generated a new remote bearer token. Copy it to the remote worker.", "info", 5000);
+  } else {
+    toast("GPU settings saved", "ok");
+  }
+}
+
+async function testGpuSettingsConnection() {
+  const useRemote = $("#chk-use-remote-gpu")?.checked || false;
+  const remoteUrl = ($("#inp-remote-gpu-url")?.value || "").trim();
+  const remoteToken = ($("#inp-remote-gpu-token")?.value || "").trim();
+  if (!useRemote) {
+    setGpuSettingsStatus("Enable remote GPU first.");
+    return;
+  }
+  if (!remoteUrl) {
+    setGpuSettingsStatus("Remote GPU URL required.");
+    return;
+  }
+
+  setGpuSettingsStatus("Testing remote GPU...");
+  try {
+    await fetchJson("/api/gpu-settings/test", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        remote_base_url: remoteUrl,
+        bearer_token: remoteToken || null,
+        timeout_seconds: 8,
+      }),
+    });
+    setGpuSettingsStatus("Remote GPU health check succeeded.");
+    toast("Remote GPU is reachable", "ok");
+  } catch (error) {
+    setGpuSettingsStatus(`Remote GPU check failed: ${error.message}`);
+    toast(`Remote GPU check failed: ${error.message}`, "err");
+  }
+}
+
+function generateGpuTokenInField() {
+  const tokenField = $("#inp-remote-gpu-token");
+  if (!tokenField) return;
+  tokenField.value = randomGpuToken();
+  tokenField.placeholder = "Generated token (copy to remote worker)";
+  setGpuSettingsStatus("Generated token. Save settings to persist.");
 }
 
 
@@ -1896,6 +2033,21 @@ function wireEvents() {
     }
   });
 
+  $("#chk-use-remote-gpu")?.addEventListener("change", () => {
+    syncGpuSettingsControls();
+    setGpuSettingsStatus($("#chk-use-remote-gpu").checked ? "Remote GPU enabled." : "Remote GPU disabled.");
+  });
+  $("#btn-gpu-token-generate")?.addEventListener("click", generateGpuTokenInField);
+  $("#btn-gpu-test")?.addEventListener("click", testGpuSettingsConnection);
+  $("#btn-gpu-save")?.addEventListener("click", async () => {
+    try {
+      await saveGpuSettings();
+    } catch (error) {
+      setGpuSettingsStatus(`Failed to save GPU settings: ${error.message}`);
+      toast(`Failed to save GPU settings: ${error.message}`, "err");
+    }
+  });
+
   // Model change
   $("#sel-model").addEventListener("change", onModelChange);
   $("#sel-gpu-worker")?.addEventListener("change", () => {
@@ -2065,6 +2217,7 @@ async function init() {
   setStatus("Loading config…", true);
   wireEvents();
   await loadConfig();
+  await loadGpuSettings({ silent: true });
   try {
     await loadRuntimeMode();
     await refreshRuntimeAuthState({ silent: true });

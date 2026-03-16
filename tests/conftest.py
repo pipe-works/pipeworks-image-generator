@@ -722,6 +722,10 @@ def test_client(
         patch("pipeworks.api.main.GALLERY_DIR", test_config.gallery_dir),
         patch("pipeworks.api.main.TEMPLATES_DIR", test_config.templates_dir),
         patch("pipeworks.api.main.GALLERY_DB", test_config.data_dir / "gallery.json"),
+        patch(
+            "pipeworks.api.main.GPU_SETTINGS_DB",
+            test_config.outputs_dir / "gpu_workers.runtime.json",
+        ),
     ):
         from pipeworks.api import runtime_mode as runtime_mode_module
         from pipeworks.api.main import app, runtime_browser_sessions

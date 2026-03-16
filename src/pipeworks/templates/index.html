@@ -73,6 +73,37 @@
       <button id="runtime-login-apply" class="btn btn--secondary btn--sm" type="button">
         Login
       </button>
+      <span class="runtime-mode-shell__title" style="margin-left:var(--sp-3)">GPU Settings</span>
+      <label class="toggle-label" style="margin-bottom:0">
+        <input type="checkbox" id="chk-use-remote-gpu" />
+        <span class="toggle-text">Use Remote GPU</span>
+      </label>
+      <input
+        id="inp-remote-gpu-url"
+        class="input runtime-mode-shell__input"
+        type="url"
+        placeholder="http://100.107.250.105:7860"
+        aria-label="Remote GPU URL"
+      />
+      <input
+        id="inp-remote-gpu-token"
+        class="input runtime-mode-shell__input"
+        type="text"
+        placeholder="Bearer token"
+        aria-label="Remote GPU bearer token"
+      />
+      <button id="btn-gpu-token-generate" class="btn btn--secondary btn--sm" type="button">
+        Generate Token
+      </button>
+      <button id="btn-gpu-test" class="btn btn--secondary btn--sm" type="button">
+        Test GPU
+      </button>
+      <button id="btn-gpu-save" class="btn btn--secondary btn--sm" type="button">
+        Save GPU
+      </button>
+      <span id="gpu-settings-status" class="runtime-mode-shell__status" aria-live="polite">
+        GPU settings pending
+      </span>
     </div>
   </section>
 

@@ -30,5 +30,10 @@ def test_index_template_includes_output_lightbox_transport_controls() -> None:
     assert 'id="btn-output-select-all"' in html
     assert 'id="btn-output-save-all"' in html
     assert 'id="sel-gpu-worker"' in html
+    assert 'id="chk-use-remote-gpu"' in html
+    assert 'id="inp-remote-gpu-url"' in html
+    assert 'id="inp-remote-gpu-token"' in html
+    assert 'id="btn-gpu-test"' in html
+    assert 'id="btn-gpu-save"' in html
     assert 'id="btn-prompt-preview"' not in html
     assert 'type="module" src="/static/js/app.js"' in html
