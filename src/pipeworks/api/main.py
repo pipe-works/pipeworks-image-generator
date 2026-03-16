@@ -95,6 +95,8 @@ from pipeworks.api.models import (
     CancelGenerationRequest,
     FavouriteRequest,
     GenerateRequest,
+    GpuSettingsTestRequest,
+    GpuSettingsUpdateRequest,
     RuntimeAuthResponse,
     RuntimeLoginRequest,
     RuntimeLoginResponse,
@@ -141,6 +143,7 @@ DATA_DIR: Path = config.data_dir
 GALLERY_DIR: Path = config.gallery_dir
 TEMPLATES_DIR: Path = config.templates_dir
 GALLERY_DB: Path = DATA_DIR / "gallery.json"
+GPU_SETTINGS_DB: Path = config.outputs_dir / "gpu_workers.runtime.json"
 
 # Ensure the gallery directory exists at import time.
 GALLERY_DIR.mkdir(parents=True, exist_ok=True)
@@ -159,6 +162,8 @@ _SNIPPET_POLICY_TYPES = {
 
 _RUNTIME_SESSION_COOKIE_NAME = "pw_image_runtime_session"
 _RUNTIME_SESSION_MAX_AGE_SECONDS = 12 * 60 * 60
+_DEFAULT_REMOTE_GPU_BASE_URL = "http://100.107.250.105:7860"
+_DEFAULT_REMOTE_GPU_LABEL = "Remote GPU (Tailscale)"
 
 
 @dataclass(slots=True)
@@ -229,6 +234,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.generation_cancel_events = {}
     app.state.worker_cancel_events = {}
     app.state.remote_generation_targets = {}
+    app.state.runtime_gpu_workers = None
+    app.state.runtime_default_gpu_worker_id = None
+    _load_runtime_gpu_settings_from_disk()
     logger.info("ModelManager initialised (no model loaded yet).")
 
     yield  # Application runs here.
@@ -1120,10 +1128,193 @@ def _public_gpu_worker(worker: GpuWorkerConfig) -> dict[str, object]:
     }
 
 
+def _resolve_default_gpu_worker_id_or_error(
+    workers: list[GpuWorkerConfig],
+    preferred_worker_id: str | None,
+) -> str:
+    """Resolve default worker ID for a worker list, validating enabled state."""
+    if not workers:
+        raise ValueError("At least one GPU worker must be configured.")
+
+    enabled_workers = [worker for worker in workers if worker.enabled]
+    if not enabled_workers:
+        raise ValueError("At least one GPU worker must be enabled.")
+
+    preferred = (preferred_worker_id or "").strip()
+    if not preferred:
+        return enabled_workers[0].id
+
+    target = next((worker for worker in workers if worker.id == preferred), None)
+    if target is None:
+        raise ValueError(
+            f"default_gpu_worker_id '{preferred}' does not match any configured worker."
+        )
+    if not target.enabled:
+        raise ValueError(f"default_gpu_worker_id '{preferred}' must reference an enabled worker.")
+    return preferred
+
+
+def _active_gpu_workers() -> list[GpuWorkerConfig]:
+    """Return active GPU worker configuration (runtime override or static config)."""
+    runtime_workers = getattr(app.state, "runtime_gpu_workers", None)
+    if isinstance(runtime_workers, list) and runtime_workers:
+        return runtime_workers
+    return config.gpu_workers
+
+
+def _active_default_gpu_worker_id() -> str:
+    """Return active default GPU worker ID."""
+    runtime_default = getattr(app.state, "runtime_default_gpu_worker_id", None)
+    fallback_default = (
+        runtime_default if runtime_default is not None else config.default_gpu_worker_id
+    )
+    return _resolve_default_gpu_worker_id_or_error(_active_gpu_workers(), fallback_default)
+
+
+def _active_worker_api_tokens() -> set[str]:
+    """Return accepted worker API tokens, including runtime worker overrides."""
+    tokens = set(config.worker_api_tokens())
+    for worker in _active_gpu_workers():
+        if worker.mode == "remote" and worker.bearer_token:
+            tokens.add(worker.bearer_token.strip())
+    return {token for token in tokens if token}
+
+
+def _set_runtime_gpu_settings(
+    *,
+    workers: list[GpuWorkerConfig],
+    default_gpu_worker_id: str | None,
+) -> None:
+    """Apply runtime GPU worker overrides to in-memory app state."""
+    resolved_default = _resolve_default_gpu_worker_id_or_error(workers, default_gpu_worker_id)
+    app.state.runtime_gpu_workers = workers
+    app.state.runtime_default_gpu_worker_id = resolved_default
+
+
+def _persist_runtime_gpu_settings(
+    *,
+    workers: list[GpuWorkerConfig],
+    default_gpu_worker_id: str,
+) -> None:
+    """Persist runtime GPU worker overrides to disk."""
+    payload = {
+        "gpu_workers": [worker.model_dump() for worker in workers],
+        "default_gpu_worker_id": default_gpu_worker_id,
+    }
+    GPU_SETTINGS_DB.parent.mkdir(parents=True, exist_ok=True)
+    GPU_SETTINGS_DB.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def _load_runtime_gpu_settings_from_disk() -> None:
+    """Load persisted runtime GPU worker settings when available."""
+    if not GPU_SETTINGS_DB.exists():
+        return
+
+    try:
+        parsed = json.loads(GPU_SETTINGS_DB.read_text(encoding="utf-8"))
+        if not isinstance(parsed, dict):
+            raise ValueError("GPU settings payload must be an object.")
+        raw_workers = parsed.get("gpu_workers")
+        if not isinstance(raw_workers, list):
+            raise ValueError("gpu_workers must be a list.")
+        workers = [GpuWorkerConfig.model_validate(item) for item in raw_workers]
+        raw_default = parsed.get("default_gpu_worker_id")
+        default_gpu_worker_id = raw_default if isinstance(raw_default, str) else None
+        _set_runtime_gpu_settings(
+            workers=workers,
+            default_gpu_worker_id=default_gpu_worker_id,
+        )
+    except Exception:
+        logger.exception("Failed to load runtime GPU settings from %s.", GPU_SETTINGS_DB)
+
+
+def _build_gpu_settings_summary(
+    *,
+    generated_bearer_token: str | None = None,
+) -> dict[str, object]:
+    """Return UI summary payload for GPU settings panel."""
+    workers = _active_gpu_workers()
+    default_worker_id = _active_default_gpu_worker_id()
+    remote_worker = next((worker for worker in workers if worker.mode == "remote"), None)
+    summary: dict[str, object] = {
+        "use_remote_gpu": remote_worker is not None and remote_worker.enabled,
+        "remote_label": remote_worker.label if remote_worker else _DEFAULT_REMOTE_GPU_LABEL,
+        "remote_base_url": (
+            remote_worker.base_url if remote_worker else _DEFAULT_REMOTE_GPU_BASE_URL
+        ),
+        "remote_timeout_seconds": (remote_worker.timeout_seconds if remote_worker else 240.0),
+        "has_bearer_token": bool(remote_worker and remote_worker.bearer_token),
+        "default_gpu_worker_id": default_worker_id,
+    }
+    if generated_bearer_token:
+        summary["generated_bearer_token"] = generated_bearer_token
+    return summary
+
+
+def _build_runtime_gpu_workers_from_settings(
+    payload: GpuSettingsUpdateRequest,
+) -> tuple[list[GpuWorkerConfig], str, str | None]:
+    """Build active worker list/default from one GPU settings update request."""
+    active_workers = _active_gpu_workers()
+    local_worker = next((worker for worker in active_workers if worker.mode == "local"), None)
+    if local_worker is None:
+        local_worker = GpuWorkerConfig(
+            id="local",
+            label="Local GPU",
+            mode="local",
+            enabled=True,
+        )
+    local_worker = local_worker.model_copy(update={"enabled": True})
+
+    existing_remote = next((worker for worker in active_workers if worker.mode == "remote"), None)
+
+    if not payload.use_remote_gpu:
+        workers = [local_worker]
+        default_id = local_worker.id
+        resolved_default = _resolve_default_gpu_worker_id_or_error(workers, default_id)
+        return workers, resolved_default, None
+
+    base_url = (
+        (payload.remote_base_url or "").strip()
+        or (existing_remote.base_url if existing_remote else "")
+        or _DEFAULT_REMOTE_GPU_BASE_URL
+    )
+    if not base_url:
+        raise HTTPException(status_code=400, detail="Remote GPU URL is required.")
+
+    resolved_token = (payload.bearer_token or "").strip()
+    if not resolved_token and existing_remote and existing_remote.bearer_token:
+        resolved_token = existing_remote.bearer_token.strip()
+
+    generated_token: str | None = None
+    if not resolved_token:
+        generated_token = token_urlsafe(32)
+        resolved_token = generated_token
+
+    remote_label = (
+        (payload.remote_label or "").strip()
+        or (existing_remote.label if existing_remote else "")
+        or _DEFAULT_REMOTE_GPU_LABEL
+    )
+    remote_worker = GpuWorkerConfig(
+        id=(existing_remote.id if existing_remote else "remote-ts"),
+        label=remote_label,
+        mode="remote",
+        base_url=base_url,
+        bearer_token=resolved_token,
+        timeout_seconds=payload.timeout_seconds,
+        enabled=True,
+    )
+    workers = [local_worker, remote_worker]
+    default_id = remote_worker.id if payload.default_to_remote else local_worker.id
+    resolved_default = _resolve_default_gpu_worker_id_or_error(workers, default_id)
+    return workers, resolved_default, generated_token
+
+
 def _resolve_gpu_worker_or_400(worker_id: str | None) -> GpuWorkerConfig:
     """Resolve requested/default worker, rejecting invalid or disabled targets."""
-    selected_id = (worker_id or config.resolve_default_gpu_worker_id()).strip()
-    target = next((worker for worker in config.gpu_workers if worker.id == selected_id), None)
+    selected_id = (worker_id or _active_default_gpu_worker_id()).strip()
+    target = next((worker for worker in _active_gpu_workers() if worker.id == selected_id), None)
     if target is None:
         raise HTTPException(status_code=400, detail=f"Unknown gpu_worker_id: {selected_id}")
     if not target.enabled:
@@ -1403,7 +1594,7 @@ def _pop_worker_cancel_event(generation_id: str) -> None:
 
 def _require_worker_api_auth(request: Request) -> None:
     """Validate bearer token for internal worker API endpoints."""
-    expected_tokens = config.worker_api_tokens()
+    expected_tokens = _active_worker_api_tokens()
     auth_header = str(request.headers.get("authorization", "")).strip()
     prefix = "Bearer "
     if not auth_header.startswith(prefix):
@@ -1656,8 +1847,8 @@ async def get_config(request: Request, response: Response) -> dict:
     return {
         "version": __version__,
         "models": annotated_models,
-        "gpu_workers": [_public_gpu_worker(worker) for worker in config.gpu_workers],
-        "default_gpu_worker_id": config.resolve_default_gpu_worker_id(),
+        "gpu_workers": [_public_gpu_worker(worker) for worker in _active_gpu_workers()],
+        "default_gpu_worker_id": _active_default_gpu_worker_id(),
         "prepend_library": prompts.get("prepend_library", []),
         "main_library": prompts.get("main_library", []),
         "append_library": prompts.get("append_library", []),
@@ -1669,6 +1860,84 @@ async def get_config(request: Request, response: Response) -> dict:
         "policy_prompt_groups": policy_prompt_groups,
         "runtime_mode": _build_runtime_mode_response().model_dump(),
         "runtime_auth": runtime_auth.model_dump(),
+    }
+
+
+@app.get("/api/gpu-settings")
+async def get_gpu_settings() -> dict:
+    """Return editable GPU settings summary for the frontend admin panel."""
+    return _build_gpu_settings_summary()
+
+
+@app.post("/api/gpu-settings")
+async def update_gpu_settings(payload: GpuSettingsUpdateRequest) -> dict:
+    """Update runtime GPU settings and persist them to local disk."""
+    workers, default_worker_id, generated_token = _build_runtime_gpu_workers_from_settings(payload)
+    _set_runtime_gpu_settings(
+        workers=workers,
+        default_gpu_worker_id=default_worker_id,
+    )
+    _persist_runtime_gpu_settings(
+        workers=workers,
+        default_gpu_worker_id=default_worker_id,
+    )
+    return _build_gpu_settings_summary(generated_bearer_token=generated_token)
+
+
+@app.post("/api/gpu-settings/test")
+async def test_gpu_settings_connection(payload: GpuSettingsTestRequest) -> dict:
+    """Probe remote worker health using supplied URL/token credentials."""
+    base_url = payload.remote_base_url.strip().rstrip("/")
+    token = (payload.bearer_token or "").strip()
+    if not base_url:
+        raise HTTPException(status_code=400, detail="Remote GPU URL is required.")
+    if not token:
+        matching_remote = next(
+            (
+                worker
+                for worker in _active_gpu_workers()
+                if worker.mode == "remote" and (worker.base_url or "").rstrip("/") == base_url
+            ),
+            None,
+        )
+        if matching_remote and matching_remote.bearer_token:
+            token = matching_remote.bearer_token.strip()
+    if not token:
+        raise HTTPException(status_code=400, detail="Bearer token is required.")
+
+    request = UrlRequest(
+        url=f"{base_url}/api/worker/health",
+        method="GET",
+        headers={
+            "Accept": "application/json",
+            "Authorization": f"Bearer {token}",
+        },
+    )
+    try:
+        with urlopen(
+            request, timeout=payload.timeout_seconds
+        ) as response:  # noqa: S310  # nosec B310
+            parsed = json.loads(response.read().decode("utf-8"))
+    except HTTPError as exc:
+        detail = _worker_api_error_detail(exc)
+        raise HTTPException(
+            status_code=502, detail=f"Remote GPU health check failed: {detail}"
+        ) from exc
+    except (URLError, TimeoutError, OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Remote GPU health check failed: {exc}",
+        ) from exc
+
+    if not isinstance(parsed, dict):
+        raise HTTPException(
+            status_code=502, detail="Remote GPU health response must be JSON object."
+        )
+
+    return {
+        "success": True,
+        "detail": "Remote GPU health check succeeded.",
+        "worker": parsed,
     }
 
 

@@ -14,3 +14,5 @@ def test_app_js_includes_gpu_worker_in_generate_payload() -> None:
 
     assert "gpu_worker_id: getSelectedGpuWorker()?.id || null" in script
     assert "selectedGpuWorkerLabel()" in script
+    assert "/api/gpu-settings" in script
+    assert "/api/gpu-settings/test" in script

@@ -253,6 +253,48 @@ class WorkerGenerateBatchRequest(BaseModel):
     jobs: list[WorkerGenerateJob] = Field(min_length=1, max_length=1000)
 
 
+class GpuSettingsUpdateRequest(BaseModel):
+    """Request body for updating runtime GPU worker settings."""
+
+    use_remote_gpu: bool = Field(
+        default=False,
+        description="Enable or disable configured remote GPU worker usage.",
+    )
+    remote_label: str | None = Field(
+        default=None,
+        description="Optional label shown for the configured remote worker.",
+    )
+    remote_base_url: str | None = Field(
+        default=None,
+        description="Remote worker base URL (required when use_remote_gpu is true).",
+    )
+    bearer_token: str | None = Field(
+        default=None,
+        description=(
+            "Remote worker bearer token. If omitted and no token exists, one "
+            "is generated automatically."
+        ),
+    )
+    timeout_seconds: float = Field(
+        default=240.0,
+        ge=1.0,
+        le=3600.0,
+        description="Remote worker timeout in seconds.",
+    )
+    default_to_remote: bool = Field(
+        default=False,
+        description="Set remote worker as default selection after saving.",
+    )
+
+
+class GpuSettingsTestRequest(BaseModel):
+    """Request body for testing remote worker connectivity."""
+
+    remote_base_url: str = Field(min_length=1)
+    bearer_token: str | None = None
+    timeout_seconds: float = Field(default=8.0, ge=1.0, le=120.0)
+
+
 class FavouriteRequest(BaseModel):
     """Request body for the ``POST /api/gallery/favourite`` endpoint.
 

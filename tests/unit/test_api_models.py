@@ -12,7 +12,13 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from pipeworks.api.models import BulkDeleteRequest, FavouriteRequest, GenerateRequest
+from pipeworks.api.models import (
+    BulkDeleteRequest,
+    FavouriteRequest,
+    GenerateRequest,
+    GpuSettingsTestRequest,
+    GpuSettingsUpdateRequest,
+)
 
 
 class TestGenerateRequest:
@@ -291,3 +297,22 @@ class TestBulkDeleteRequest:
         """Omitting image_ids should raise ValidationError."""
         with pytest.raises(ValidationError):
             BulkDeleteRequest()
+
+
+class TestGpuSettingsRequests:
+    """Test GPU settings request models."""
+
+    def test_gpu_settings_update_defaults(self):
+        """Update request should expose documented default values."""
+        req = GpuSettingsUpdateRequest()
+        assert req.use_remote_gpu is False
+        assert req.remote_base_url is None
+        assert req.bearer_token is None
+        assert req.default_to_remote is False
+        assert req.timeout_seconds == 240.0
+
+    def test_gpu_settings_test_request_allows_missing_token(self):
+        """Health test request should permit blank token (saved-token fallback)."""
+        req = GpuSettingsTestRequest(remote_base_url="http://100.107.250.105:7860")
+        assert req.remote_base_url == "http://100.107.250.105:7860"
+        assert req.bearer_token is None
