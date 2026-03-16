@@ -62,15 +62,17 @@ import uuid
 import zipfile
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from secrets import token_urlsafe
+from threading import RLock
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
-from starlette.responses import Response
 
 from pipeworks import __version__
 from pipeworks.api.gallery_store import (
@@ -88,6 +90,18 @@ from pipeworks.api.models import (
     CancelGenerationRequest,
     FavouriteRequest,
     GenerateRequest,
+    RuntimeAuthResponse,
+    RuntimeLoginRequest,
+    RuntimeLoginResponse,
+    RuntimeLogoutResponse,
+    RuntimeModeOptionResponse,
+    RuntimeModeRequest,
+    RuntimeModeResponse,
+)
+from pipeworks.api.mud_api_client import (
+    fetch_mud_api_json,
+    fetch_mud_api_json_anonymous,
+    normalize_base_url,
 )
 from pipeworks.api.prompt_builder import (
     SECTION_ORDER,
@@ -96,6 +110,10 @@ from pipeworks.api.prompt_builder import (
     expand_prompt_placeholders,
     resolve_prompt_variants,
     resolve_structured_prompt_variants,
+)
+from pipeworks.api.runtime_mode import (
+    get_runtime_mode,
+    set_runtime_mode,
 )
 from pipeworks.core.config import config
 from pipeworks.core.model_manager import ModelManager, get_model_runtime_support
@@ -117,6 +135,46 @@ GALLERY_DB: Path = DATA_DIR / "gallery.json"
 
 # Ensure the gallery directory exists at import time.
 GALLERY_DIR.mkdir(parents=True, exist_ok=True)
+
+_DEFAULT_MUD_API_BASE_URL = "http://127.0.0.1:8000"
+_POLICY_API_ROLE_REQUIRED_DETAIL = "Policy API requires admin or superuser role."
+_SNIPPET_ALLOWED_ROLES = {"admin", "superuser"}
+_SNIPPET_POLICY_TYPES = {
+    "prompt",
+    "species_block",
+    "image_block",
+    "clothing_block",
+    "descriptor_layer",
+    "registry",
+}
+
+_RUNTIME_SESSION_COOKIE_NAME = "pw_image_runtime_session"
+_RUNTIME_SESSION_MAX_AGE_SECONDS = 12 * 60 * 60
+
+
+@dataclass(slots=True)
+class _RuntimeBrowserSession:
+    """Server-side runtime session binding for browser refresh persistence."""
+
+    session_id: str
+    mode_key: str
+    server_url: str
+    available_worlds: list[dict[str, object]]
+    created_at_epoch: int
+    updated_at_epoch: int
+
+
+@dataclass(frozen=True, slots=True)
+class _MudApiRuntimeConfig:
+    """Resolved mud-server API runtime configuration."""
+
+    base_url: str
+    session_id: str
+    timeout_seconds: float = 8.0
+
+
+runtime_browser_sessions: dict[str, _RuntimeBrowserSession] = {}
+runtime_browser_sessions_lock = RLock()
 
 # ---------------------------------------------------------------------------
 # Application lifecycle — model manager setup and teardown.
@@ -330,131 +388,425 @@ def _load_prompt_catalog() -> dict:
     }
 
 
-def _resolve_policy_root() -> Path | None:
-    """Resolve the world-policy root used for section dropdown snippets."""
-    candidates = [
-        Path.cwd() / "data/worlds/pipeworks_web/policies",
-        Path(__file__).resolve().parents[3] / "data/worlds/pipeworks_web/policies",
-    ]
-    for candidate in candidates:
-        if candidate.exists() and candidate.is_dir():
-            return candidate
-    return None
+def _normalize_server_url_for_binding(value: str | None) -> str:
+    """Normalize runtime server URLs for stable session-binding comparisons."""
+    return str(value or "").strip().rstrip("/")
 
 
-def _format_policy_label(path: Path) -> str:
-    """Convert a policy file path into a short human-readable label."""
-    stem = path.stem.replace("_", " ").replace("-", " ").strip()
-    if not stem:
-        return path.name
-    return " ".join(part.capitalize() for part in stem.split())
-
-
-def _extract_yaml_prompt_text(raw_yaml: str) -> str:
-    """Extract a prompt string from a YAML `text` field.
-
-    Supports the common forms used by policy blocks:
-    - multiline block scalars: `text: |`
-    - inline scalar: `text: some text`
-    """
-    lines = raw_yaml.splitlines()
-    for index, line in enumerate(lines):
-        stripped = line.lstrip()
-        indent = len(line) - len(stripped)
-        if not stripped.startswith("text:"):
+def _sanitize_available_worlds(
+    world_rows: list[dict[str, object]] | None,
+) -> list[dict[str, object]]:
+    """Retain only stable world-row dictionaries with non-empty IDs."""
+    if not isinstance(world_rows, list):
+        return []
+    sanitized: list[dict[str, object]] = []
+    for row in world_rows:
+        if not isinstance(row, dict):
             continue
-
-        remainder = stripped[len("text:") :].strip()
-        if remainder and remainder[0] not in {"|", ">"}:
-            return remainder.strip("'\"").strip()
-
-        block_lines: list[str] = []
-        block_indent: int | None = None
-        for block_line in lines[index + 1 :]:
-            block_stripped = block_line.lstrip()
-            current_indent = len(block_line) - len(block_stripped)
-
-            if block_stripped == "":
-                if block_indent is not None:
-                    block_lines.append("")
-                continue
-
-            if current_indent <= indent:
-                break
-
-            if block_indent is None:
-                block_indent = current_indent
-
-            block_lines.append(block_line[block_indent:].rstrip())
-
-        return "\n".join(block_lines).strip()
-
-    return ""
+        world_id = str(row.get("id") or "").strip()
+        if not world_id:
+            continue
+        normalized_row = dict(row)
+        normalized_row["id"] = world_id
+        world_name = str(row.get("name") or "").strip()
+        if world_name:
+            normalized_row["name"] = world_name
+        sanitized.append(normalized_row)
+    return sanitized
 
 
-def _load_policy_prompt_options() -> list[dict]:
-    """Load prompt snippets from the policy tree.
+def _runtime_cookie_secure(request: Request) -> bool:
+    """Return whether runtime session cookies should include the Secure attribute."""
+    if request.url.scheme == "https":
+        return True
+    hostname = str(request.url.hostname or "").strip().lower()
+    return hostname not in {"localhost", "127.0.0.1", "::1", "testserver"}
 
-    Each option includes:
-    - ``id``: stable path-like identifier relative to policy root
-    - ``label``: user-facing short label from filename
-    - ``value``: file contents
-    - ``group``: relative directory path for UI optgroup rendering
 
-    Supported sources:
-    - `.txt` files (full file text)
-    - `.yaml`/`.yml` files that contain a prompt-bearing `text` field
-    """
-    policy_root = _resolve_policy_root()
-    if policy_root is None:
+def _set_runtime_session_cookie(response: Response, *, request: Request, token: str) -> None:
+    """Set hardened browser cookie for one runtime browser-session token."""
+    response.set_cookie(
+        key=_RUNTIME_SESSION_COOKIE_NAME,
+        value=token,
+        max_age=_RUNTIME_SESSION_MAX_AGE_SECONDS,
+        httponly=True,
+        secure=_runtime_cookie_secure(request),
+        samesite="strict",
+        path="/",
+    )
+
+
+def _clear_runtime_session_cookie(response: Response, *, request: Request) -> None:
+    """Delete runtime session cookie from browser storage."""
+    response.delete_cookie(
+        key=_RUNTIME_SESSION_COOKIE_NAME,
+        httponly=True,
+        secure=_runtime_cookie_secure(request),
+        samesite="strict",
+        path="/",
+    )
+
+
+def _purge_expired_runtime_browser_sessions(*, now_epoch: int | None = None) -> None:
+    """Evict expired runtime browser-session records from in-memory store."""
+    now = int(now_epoch if now_epoch is not None else time.time())
+    with runtime_browser_sessions_lock:
+        expired_tokens = [
+            token
+            for token, record in runtime_browser_sessions.items()
+            if now - record.updated_at_epoch >= _RUNTIME_SESSION_MAX_AGE_SECONDS
+        ]
+        for token in expired_tokens:
+            runtime_browser_sessions.pop(token, None)
+
+
+def _store_runtime_browser_session(
+    *,
+    mode_key: str,
+    server_url: str | None,
+    session_id: str,
+    available_worlds: list[dict[str, object]] | None,
+) -> str:
+    """Create one runtime browser-session record and return opaque token."""
+    now = int(time.time())
+    token = token_urlsafe(32)
+    record = _RuntimeBrowserSession(
+        session_id=session_id,
+        mode_key=mode_key,
+        server_url=_normalize_server_url_for_binding(server_url),
+        available_worlds=_sanitize_available_worlds(available_worlds),
+        created_at_epoch=now,
+        updated_at_epoch=now,
+    )
+    with runtime_browser_sessions_lock:
+        runtime_browser_sessions[token] = record
+    _purge_expired_runtime_browser_sessions(now_epoch=now)
+    return token
+
+
+def _pop_runtime_browser_session_by_token(token: str | None) -> _RuntimeBrowserSession | None:
+    """Remove one runtime browser-session record by token and return it."""
+    normalized_token = str(token or "").strip()
+    if not normalized_token:
+        return None
+    with runtime_browser_sessions_lock:
+        return runtime_browser_sessions.pop(normalized_token, None)
+
+
+def _resolve_runtime_browser_session(
+    *,
+    request: Request,
+    mode_key: str,
+    server_url: str | None,
+) -> tuple[str | None, list[dict[str, object]], str | None]:
+    """Resolve runtime browser-session for request cookie and active mode/url."""
+    _purge_expired_runtime_browser_sessions()
+    token = str(request.cookies.get(_RUNTIME_SESSION_COOKIE_NAME, "")).strip()
+    if not token:
+        return (None, [], None)
+    with runtime_browser_sessions_lock:
+        record = runtime_browser_sessions.get(token)
+        if record is None:
+            return (None, [], token)
+        if record.mode_key != mode_key or record.server_url != _normalize_server_url_for_binding(
+            server_url
+        ):
+            runtime_browser_sessions.pop(token, None)
+            return (None, [], token)
+        record.updated_at_epoch = int(time.time())
+        return (
+            record.session_id,
+            [dict(row) for row in record.available_worlds],
+            token,
+        )
+
+
+def _resolve_request_session_id(
+    *,
+    request: Request,
+    mode_key: str,
+    server_url: str | None,
+    explicit_session_id: str | None,
+) -> tuple[str | None, list[dict[str, object]], str | None]:
+    """Resolve runtime session from explicit value first, then browser cookie."""
+    normalized_explicit = str(explicit_session_id or "").strip()
+    if normalized_explicit:
+        return (normalized_explicit, [], None)
+    return _resolve_runtime_browser_session(
+        request=request,
+        mode_key=mode_key,
+        server_url=server_url,
+    )
+
+
+def _resolve_mud_api_runtime_config(
+    *,
+    session_id_override: str | None,
+    base_url_override: str | None = None,
+) -> _MudApiRuntimeConfig:
+    """Resolve mud-server runtime config from overrides and defaults."""
+    base_url = normalize_base_url(base_url_override or _DEFAULT_MUD_API_BASE_URL)
+    if not base_url:
+        raise ValueError("Mud API base URL must not be empty.")
+
+    session_id = str(session_id_override or "").strip()
+    if not session_id:
+        raise ValueError("No active runtime session. Login with an admin/superuser account.")
+
+    return _MudApiRuntimeConfig(base_url=base_url, session_id=session_id, timeout_seconds=8.0)
+
+
+def _fetch_mud_api_json(
+    *,
+    runtime: _MudApiRuntimeConfig,
+    method: str,
+    path: str,
+    query_params: dict[str, str],
+    json_payload: dict[str, object] | None = None,
+) -> dict[str, object]:
+    """Issue one mud-server API request with session query injection."""
+    return fetch_mud_api_json(
+        runtime=runtime,
+        method=method,
+        path=path,
+        query_params=query_params,
+        json_payload=json_payload,
+    )
+
+
+def _fetch_mud_api_json_anonymous(
+    *,
+    base_url: str,
+    method: str,
+    path: str,
+    body: dict[str, object] | None,
+) -> dict[str, object]:
+    """Issue one mud-server API request without session query injection."""
+    return fetch_mud_api_json_anonymous(
+        base_url=base_url,
+        method=method,
+        path=path,
+        body=body,
+        timeout_seconds=8.0,
+    )
+
+
+def _extract_available_worlds_from_login_payload(
+    payload: dict[str, object],
+) -> list[dict[str, object]]:
+    """Extract world rows from canonical mud-server ``/login`` payloads."""
+    raw_worlds = payload.get("available_worlds")
+    if not isinstance(raw_worlds, list):
+        return []
+
+    worlds: list[dict[str, object]] = []
+    for world in raw_worlds:
+        if not isinstance(world, dict):
+            continue
+        world_id = str(world.get("id") or "").strip()
+        if not world_id:
+            continue
+        normalized_world = dict(world)
+        normalized_world["id"] = world_id
+        world_name = str(world.get("name") or "").strip()
+        if world_name:
+            normalized_world["name"] = world_name
+        worlds.append(normalized_world)
+    return worlds
+
+
+def _classify_runtime_auth_probe_error(error_detail: str) -> tuple[str, str]:
+    """Classify capability probe failures into stable UI-facing auth status."""
+    if _POLICY_API_ROLE_REQUIRED_DETAIL in error_detail:
+        return ("forbidden", "Session is valid but role is not admin/superuser.")
+    if "Invalid or expired session" in error_detail or "Invalid session user" in error_detail:
+        return ("unauthenticated", "Session is invalid or expired.")
+    return ("error", error_detail)
+
+
+def _probe_runtime_auth(
+    *,
+    mode_key: str,
+    source_kind: str,
+    active_server_url: str | None,
+    session_id_override: str | None,
+) -> RuntimeAuthResponse:
+    """Build runtime auth/capability payload for server-backed snippet loading."""
+    if source_kind != "server_api":
+        return RuntimeAuthResponse(
+            mode_key=mode_key,
+            source_kind=source_kind,
+            active_server_url=active_server_url,
+            session_present=False,
+            access_granted=False,
+            status="error",
+            detail="Runtime mode must be server_api.",
+            available_worlds=[],
+        )
+
+    try:
+        runtime = _resolve_mud_api_runtime_config(
+            session_id_override=session_id_override,
+            base_url_override=active_server_url,
+        )
+    except ValueError as exc:
+        return RuntimeAuthResponse(
+            mode_key=mode_key,
+            source_kind=source_kind,
+            active_server_url=active_server_url,
+            session_present=False,
+            access_granted=False,
+            status="missing_session",
+            detail=str(exc),
+            available_worlds=[],
+        )
+
+    try:
+        _fetch_mud_api_json(
+            runtime=runtime,
+            method="GET",
+            path="/api/policy-capabilities",
+            query_params={},
+        )
+    except ValueError as exc:
+        status, detail = _classify_runtime_auth_probe_error(str(exc))
+        return RuntimeAuthResponse(
+            mode_key=mode_key,
+            source_kind=source_kind,
+            active_server_url=runtime.base_url,
+            session_present=True,
+            access_granted=False,
+            status=status,
+            detail=detail,
+            available_worlds=[],
+        )
+
+    return RuntimeAuthResponse(
+        mode_key=mode_key,
+        source_kind=source_kind,
+        active_server_url=runtime.base_url,
+        session_present=True,
+        access_granted=True,
+        status="authorized",
+        detail="Session is authorized for admin/superuser policy APIs.",
+        available_worlds=[],
+    )
+
+
+def _build_runtime_mode_response() -> RuntimeModeResponse:
+    """Return runtime mode payload serialized to response models."""
+    state = get_runtime_mode()
+    return RuntimeModeResponse(
+        mode_key=state.mode_key,
+        source_kind=state.source_kind,
+        active_server_url=state.active_server_url,
+        options=[
+            RuntimeModeOptionResponse(
+                mode_key=option.mode_key,
+                label=option.label,
+                source_kind=option.source_kind,
+                default_server_url=option.default_server_url,
+                active_server_url=(
+                    state.active_server_url if option.mode_key == state.mode_key else None
+                ),
+                url_editable=option.url_editable,
+            )
+            for option in state.options
+        ],
+    )
+
+
+def _format_policy_option_label(policy_key: str, variant: str) -> str:
+    """Build a stable, human-readable label for one policy snippet option."""
+    normalized_key = policy_key.replace("_", " ").replace("-", " ").strip()
+    key_label = " ".join(part.capitalize() for part in normalized_key.split()) or policy_key
+    variant_label = str(variant or "").strip()
+    if variant_label:
+        return f"{key_label} ({variant_label})"
+    return key_label
+
+
+def _extract_policy_prompt_text(policy_item: dict[str, object]) -> str:
+    """Extract snippet text from one mud-server policy object payload."""
+    content = policy_item.get("content")
+    if not isinstance(content, dict):
+        return ""
+    text_value = content.get("text")
+    if not isinstance(text_value, str):
+        return ""
+    return text_value.strip()
+
+
+def _load_policy_prompt_options(
+    *,
+    active_server_url: str | None,
+    session_id: str | None,
+) -> list[dict]:
+    """Load prompt snippets from canonical mud-server policy APIs."""
+    try:
+        runtime = _resolve_mud_api_runtime_config(
+            session_id_override=session_id,
+            base_url_override=active_server_url,
+        )
+    except ValueError:
+        return []
+
+    try:
+        payload = _fetch_mud_api_json(
+            runtime=runtime,
+            method="GET",
+            path="/api/policies",
+            query_params={},
+        )
+    except ValueError as exc:
+        logger.warning("Unable to load policy snippets from mud-server API: %s", exc)
+        return []
+
+    raw_items = payload.get("items")
+    if not isinstance(raw_items, list):
         return []
 
     options: list[dict] = []
-    supported_extensions = {".txt", ".yaml", ".yml"}
-    for file_path in sorted(path for path in policy_root.rglob("*") if path.is_file()):
-        if file_path.suffix.lower() not in supported_extensions:
+    for item in raw_items:
+        if not isinstance(item, dict):
             continue
 
-        rel_path = file_path.relative_to(policy_root).as_posix()
-        group_rel = file_path.parent.relative_to(policy_root).as_posix()
-        group = group_rel if group_rel != "." else "policies"
-
-        try:
-            raw_value = file_path.read_text(encoding="utf-8")
-        except Exception as exc:
-            logger.warning("Unable to read policy prompt snippet '%s': %s", file_path, exc)
+        policy_type = str(item.get("policy_type") or "").strip()
+        if policy_type not in _SNIPPET_POLICY_TYPES:
             continue
 
-        if file_path.suffix.lower() == ".txt":
-            value = raw_value.strip()
-        else:
-            value = _extract_yaml_prompt_text(raw_value)
-
-        if not value:
+        text_value = _extract_policy_prompt_text(item)
+        if not text_value:
             continue
+
+        policy_id = str(item.get("policy_id") or "").strip()
+        variant = str(item.get("variant") or "").strip()
+        policy_key = str(item.get("policy_key") or "").strip()
+        namespace = str(item.get("namespace") or "").strip()
+        if not policy_id or not variant or not policy_key:
+            continue
+
+        option_id = f"{policy_id}:{variant}"
+        group = namespace or policy_type
         options.append(
             {
-                "id": rel_path,
-                "label": _format_policy_label(file_path),
-                "value": value,
+                "id": option_id,
+                "label": _format_policy_option_label(policy_key, variant),
+                "value": text_value,
                 "group": group,
-                "path": rel_path,
+                "path": option_id,
             }
         )
+
+    options.sort(key=lambda option: (option.get("group", ""), option.get("label", "")))
     return options
 
 
-def _load_policy_prompt_groups() -> list[str]:
-    """Load all policy directory paths for dropdown group mirroring."""
-    policy_root = _resolve_policy_root()
-    if policy_root is None:
-        return []
-
-    groups = ["policies"]
-    for dir_path in sorted(path for path in policy_root.rglob("*") if path.is_dir()):
-        rel_path = dir_path.relative_to(policy_root).as_posix()
-        groups.append(rel_path if rel_path != "." else "policies")
-    return groups
+def _load_policy_prompt_groups(options: list[dict]) -> list[str]:
+    """Load snippet group labels mirrored from canonical policy namespaces."""
+    return sorted(
+        {str(option.get("group") or "").strip() for option in options if option.get("group")}
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -638,7 +990,11 @@ def _build_zip_metadata_for_entry(entry: dict) -> dict:
 
     # Load prompt sources so we can resolve labels/text for metadata sections.
     prompts = _load_prompt_catalog()
-    policy_options = _load_policy_prompt_options()
+    runtime_state = get_runtime_mode()
+    policy_options = _load_policy_prompt_options(
+        active_server_url=runtime_state.active_server_url,
+        session_id=None,
+    )
     prompt_lookup = _build_prompt_lookup(prompts, policy_options)
 
     prepend_mode = entry.get("prepend_mode", "template")
@@ -753,6 +1109,47 @@ def _pop_generation_cancel_event(generation_id: str | None) -> None:
     app.state.generation_cancel_events.pop(generation_id, None)
 
 
+def _load_policy_prompts_for_request(
+    *,
+    request: Request,
+    response: Response | None = None,
+    explicit_session_id: str | None = None,
+) -> tuple[list[dict], list[str], RuntimeAuthResponse]:
+    """Resolve auth context and return canonical policy snippet options."""
+    state = get_runtime_mode()
+    resolved_session_id, cookie_worlds, cookie_token = _resolve_request_session_id(
+        request=request,
+        mode_key=state.mode_key,
+        server_url=state.active_server_url,
+        explicit_session_id=explicit_session_id,
+    )
+
+    runtime_auth = _probe_runtime_auth(
+        mode_key=state.mode_key,
+        source_kind=state.source_kind,
+        active_server_url=state.active_server_url,
+        session_id_override=resolved_session_id,
+    )
+
+    if cookie_token and runtime_auth.status in {"missing_session", "unauthenticated"}:
+        _pop_runtime_browser_session_by_token(cookie_token)
+        if response is not None:
+            _clear_runtime_session_cookie(response, request=request)
+
+    if runtime_auth.access_granted and cookie_worlds:
+        runtime_auth = runtime_auth.model_copy(update={"available_worlds": cookie_worlds})
+
+    if not runtime_auth.access_granted:
+        return ([], [], runtime_auth)
+
+    policy_prompt_options = _load_policy_prompt_options(
+        active_server_url=state.active_server_url,
+        session_id=resolved_session_id,
+    )
+    policy_prompt_groups = _load_policy_prompt_groups(policy_prompt_options)
+    return (policy_prompt_options, policy_prompt_groups, runtime_auth)
+
+
 # ---------------------------------------------------------------------------
 # Routes.
 # ---------------------------------------------------------------------------
@@ -779,8 +1176,147 @@ async def index() -> HTMLResponse:
     raise HTTPException(status_code=404, detail="index.html not found")
 
 
+@app.get("/api/runtime-mode", response_model=RuntimeModeResponse)
+async def api_runtime_mode() -> RuntimeModeResponse:
+    """Return active runtime mode and available source-mode profiles."""
+    return _build_runtime_mode_response()
+
+
+@app.post("/api/runtime-mode", response_model=RuntimeModeResponse)
+async def api_runtime_mode_set(payload: RuntimeModeRequest) -> RuntimeModeResponse:
+    """Switch active runtime mode and optional mud-server URL override."""
+    try:
+        set_runtime_mode(mode_key=payload.mode_key, server_url=payload.server_url)
+        return _build_runtime_mode_response()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/runtime-auth", response_model=RuntimeAuthResponse)
+async def api_runtime_auth(
+    request: Request,
+    response: Response,
+    session_id: str | None = Query(default=None),
+) -> RuntimeAuthResponse:
+    """Return runtime auth/access status for server-backed snippet APIs."""
+    _, _, runtime_auth = _load_policy_prompts_for_request(
+        request=request,
+        response=response,
+        explicit_session_id=session_id,
+    )
+    return runtime_auth
+
+
+@app.post("/api/runtime-login", response_model=RuntimeLoginResponse)
+async def api_runtime_login(
+    payload: RuntimeLoginRequest,
+    request: Request,
+    response: Response,
+) -> RuntimeLoginResponse:
+    """Authenticate to active mud-server profile and return session bootstrap data."""
+    state = get_runtime_mode()
+    if state.source_kind != "server_api":
+        raise HTTPException(status_code=400, detail="Runtime mode must be server_api.")
+
+    username = (payload.username or "").strip()
+    if not username:
+        raise HTTPException(status_code=400, detail="Username is required.")
+    password = (payload.password or "").strip()
+    if not password:
+        raise HTTPException(status_code=400, detail="Password is required.")
+
+    base_url = normalize_base_url(
+        state.active_server_url
+        if state.active_server_url is not None
+        else _DEFAULT_MUD_API_BASE_URL
+    )
+    if not base_url:
+        raise HTTPException(status_code=400, detail="Mud API base URL must not be empty.")
+
+    try:
+        login_payload = _fetch_mud_api_json_anonymous(
+            base_url=base_url,
+            method="POST",
+            path="/login",
+            body={"username": username, "password": password},
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    session_id = login_payload.get("session_id")
+    role = str(login_payload.get("role") or "").strip()
+    available_worlds = _sanitize_available_worlds(
+        _extract_available_worlds_from_login_payload(login_payload)
+    )
+
+    if not isinstance(session_id, str) or not session_id.strip():
+        raise HTTPException(
+            status_code=400, detail="Mud login response did not include session_id."
+        )
+    if not role:
+        raise HTTPException(status_code=400, detail="Mud login response did not include role.")
+
+    success = role in _SNIPPET_ALLOWED_ROLES
+    detail = (
+        "Authenticated as admin/superuser."
+        if success
+        else "Authenticated, but role is not admin/superuser for policy APIs."
+    )
+
+    if success:
+        token = _store_runtime_browser_session(
+            mode_key=state.mode_key,
+            server_url=state.active_server_url,
+            session_id=session_id.strip(),
+            available_worlds=available_worlds,
+        )
+        _set_runtime_session_cookie(response, request=request, token=token)
+    else:
+        stale_token = str(request.cookies.get(_RUNTIME_SESSION_COOKIE_NAME, "")).strip()
+        if stale_token:
+            _pop_runtime_browser_session_by_token(stale_token)
+        _clear_runtime_session_cookie(response, request=request)
+
+    return RuntimeLoginResponse(
+        success=success,
+        session_id=None,
+        role=role,
+        available_worlds=available_worlds,
+        detail=detail,
+    )
+
+
+@app.post("/api/runtime-logout", response_model=RuntimeLogoutResponse)
+async def api_runtime_logout(request: Request, response: Response) -> RuntimeLogoutResponse:
+    """Clear active browser-bound runtime session token."""
+    session_token = str(request.cookies.get(_RUNTIME_SESSION_COOKIE_NAME, "")).strip()
+    if session_token:
+        _pop_runtime_browser_session_by_token(session_token)
+    _clear_runtime_session_cookie(response, request=request)
+    return RuntimeLogoutResponse(success=True, detail="Runtime session cleared.")
+
+
+@app.get("/api/policy-prompts")
+async def get_policy_prompts(
+    request: Request,
+    response: Response,
+    session_id: str | None = Query(default=None),
+) -> dict:
+    """Return canonical policy snippet options for prompt composer dropdowns."""
+    options, groups, runtime_auth = _load_policy_prompts_for_request(
+        request=request,
+        response=response,
+        explicit_session_id=session_id,
+    )
+    return {
+        "policy_prompt_options": options,
+        "policy_prompt_groups": groups,
+        "runtime_auth": runtime_auth.model_dump(),
+    }
+
+
 @app.get("/api/config")
-async def get_config() -> dict:
+async def get_config(request: Request, response: Response) -> dict:
     """Return the full application configuration for the frontend.
 
     The response includes:
@@ -801,8 +1337,10 @@ async def get_config() -> dict:
     models = _load_json(DATA_DIR / "models.json", {"models": []})
     annotated_models = _annotate_models_with_runtime_support(models.get("models", []))
     prompts = _load_prompt_catalog()
-    policy_prompt_options = _load_policy_prompt_options()
-    policy_prompt_groups = _load_policy_prompt_groups()
+    policy_prompt_options, policy_prompt_groups, runtime_auth = _load_policy_prompts_for_request(
+        request=request,
+        response=response,
+    )
     return {
         "version": __version__,
         "models": annotated_models,
@@ -815,11 +1353,13 @@ async def get_config() -> dict:
         "prompt_sections": list(PROMPT_SECTION_ORDER),
         "policy_prompt_options": policy_prompt_options,
         "policy_prompt_groups": policy_prompt_groups,
+        "runtime_mode": _build_runtime_mode_response().model_dump(),
+        "runtime_auth": runtime_auth.model_dump(),
     }
 
 
 @app.post("/api/generate")
-async def generate_images(req: GenerateRequest) -> dict:
+async def generate_images(req: GenerateRequest, request: Request) -> dict:
     """Generate a batch of images using the selected diffusion model.
 
     This endpoint:
@@ -874,7 +1414,12 @@ async def generate_images(req: GenerateRequest) -> dict:
 
     # --- Resolve prompt input once; placeholders expand per generated image --
     use_section_schema = _request_uses_section_schema(req)
-    policy_prompt_options = _load_policy_prompt_options() if use_section_schema else []
+    policy_prompt_options: list[dict] = []
+    if use_section_schema:
+        policy_prompt_options, _, _ = _load_policy_prompts_for_request(
+            request=request,
+            response=None,
+        )
     raw_sections = (
         _resolve_structured_prompt_sections(
             req,
@@ -1447,7 +1992,7 @@ async def download_image_zip(image_id: str) -> Response:
 
 
 @app.post("/api/prompt/compile")
-async def compile_prompt(req: GenerateRequest) -> dict:
+async def compile_prompt(req: GenerateRequest, request: Request) -> dict:
     """Preview the compiled prompt without generating an image.
 
     Resolves the prepend, main scene, and append parts from the request
@@ -1464,10 +2009,14 @@ async def compile_prompt(req: GenerateRequest) -> dict:
     models_data = _load_json(DATA_DIR / "models.json", {"models": []})
     use_section_schema = _request_uses_section_schema(req)
     if use_section_schema:
+        policy_prompt_options, _, _ = _load_policy_prompts_for_request(
+            request=request,
+            response=None,
+        )
         raw_sections = _resolve_structured_prompt_sections(
             req,
             prompts,
-            policy_options=_load_policy_prompt_options(),
+            policy_options=policy_prompt_options,
             strict=False,
         )
         resolved_sections = resolve_structured_prompt_variants(raw_sections)

@@ -19,6 +19,8 @@ BulkDeleteRequest
 
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 
@@ -271,3 +273,67 @@ class BulkZipRequest(BaseModel):
         min_length=1,
         description="List of gallery image UUIDs to zip (at least one required).",
     )
+
+
+class RuntimeModeOptionResponse(BaseModel):
+    """One runtime source mode option available in the UI."""
+
+    mode_key: str
+    label: str
+    source_kind: str
+    default_server_url: str | None
+    active_server_url: str | None
+    url_editable: bool
+
+
+class RuntimeModeResponse(BaseModel):
+    """Current runtime source mode and all selectable mode options."""
+
+    mode_key: str
+    source_kind: str
+    active_server_url: str | None
+    options: list[RuntimeModeOptionResponse]
+
+
+class RuntimeModeRequest(BaseModel):
+    """Request payload to switch runtime source mode."""
+
+    mode_key: str = Field(min_length=1)
+    server_url: str | None = None
+
+
+class RuntimeAuthResponse(BaseModel):
+    """Runtime auth/capability probe result for server-backed snippet loading."""
+
+    mode_key: str
+    source_kind: str
+    active_server_url: str | None
+    session_present: bool
+    access_granted: bool
+    status: str
+    detail: str
+    available_worlds: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class RuntimeLoginRequest(BaseModel):
+    """Request payload to authenticate against the active mud-server profile."""
+
+    username: str = Field(min_length=1)
+    password: str = Field(min_length=1)
+
+
+class RuntimeLoginResponse(BaseModel):
+    """Runtime login result used by image-generator snippet source controls."""
+
+    success: bool
+    session_id: str | None = None
+    role: str | None = None
+    available_worlds: list[dict[str, Any]] = Field(default_factory=list)
+    detail: str
+
+
+class RuntimeLogoutResponse(BaseModel):
+    """Runtime logout result for browser-session teardown."""
+
+    success: bool
+    detail: str

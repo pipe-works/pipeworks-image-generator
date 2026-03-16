@@ -33,6 +33,49 @@
     </nav>
   </header>
 
+  <section class="runtime-mode-shell" aria-label="Snippet source">
+    <div class="runtime-mode-shell__controls">
+      <span class="runtime-mode-shell__title">Snippet Source</span>
+      <span id="runtime-mode-badge" class="badge badge--muted">Loading</span>
+      <span id="runtime-auth-badge" class="badge badge--muted">Auth Pending</span>
+      <span id="runtime-source-status" class="runtime-mode-shell__status" aria-live="polite">
+        Source pending
+      </span>
+      <label for="runtime-mode-select" class="control-label runtime-mode-shell__label">Mode</label>
+      <select id="runtime-mode-select" class="select select--sm" aria-label="Snippet source">
+        <option value="server_dev">Server (Dev)</option>
+        <option value="server_prod">Server (Production)</option>
+      </select>
+      <input
+        id="runtime-mode-url"
+        class="input runtime-mode-shell__input"
+        type="url"
+        placeholder="https://mud-dev.example.com"
+        aria-label="Mud server URL"
+      />
+      <button id="runtime-mode-apply" class="btn btn--secondary btn--sm" type="button">
+        Apply URL
+      </button>
+      <input
+        id="runtime-login-username"
+        class="input runtime-mode-shell__input"
+        type="text"
+        placeholder="username"
+        aria-label="Mud login username"
+      />
+      <input
+        id="runtime-login-password"
+        class="input runtime-mode-shell__input"
+        type="password"
+        placeholder="password"
+        aria-label="Mud login password"
+      />
+      <button id="runtime-login-apply" class="btn btn--secondary btn--sm" type="button">
+        Login
+      </button>
+    </div>
+  </section>
+
   <!-- Tab Navigation -->
   <nav class="tab-nav" role="tablist">
     <button class="tab-nav__item is-active" data-tab="generation" role="tab">Generation</button>
