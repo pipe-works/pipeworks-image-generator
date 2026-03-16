@@ -196,6 +196,104 @@ class TestConfigValidation:
         )
         assert cfg.device == "cuda"
 
+    def test_default_gpu_worker_is_local_enabled(self, temp_dir: Path):
+        """Config should default to one enabled local GPU worker."""
+        cfg = PipeworksConfig(
+            models_dir=str(temp_dir / "models"),
+            outputs_dir=str(temp_dir / "outputs"),
+            gallery_dir=str(temp_dir / "gallery"),
+        )
+        assert len(cfg.gpu_workers) == 1
+        assert cfg.gpu_workers[0].id == "local"
+        assert cfg.gpu_workers[0].mode == "local"
+        assert cfg.resolve_default_gpu_worker_id() == "local"
+
+    def test_gpu_workers_require_unique_ids(self):
+        """Duplicate worker ids should fail validation."""
+        with pytest.raises(Exception):
+            PipeworksConfig(
+                models_dir="/tmp/test_models",
+                outputs_dir="/tmp/test_outputs",
+                gallery_dir="/tmp/test_gallery",
+                gpu_workers=[
+                    {"id": "dup", "label": "A", "mode": "local", "enabled": True},
+                    {"id": "dup", "label": "B", "mode": "local", "enabled": True},
+                ],
+            )
+
+    def test_gpu_workers_require_at_least_one_enabled(self):
+        """All-disabled worker lists should fail validation."""
+        with pytest.raises(Exception):
+            PipeworksConfig(
+                models_dir="/tmp/test_models",
+                outputs_dir="/tmp/test_outputs",
+                gallery_dir="/tmp/test_gallery",
+                gpu_workers=[
+                    {"id": "local", "label": "Local", "mode": "local", "enabled": False},
+                ],
+            )
+
+    def test_remote_worker_requires_base_url_and_token(self):
+        """Remote worker entries must define both URL and bearer token."""
+        with pytest.raises(Exception):
+            PipeworksConfig(
+                models_dir="/tmp/test_models",
+                outputs_dir="/tmp/test_outputs",
+                gallery_dir="/tmp/test_gallery",
+                gpu_workers=[
+                    {
+                        "id": "remote",
+                        "label": "Remote",
+                        "mode": "remote",
+                        "base_url": "https://gpu.example.com",
+                        "enabled": True,
+                    }
+                ],
+            )
+
+    def test_default_gpu_worker_id_must_reference_enabled_worker(self):
+        """default_gpu_worker_id should fail when target worker is disabled."""
+        with pytest.raises(Exception):
+            PipeworksConfig(
+                models_dir="/tmp/test_models",
+                outputs_dir="/tmp/test_outputs",
+                gallery_dir="/tmp/test_gallery",
+                gpu_workers=[
+                    {"id": "local", "label": "Local", "mode": "local", "enabled": False},
+                    {
+                        "id": "remote",
+                        "label": "Remote",
+                        "mode": "remote",
+                        "base_url": "https://gpu.example.com",
+                        "bearer_token": "token",
+                        "enabled": True,
+                    },
+                ],
+                default_gpu_worker_id="local",
+            )
+
+    def test_worker_api_tokens_include_remote_and_explicit_tokens(self, temp_dir: Path):
+        """Worker API accepted token set should include configured remote and local tokens."""
+        cfg = PipeworksConfig(
+            models_dir=str(temp_dir / "models"),
+            outputs_dir=str(temp_dir / "outputs"),
+            gallery_dir=str(temp_dir / "gallery"),
+            gpu_workers=[
+                {"id": "local", "label": "Local", "mode": "local", "enabled": True},
+                {
+                    "id": "remote",
+                    "label": "Remote",
+                    "mode": "remote",
+                    "base_url": "https://gpu.example.com/",
+                    "bearer_token": "remote-token",
+                    "enabled": True,
+                },
+            ],
+            worker_api_bearer_tokens=["admin-token"],
+        )
+        assert cfg.resolve_default_gpu_worker_id() == "local"
+        assert cfg.worker_api_tokens() == {"admin-token", "remote-token"}
+
 
 class TestConfigPathResolution:
     """Verify that path fields are properly resolved."""
