@@ -222,6 +222,7 @@ models/
 # Generated outputs
 /src/outputs/
 !/src/outputs/.gitkeep
+outputs/gpu_workers.runtime.json
 
 # Gallery images and database (generated at runtime)
 src/pipeworks/static/gallery/*

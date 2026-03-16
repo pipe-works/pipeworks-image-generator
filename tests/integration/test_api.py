@@ -19,6 +19,7 @@ real model loading or GPU access occurs.  Tests cover every endpoint:
 from __future__ import annotations
 
 import json
+import os
 import threading
 import time
 from base64 import b64encode
@@ -406,6 +407,26 @@ class TestGpuSettings:
 
         assert resp.status_code == 200
         assert resp.json()["success"] is True
+
+    def test_update_gpu_settings_writes_runtime_file_with_strict_permissions(self, test_client):
+        """Persisted runtime GPU settings should be owner-only on POSIX hosts."""
+        if os.name != "posix":
+            return
+
+        from pipeworks.api import main as main_module
+
+        resp = test_client.post(
+            "/api/gpu-settings",
+            json={
+                "use_remote_gpu": True,
+                "remote_base_url": "http://100.107.250.105:7860",
+                "bearer_token": "test-token",
+            },
+        )
+        assert resp.status_code == 200
+        assert main_module.GPU_SETTINGS_DB.exists() is True
+        mode = main_module.GPU_SETTINGS_DB.stat().st_mode & 0o777
+        assert mode == 0o600
 
 
 # ---------------------------------------------------------------------------

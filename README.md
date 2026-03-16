@@ -189,6 +189,61 @@ PW_POLICY_DEV_MUD_API_BASE_URL=https://mud-dev.example.com
 PW_POLICY_PROD_MUD_API_BASE_URL=https://mud-api.example.com
 ```
 
+## Remote GPU Worker Setup
+
+Pipeworks can run as:
+
+- **Controller** (the machine hosting the web UI and gallery)
+- **Worker** (the machine with the NVIDIA GPU)
+
+### 1) Configure and run the worker host
+
+On the GPU machine, set a worker token list in `.env` (or export it before launch):
+
+```bash
+PIPEWORKS_SERVER_HOST=0.0.0.0
+PIPEWORKS_SERVER_PORT=8123
+PIPEWORKS_WORKER_API_BEARER_TOKENS=["<worker-token-here>"]
+```
+
+Shell export form (same value, quoted for your shell):
+
+```bash
+export PIPEWORKS_WORKER_API_BEARER_TOKENS='["<worker-token-here>"]'
+```
+
+Then start `pipeworks` on that machine and verify health:
+
+```bash
+curl -H "Authorization: Bearer <worker-token-here>" \
+  http://<worker-host>:8123/api/worker/health
+```
+
+### 2) Configure the controller UI
+
+On the controller machine, open **GPU Settings** in the web UI and set:
+
+- `Use remote GPU` = enabled
+- `Remote URL` = `http://<worker-host>:8123`
+- `Bearer token` = same token as worker host
+- Optionally `Default to remote`
+
+Click **Test** to verify connectivity, then click **Save GPU** to persist the setting.
+
+### 3) Runtime file and secret handling
+
+- Remote GPU runtime settings are stored in `outputs/gpu_workers.runtime.json`.
+- This file can include bearer tokens and is intentionally gitignored.
+- Pipeworks writes this file with owner-only permissions (`0600`) on POSIX systems.
+- Treat `.env` and runtime token files as secrets and never commit real tokens.
+
+### Troubleshooting
+
+- `401 Unauthorized` from `/api/worker/health`: token mismatch between controller and worker.
+- `Connection refused`: worker host/port not reachable from controller.
+- `Torch not compiled with CUDA enabled` on controller: generation is still running locally;
+  save/select remote worker and retry.
+
 ## Development
 
 ```bash
