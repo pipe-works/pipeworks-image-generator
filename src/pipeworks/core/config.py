@@ -70,7 +70,7 @@ See Also
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field
+from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # ---------------------------------------------------------------------------
@@ -79,6 +79,52 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # working directory.
 # ---------------------------------------------------------------------------
 _PACKAGE_DIR = Path(__file__).resolve().parent.parent  # src/pipeworks/
+
+
+class GpuWorkerConfig(BaseModel):
+    """One configured GPU worker target for generation requests."""
+
+    id: str = Field(description="Stable worker identifier.")
+    label: str = Field(description="Human-readable worker label for the UI.")
+    mode: Literal["local", "remote"] = Field(
+        default="local",
+        description="Execution mode. local = in-process inference, remote = HTTP worker.",
+    )
+    base_url: str | None = Field(
+        default=None,
+        description="Remote worker base URL (required for mode='remote').",
+    )
+    bearer_token: str | None = Field(
+        default=None,
+        description="Remote worker bearer token (required for mode='remote').",
+    )
+    timeout_seconds: float = Field(
+        default=240.0,
+        ge=1.0,
+        le=3600.0,
+        description="Worker request timeout in seconds.",
+    )
+    enabled: bool = Field(default=True, description="Whether this worker can be selected.")
+
+    @model_validator(mode="after")
+    def _validate_mode_fields(self) -> "GpuWorkerConfig":
+        self.id = self.id.strip()
+        self.label = self.label.strip()
+        if not self.id:
+            raise ValueError("GPU worker id must not be empty.")
+        if not self.label:
+            raise ValueError("GPU worker label must not be empty.")
+
+        if self.mode == "remote":
+            base_url = (self.base_url or "").strip()
+            token = (self.bearer_token or "").strip()
+            if not base_url:
+                raise ValueError(f"GPU worker '{self.id}' requires base_url in remote mode.")
+            if not token:
+                raise ValueError(f"GPU worker '{self.id}' requires bearer_token in remote mode.")
+            self.base_url = base_url.rstrip("/")
+            self.bearer_token = token
+        return self
 
 
 class PipeworksConfig(BaseSettings):
@@ -305,6 +351,92 @@ class PipeworksConfig(BaseSettings):
             "Useful for local development when verifying frontend changes."
         ),
     )
+    gpu_workers: list[GpuWorkerConfig] = Field(
+        default_factory=lambda: [
+            GpuWorkerConfig(
+                id="local",
+                label="Local GPU",
+                mode="local",
+                enabled=True,
+            )
+        ],
+        description="Configured GPU worker targets.",
+    )
+    default_gpu_worker_id: str | None = Field(
+        default=None,
+        description=(
+            "Default worker id selected by the controller. If omitted, the first "
+            "enabled worker is used."
+        ),
+    )
+    worker_api_bearer_tokens: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Bearer tokens accepted by /api/worker/* endpoints. Optional; when "
+            "empty, only remote worker tokens from gpu_workers are accepted."
+        ),
+    )
+    remote_worker_max_batch_size: int = Field(
+        default=64,
+        ge=1,
+        le=1000,
+        description="Maximum batch size accepted for remote worker execution.",
+    )
+    remote_worker_max_decoded_bytes: int = Field(
+        default=80 * 1024 * 1024,
+        ge=1024,
+        le=1024 * 1024 * 1024,
+        description="Maximum decoded PNG bytes accepted from one remote worker response.",
+    )
+
+    @model_validator(mode="after")
+    def _validate_gpu_workers(self) -> "PipeworksConfig":
+        worker_ids = [worker.id for worker in self.gpu_workers]
+        if len(set(worker_ids)) != len(worker_ids):
+            raise ValueError("GPU worker ids must be unique.")
+
+        enabled_workers = [worker for worker in self.gpu_workers if worker.enabled]
+        if not enabled_workers:
+            raise ValueError("At least one GPU worker must be enabled.")
+
+        default_worker_id = (self.default_gpu_worker_id or "").strip()
+        if default_worker_id:
+            default_worker = next(
+                (worker for worker in self.gpu_workers if worker.id == default_worker_id),
+                None,
+            )
+            if not default_worker:
+                raise ValueError(
+                    "default_gpu_worker_id "
+                    f"'{default_worker_id}' does not match any configured worker."
+                )
+            if not default_worker.enabled:
+                raise ValueError(
+                    f"default_gpu_worker_id '{default_worker_id}' must reference an enabled worker."
+                )
+            self.default_gpu_worker_id = default_worker_id
+        return self
+
+    def get_enabled_gpu_workers(self) -> list[GpuWorkerConfig]:
+        """Return all currently enabled GPU workers in configured order."""
+        return [worker for worker in self.gpu_workers if worker.enabled]
+
+    def resolve_default_gpu_worker_id(self) -> str:
+        """Return selected default worker id with first-enabled fallback."""
+        if self.default_gpu_worker_id:
+            return self.default_gpu_worker_id
+        enabled = self.get_enabled_gpu_workers()
+        if not enabled:  # pragma: no cover - guarded by config validation.
+            raise ValueError("No enabled GPU workers are configured.")
+        return enabled[0].id
+
+    def worker_api_tokens(self) -> set[str]:
+        """Return bearer tokens accepted by internal worker API routes."""
+        tokens = {token.strip() for token in self.worker_api_bearer_tokens if token.strip()}
+        for worker in self.gpu_workers:
+            if worker.mode == "remote" and worker.bearer_token:
+                tokens.add(worker.bearer_token.strip())
+        return tokens
 
     def __init__(self, **kwargs):
         """Initialise configuration and create required directories.

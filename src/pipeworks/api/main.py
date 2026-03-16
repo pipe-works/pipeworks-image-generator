@@ -60,6 +60,7 @@ import threading
 import time
 import uuid
 import zipfile
+from base64 import b64decode, b64encode
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -67,6 +68,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 from secrets import token_urlsafe
 from threading import RLock
+from typing import TypedDict
+from urllib.error import HTTPError, URLError
+from urllib.request import Request as UrlRequest
+from urllib.request import urlopen
 
 from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -97,6 +102,7 @@ from pipeworks.api.models import (
     RuntimeModeOptionResponse,
     RuntimeModeRequest,
     RuntimeModeResponse,
+    WorkerGenerateBatchRequest,
 )
 from pipeworks.api.mud_api_client import (
     fetch_mud_api_json,
@@ -115,13 +121,16 @@ from pipeworks.api.runtime_mode import (
     get_runtime_mode,
     set_runtime_mode,
 )
-from pipeworks.core.config import config
+from pipeworks.core.config import GpuWorkerConfig, config
 from pipeworks.core.model_manager import ModelManager, get_model_runtime_support
 from pipeworks.core.prompt_token_counter import PromptTokenCounter
 
 logger = logging.getLogger(__name__)
 
 _MAX_BATCH_SIZE = 1000
+_WORKER_MAX_BATCH_SIZE = 1000
+_WORKER_GENERATE_BATCH_PATH = "/api/worker/generate-batch"
+_WORKER_CANCEL_PATH = "/api/worker/generate/cancel"
 PROMPT_SECTION_ORDER = SECTION_ORDER
 
 # ---------------------------------------------------------------------------
@@ -176,6 +185,16 @@ class _MudApiRuntimeConfig:
 runtime_browser_sessions: dict[str, _RuntimeBrowserSession] = {}
 runtime_browser_sessions_lock = RLock()
 
+
+class _GenerationJob(TypedDict):
+    """Deterministic generation job payload shared by local/remote flows."""
+
+    index: int
+    seed: int
+    prompt: str
+    negative_prompt: str | None
+
+
 # ---------------------------------------------------------------------------
 # Application lifecycle — model manager setup and teardown.
 #
@@ -208,6 +227,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.model_manager = ModelManager(config)
     app.state.prompt_token_counter = PromptTokenCounter(config)
     app.state.generation_cancel_events = {}
+    app.state.worker_cancel_events = {}
+    app.state.remote_generation_targets = {}
     logger.info("ModelManager initialised (no model loaded yet).")
 
     yield  # Application runs here.
@@ -1089,6 +1110,241 @@ def _build_zip_metadata_for_entry(entry: dict) -> dict:
     }
 
 
+def _public_gpu_worker(worker: GpuWorkerConfig) -> dict[str, object]:
+    """Return a worker payload safe for public API responses."""
+    return {
+        "id": worker.id,
+        "label": worker.label,
+        "mode": worker.mode,
+        "enabled": worker.enabled,
+    }
+
+
+def _resolve_gpu_worker_or_400(worker_id: str | None) -> GpuWorkerConfig:
+    """Resolve requested/default worker, rejecting invalid or disabled targets."""
+    selected_id = (worker_id or config.resolve_default_gpu_worker_id()).strip()
+    target = next((worker for worker in config.gpu_workers if worker.id == selected_id), None)
+    if target is None:
+        raise HTTPException(status_code=400, detail=f"Unknown gpu_worker_id: {selected_id}")
+    if not target.enabled:
+        raise HTTPException(
+            status_code=400,
+            detail=f"GPU worker '{target.label}' is disabled.",
+        )
+    return target
+
+
+def _worker_api_error_detail(exc: HTTPError) -> str:
+    """Extract best-effort detail from worker HTTP error payload."""
+    default_detail = f"HTTP {exc.code}"
+    try:
+        raw = exc.read()
+        text = raw.decode("utf-8") if isinstance(raw, bytes) else str(raw)
+        parsed = json.loads(text)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, TypeError):
+        return default_detail
+
+    if isinstance(parsed, dict):
+        detail = parsed.get("detail")
+        if detail:
+            return str(detail)
+    return default_detail
+
+
+def _post_json_with_bearer(
+    *,
+    base_url: str,
+    path: str,
+    bearer_token: str,
+    timeout_seconds: float,
+    payload: dict[str, object],
+) -> dict[str, object]:
+    """POST JSON with bearer auth and decode object responses."""
+    url = f"{base_url.rstrip('/')}{path}"
+    body = json.dumps(payload).encode("utf-8")
+    request = UrlRequest(
+        url=url,
+        method="POST",
+        data=body,
+        headers={
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {bearer_token}",
+        },
+    )
+    try:
+        with urlopen(request, timeout=timeout_seconds) as response:  # noqa: S310  # nosec B310
+            parsed = json.loads(response.read().decode("utf-8"))
+    except HTTPError as exc:
+        raise ValueError(f"{path} failed: {_worker_api_error_detail(exc)}") from exc
+    except (URLError, TimeoutError, OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"{path} failed: {exc}") from exc
+
+    if not isinstance(parsed, dict):
+        raise ValueError(f"{path} response must be a JSON object.")
+    return parsed
+
+
+def _extract_worker_png_bytes(
+    *,
+    worker_label: str,
+    requested_jobs: list[_GenerationJob],
+    worker_results: list[dict],
+) -> dict[int, bytes]:
+    """Validate and decode worker PNG results, enforcing response size limits."""
+    requested_indexes = {job["index"] for job in requested_jobs}
+    decoded_total = 0
+    decoded_by_index: dict[int, bytes] = {}
+
+    if len(worker_results) > len(requested_jobs):
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                f"Remote worker '{worker_label}' returned too many results "
+                f"({len(worker_results)} > {len(requested_jobs)})."
+            ),
+        )
+
+    for item in worker_results:
+        if not isinstance(item, dict):
+            raise HTTPException(
+                status_code=502,
+                detail=f"Remote worker '{worker_label}' returned an invalid result record.",
+            )
+
+        index = item.get("index")
+        seed = item.get("seed")
+        png_base64 = item.get("png_base64")
+
+        if not isinstance(index, int) or index not in requested_indexes:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Remote worker '{worker_label}' returned an unexpected result index.",
+            )
+        if not isinstance(seed, int):
+            raise HTTPException(
+                status_code=502,
+                detail=f"Remote worker '{worker_label}' returned an invalid seed value.",
+            )
+        if not isinstance(png_base64, str) or not png_base64:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Remote worker '{worker_label}' returned invalid PNG payload data.",
+            )
+        if index in decoded_by_index:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Remote worker '{worker_label}' returned duplicate image indexes.",
+            )
+
+        try:
+            png_bytes = b64decode(png_base64, validate=True)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Remote worker '{worker_label}' returned invalid base64 image data.",
+            ) from exc
+
+        decoded_total += len(png_bytes)
+        if decoded_total > config.remote_worker_max_decoded_bytes:
+            raise HTTPException(
+                status_code=502,
+                detail=(
+                    f"Remote worker '{worker_label}' response exceeded decoded size limit "
+                    f"({config.remote_worker_max_decoded_bytes} bytes)."
+                ),
+            )
+
+        decoded_by_index[index] = png_bytes
+
+    return decoded_by_index
+
+
+def _build_remote_generate_payload(
+    *,
+    generation_id: str,
+    hf_id: str,
+    req: GenerateRequest,
+    jobs: list[_GenerationJob],
+) -> dict[str, object]:
+    """Build the controller -> worker generate-batch payload."""
+    return {
+        "generation_id": generation_id,
+        "hf_id": hf_id,
+        "width": req.width,
+        "height": req.height,
+        "steps": req.steps,
+        "guidance": req.guidance,
+        "scheduler": req.scheduler,
+        "jobs": jobs,
+    }
+
+
+def _build_gallery_entry(
+    *,
+    req: GenerateRequest,
+    model_cfg: dict,
+    image_id: str,
+    filename: str,
+    compiled_prompt: str,
+    negative_prompt: str | None,
+    seed: int,
+    batch_index: int,
+    batch_seed: int,
+    compute_target_id: str,
+    compute_target_label: str,
+) -> dict[str, object]:
+    """Build one persisted gallery metadata record for a generated image."""
+    return {
+        "id": image_id,
+        "filename": filename,
+        "url": f"/static/gallery/{filename}",
+        "model_id": req.model_id,
+        "model_label": model_cfg["label"],
+        "compiled_prompt": compiled_prompt,
+        "prompt_schema_version": 2 if _request_uses_section_schema(req) else 1,
+        "prepend_prompt_id": req.prepend_prompt_id,
+        "prompt_mode": req.prompt_mode,
+        "manual_prompt": req.manual_prompt,
+        "automated_prompt_id": req.automated_prompt_id,
+        "append_prompt_id": req.append_prompt_id,
+        "prepend_mode": req.prepend_mode,
+        "append_mode": req.append_mode,
+        "manual_prepend": req.manual_prepend,
+        "manual_append": req.manual_append,
+        "subject_mode": req.subject_mode,
+        "manual_subject": req.manual_subject,
+        "automated_subject_prompt_id": req.automated_subject_prompt_id,
+        "setting_mode": req.setting_mode,
+        "manual_setting": req.manual_setting,
+        "automated_setting_prompt_id": req.automated_setting_prompt_id,
+        "details_mode": req.details_mode,
+        "manual_details": req.manual_details,
+        "automated_details_prompt_id": req.automated_details_prompt_id,
+        "lighting_mode": req.lighting_mode,
+        "manual_lighting": req.manual_lighting,
+        "automated_lighting_prompt_id": req.automated_lighting_prompt_id,
+        "atmosphere_mode": req.atmosphere_mode,
+        "manual_atmosphere": req.manual_atmosphere,
+        "automated_atmosphere_prompt_id": req.automated_atmosphere_prompt_id,
+        "aspect_ratio_id": req.aspect_ratio_id,
+        "width": req.width,
+        "height": req.height,
+        "steps": req.steps,
+        "guidance": req.guidance,
+        "seed": seed,
+        "negative_prompt": negative_prompt,
+        "is_favourite": False,
+        "created_at": time.time(),
+        "batch_index": batch_index,
+        "batch_size": req.batch_size,
+        "batch_seed": batch_seed,
+        "scheduler": req.scheduler,
+        "compute_target_id": compute_target_id,
+        "compute_target_label": compute_target_label,
+    }
+
+
 def _register_generation_cancel_event(generation_id: str | None) -> threading.Event | None:
     """Create and store a cancellation event for a generation request."""
     if not generation_id:
@@ -1100,6 +1356,62 @@ def _register_generation_cancel_event(generation_id: str | None) -> threading.Ev
     event = threading.Event()
     app.state.generation_cancel_events[generation_id] = event
     return event
+
+
+def _register_remote_generation_target(
+    generation_id: str | None,
+    worker: GpuWorkerConfig,
+) -> None:
+    """Track the selected remote worker for one in-flight generation request."""
+    if not generation_id:
+        return
+    if not hasattr(app.state, "remote_generation_targets"):
+        app.state.remote_generation_targets = {}
+    app.state.remote_generation_targets[generation_id] = worker
+
+
+def _pop_remote_generation_target(generation_id: str | None) -> None:
+    """Remove tracked remote target metadata for an in-flight generation."""
+    if not generation_id:
+        return
+    if not hasattr(app.state, "remote_generation_targets"):
+        return
+    app.state.remote_generation_targets.pop(generation_id, None)
+
+
+def _get_remote_generation_target(generation_id: str) -> GpuWorkerConfig | None:
+    """Return tracked remote worker metadata for a generation id."""
+    remote_targets: dict[str, GpuWorkerConfig] = getattr(app.state, "remote_generation_targets", {})
+    return remote_targets.get(generation_id)
+
+
+def _register_worker_cancel_event(generation_id: str) -> threading.Event:
+    """Create and store a worker-side cancellation event."""
+    if not hasattr(app.state, "worker_cancel_events"):
+        app.state.worker_cancel_events = {}
+    event = threading.Event()
+    app.state.worker_cancel_events[generation_id] = event
+    return event
+
+
+def _pop_worker_cancel_event(generation_id: str) -> None:
+    """Remove a worker-side cancellation event."""
+    if not hasattr(app.state, "worker_cancel_events"):
+        return
+    app.state.worker_cancel_events.pop(generation_id, None)
+
+
+def _require_worker_api_auth(request: Request) -> None:
+    """Validate bearer token for internal worker API endpoints."""
+    expected_tokens = config.worker_api_tokens()
+    auth_header = str(request.headers.get("authorization", "")).strip()
+    prefix = "Bearer "
+    if not auth_header.startswith(prefix):
+        raise HTTPException(status_code=401, detail="Worker API requires bearer token.")
+
+    presented = auth_header[len(prefix) :].strip()
+    if not presented or presented not in expected_tokens:
+        raise HTTPException(status_code=401, detail="Invalid worker API bearer token.")
 
 
 def _pop_generation_cancel_event(generation_id: str | None) -> None:
@@ -1344,6 +1656,8 @@ async def get_config(request: Request, response: Response) -> dict:
     return {
         "version": __version__,
         "models": annotated_models,
+        "gpu_workers": [_public_gpu_worker(worker) for worker in config.gpu_workers],
+        "default_gpu_worker_id": config.resolve_default_gpu_worker_id(),
         "prepend_library": prompts.get("prepend_library", []),
         "main_library": prompts.get("main_library", []),
         "append_library": prompts.get("append_library", []),
@@ -1389,12 +1703,21 @@ async def generate_images(req: GenerateRequest, request: Request) -> dict:
             detail=f"batch_size must be between 1 and {_MAX_BATCH_SIZE}",
         )
 
+    target_worker = _resolve_gpu_worker_or_400(req.gpu_worker_id)
+    if target_worker.mode == "remote" and req.batch_size > config.remote_worker_max_batch_size:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"batch_size {req.batch_size} exceeds remote worker limit "
+                f"({config.remote_worker_max_batch_size})."
+            ),
+        )
+
     # --- Load configuration data -------------------------------------------
     prompts = _load_prompt_catalog()
     models_data = _load_json(DATA_DIR / "models.json", {"models": []})
 
     # --- Resolve model configuration ---------------------------------------
-    # Find the model definition that matches the requested model_id.
     model_cfg = next(
         (m for m in models_data.get("models", []) if m["id"] == req.model_id),
         None,
@@ -1405,12 +1728,14 @@ async def generate_images(req: GenerateRequest, request: Request) -> dict:
             detail=f"Unknown model: {req.model_id}",
         )
 
-    is_available, unavailable_reason = get_model_runtime_support(model_cfg["hf_id"])
-    if not is_available:
-        raise HTTPException(
-            status_code=503,
-            detail=unavailable_reason,
-        )
+    hf_id = model_cfg["hf_id"]
+    if target_worker.mode == "local":
+        is_available, unavailable_reason = get_model_runtime_support(hf_id)
+        if not is_available:
+            raise HTTPException(
+                status_code=503,
+                detail=unavailable_reason,
+            )
 
     # --- Resolve prompt input once; placeholders expand per generated image --
     use_section_schema = _request_uses_section_schema(req)
@@ -1436,137 +1761,172 @@ async def generate_images(req: GenerateRequest, request: Request) -> dict:
     raw_negative_prompt = (req.negative_prompt or "").strip()
 
     # --- Resolve seed ------------------------------------------------------
-    # If the client did not supply a seed, pick a random one.  Each image in
-    # the batch gets seed = base_seed + batch_index for reproducibility.
     base_seed = req.seed if req.seed is not None else random.randint(0, 2**32 - 1)
 
-    # --- Ensure model is loaded --------------------------------------------
-    model_mgr: ModelManager = app.state.model_manager
-    hf_id = model_cfg["hf_id"]
+    # --- Build deterministic generation jobs -------------------------------
+    jobs: list[_GenerationJob] = []
+    for i in range(req.batch_size):
+        img_seed = base_seed + i
+        if use_section_schema:
+            section_values = resolve_structured_prompt_variants(raw_sections)
+            compiled_prompt = build_structured_prompt(
+                section_values,
+                expand_placeholders=False,
+            )
+        else:
+            prepend_value, main_scene, append_value = resolve_prompt_variants(
+                raw_prepend_value,
+                raw_main_scene,
+                raw_append_value,
+            )
+            compiled_prompt = build_prompt(
+                prepend_value,
+                main_scene,
+                append_value,
+                prepend_mode=req.prepend_mode,
+                append_mode=req.append_mode,
+                expand_placeholders=False,
+            )
+        negative_prompt = (
+            expand_prompt_placeholders(raw_negative_prompt) if raw_negative_prompt else None
+        )
+        jobs.append(
+            {
+                "index": i,
+                "seed": img_seed,
+                "prompt": compiled_prompt,
+                "negative_prompt": negative_prompt,
+            }
+        )
 
-    # --- Register cancellation state ---------------------------------------
     cancel_event = _register_generation_cancel_event(req.generation_id)
+    gallery = load_gallery_entries(GALLERY_DB, GALLERY_DIR)
+    generated: list[dict] = []
     cancelled = False
+    remote_generation_id = req.generation_id or f"remote-{uuid.uuid4()}"
 
     try:
-        # Switch models if the currently loaded model differs from the request.
-        if model_mgr.current_model_id != hf_id:
-            await run_in_threadpool(model_mgr.load_model, hf_id)
+        if target_worker.mode == "local":
+            model_mgr: ModelManager = app.state.model_manager
+            if model_mgr.current_model_id != hf_id:
+                await run_in_threadpool(model_mgr.load_model, hf_id)
 
-        # --- Generate batch ------------------------------------------------
-        gallery = load_gallery_entries(GALLERY_DB, GALLERY_DIR)
-        generated: list[dict] = []
-        first_compiled_prompt = ""
+            for job in jobs:
+                if cancel_event and cancel_event.is_set():
+                    cancelled = True
+                    break
 
-        for i in range(req.batch_size):
-            if cancel_event and cancel_event.is_set():
-                cancelled = True
-                break
+                image = await run_in_threadpool(
+                    model_mgr.generate,
+                    prompt=job["prompt"],
+                    width=req.width,
+                    height=req.height,
+                    steps=req.steps,
+                    guidance_scale=req.guidance,
+                    seed=job["seed"],
+                    negative_prompt=job["negative_prompt"],
+                    scheduler=req.scheduler,
+                )
 
-            # Each image in the batch gets a unique, incrementing seed.
-            img_seed = base_seed + i
-            img_id = str(uuid.uuid4())
-            filename = f"{img_id}.png"
-            filepath = GALLERY_DIR / filename
-            if use_section_schema:
-                section_values = resolve_structured_prompt_variants(raw_sections)
-                compiled_prompt = build_structured_prompt(
-                    section_values,
-                    expand_placeholders=False,
+                image_id = str(uuid.uuid4())
+                filename = f"{image_id}.png"
+                filepath = GALLERY_DIR / filename
+                image.save(filepath, format="PNG")
+
+                entry = _build_gallery_entry(
+                    req=req,
+                    model_cfg=model_cfg,
+                    image_id=image_id,
+                    filename=filename,
+                    compiled_prompt=job["prompt"],
+                    negative_prompt=job["negative_prompt"],
+                    seed=job["seed"],
+                    batch_index=job["index"],
+                    batch_seed=base_seed,
+                    compute_target_id=target_worker.id,
+                    compute_target_label=target_worker.label,
                 )
-            else:
-                prepend_value, main_scene, append_value = resolve_prompt_variants(
-                    raw_prepend_value,
-                    raw_main_scene,
-                    raw_append_value,
-                )
-                compiled_prompt = build_prompt(
-                    prepend_value,
-                    main_scene,
-                    append_value,
-                    prepend_mode=req.prepend_mode,
-                    append_mode=req.append_mode,
-                    expand_placeholders=False,
-                )
-            negative_prompt = (
-                expand_prompt_placeholders(raw_negative_prompt) if raw_negative_prompt else None
+                gallery.insert(0, entry)
+                generated.append(entry)
+        else:
+            _register_remote_generation_target(req.generation_id, target_worker)
+            worker_payload = _build_remote_generate_payload(
+                generation_id=remote_generation_id,
+                hf_id=hf_id,
+                req=req,
+                jobs=jobs,
             )
-            if not first_compiled_prompt:
-                first_compiled_prompt = compiled_prompt
+            try:
+                worker_response = _post_json_with_bearer(
+                    base_url=target_worker.base_url or "",
+                    path=_WORKER_GENERATE_BATCH_PATH,
+                    bearer_token=target_worker.bearer_token or "",
+                    timeout_seconds=target_worker.timeout_seconds,
+                    payload=worker_payload,
+                )
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"GPU worker '{target_worker.label}' failed: {exc}",
+                ) from exc
 
-            # Generate the image using the real diffusion pipeline.
-            image = await run_in_threadpool(
-                model_mgr.generate,
-                prompt=compiled_prompt,
-                width=req.width,
-                height=req.height,
-                steps=req.steps,
-                guidance_scale=req.guidance,
-                seed=img_seed,
-                negative_prompt=negative_prompt,
-                scheduler=req.scheduler,
+            if worker_response.get("success") is not True:
+                worker_detail = (
+                    worker_response.get("detail") or "worker returned unsuccessful status."
+                )
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"GPU worker '{target_worker.label}' failed: {worker_detail}",
+                )
+
+            raw_results = worker_response.get("results")
+            if not isinstance(raw_results, list):
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"GPU worker '{target_worker.label}' returned invalid results payload.",
+                )
+
+            decoded_by_index = _extract_worker_png_bytes(
+                worker_label=target_worker.label,
+                requested_jobs=jobs,
+                worker_results=raw_results,
             )
 
-            # Save the PIL image to disk as a PNG file.
-            image.save(filepath, format="PNG")
+            for job in jobs:
+                job_index = job["index"]
+                png_bytes = decoded_by_index.get(job_index)
+                if png_bytes is None:
+                    continue
 
-            # Build the gallery metadata entry.
-            entry = {
-                "id": img_id,
-                "filename": filename,
-                "url": f"/static/gallery/{filename}",
-                "model_id": req.model_id,
-                "model_label": model_cfg["label"],
-                "compiled_prompt": compiled_prompt,
-                "prompt_schema_version": 2 if use_section_schema else 1,
-                "prepend_prompt_id": req.prepend_prompt_id,
-                "prompt_mode": req.prompt_mode,
-                "manual_prompt": req.manual_prompt,
-                "automated_prompt_id": req.automated_prompt_id,
-                "append_prompt_id": req.append_prompt_id,
-                "prepend_mode": req.prepend_mode,
-                "append_mode": req.append_mode,
-                "manual_prepend": req.manual_prepend,
-                "manual_append": req.manual_append,
-                "subject_mode": req.subject_mode,
-                "manual_subject": req.manual_subject,
-                "automated_subject_prompt_id": req.automated_subject_prompt_id,
-                "setting_mode": req.setting_mode,
-                "manual_setting": req.manual_setting,
-                "automated_setting_prompt_id": req.automated_setting_prompt_id,
-                "details_mode": req.details_mode,
-                "manual_details": req.manual_details,
-                "automated_details_prompt_id": req.automated_details_prompt_id,
-                "lighting_mode": req.lighting_mode,
-                "manual_lighting": req.manual_lighting,
-                "automated_lighting_prompt_id": req.automated_lighting_prompt_id,
-                "atmosphere_mode": req.atmosphere_mode,
-                "manual_atmosphere": req.manual_atmosphere,
-                "automated_atmosphere_prompt_id": req.automated_atmosphere_prompt_id,
-                "aspect_ratio_id": req.aspect_ratio_id,
-                "width": req.width,
-                "height": req.height,
-                "steps": req.steps,
-                "guidance": req.guidance,
-                "seed": img_seed,
-                "negative_prompt": negative_prompt,
-                "is_favourite": False,
-                "created_at": time.time(),
-                "batch_index": i,
-                "batch_size": req.batch_size,
-                "batch_seed": base_seed,
-                "scheduler": req.scheduler,
-            }
+                image_id = str(uuid.uuid4())
+                filename = f"{image_id}.png"
+                filepath = GALLERY_DIR / filename
+                filepath.write_bytes(png_bytes)
 
-            # Insert newest first so the gallery is in reverse-chronological order.
-            gallery.insert(0, entry)
-            generated.append(entry)
+                entry = _build_gallery_entry(
+                    req=req,
+                    model_cfg=model_cfg,
+                    image_id=image_id,
+                    filename=filename,
+                    compiled_prompt=job["prompt"],
+                    negative_prompt=job["negative_prompt"],
+                    seed=job["seed"],
+                    batch_index=job_index,
+                    batch_seed=base_seed,
+                    compute_target_id=target_worker.id,
+                    compute_target_label=target_worker.label,
+                )
+                gallery.insert(0, entry)
+                generated.append(entry)
 
-        # Persist the updated gallery to disk.
+            cancelled = bool(worker_response.get("cancelled"))
+
         save_gallery_entries(GALLERY_DB, gallery)
     finally:
         _pop_generation_cancel_event(req.generation_id)
+        _pop_remote_generation_target(req.generation_id)
 
+    first_compiled_prompt = generated[0]["compiled_prompt"] if generated else ""
     return {
         "success": True,
         "batch_seed": base_seed,
@@ -1587,11 +1947,138 @@ async def cancel_generation(req: CancelGenerationRequest) -> dict:
     """
     cancel_events: dict[str, threading.Event] = getattr(app.state, "generation_cancel_events", {})
     event = cancel_events.get(req.generation_id)
-    if not event:
+    remote_target = _get_remote_generation_target(req.generation_id)
+    if not event and not remote_target:
         raise HTTPException(status_code=404, detail="Generation not found")
 
+    if event:
+        event.set()
+
+    status = "cancelling"
+    if remote_target and remote_target.mode == "remote":
+        try:
+            cancel_payload = _post_json_with_bearer(
+                base_url=remote_target.base_url or "",
+                path=_WORKER_CANCEL_PATH,
+                bearer_token=remote_target.bearer_token or "",
+                timeout_seconds=remote_target.timeout_seconds,
+                payload={"generation_id": req.generation_id},
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=502,
+                detail=(
+                    f"Failed to forward cancellation to GPU worker "
+                    f"'{remote_target.label}': {exc}"
+                ),
+            ) from exc
+
+        if cancel_payload.get("success") is not True:
+            raise HTTPException(
+                status_code=502,
+                detail=(
+                    f"Failed to forward cancellation to GPU worker " f"'{remote_target.label}'."
+                ),
+            )
+        status = str(cancel_payload.get("status") or status)
+
+    return {"success": True, "generation_id": req.generation_id, "status": status}
+
+
+@app.post(_WORKER_GENERATE_BATCH_PATH)
+async def worker_generate_batch(req: WorkerGenerateBatchRequest, request: Request) -> dict:
+    """Internal worker endpoint: generate a batch and return PNG payloads."""
+    _require_worker_api_auth(request)
+
+    if len(req.jobs) > _WORKER_MAX_BATCH_SIZE:
+        raise HTTPException(
+            status_code=400,
+            detail=f"jobs length must be <= {_WORKER_MAX_BATCH_SIZE}",
+        )
+
+    models_data = _load_json(DATA_DIR / "models.json", {"models": []})
+    allowed_hf_ids = {
+        model.get("hf_id")
+        for model in models_data.get("models", [])
+        if isinstance(model, dict) and isinstance(model.get("hf_id"), str)
+    }
+    if req.hf_id not in allowed_hf_ids:
+        raise HTTPException(
+            status_code=400,
+            detail=f"HF model '{req.hf_id}' is not allowed by worker configuration.",
+        )
+
+    model_mgr: ModelManager = app.state.model_manager
+    cancel_event = _register_worker_cancel_event(req.generation_id)
+    results: list[dict[str, object]] = []
+    cancelled = False
+
+    try:
+        if model_mgr.current_model_id != req.hf_id:
+            await run_in_threadpool(model_mgr.load_model, req.hf_id)
+
+        for job in req.jobs:
+            if cancel_event.is_set():
+                cancelled = True
+                break
+
+            image = await run_in_threadpool(
+                model_mgr.generate,
+                prompt=job.prompt,
+                width=req.width,
+                height=req.height,
+                steps=req.steps,
+                guidance_scale=req.guidance,
+                seed=job.seed,
+                negative_prompt=job.negative_prompt,
+                scheduler=req.scheduler,
+            )
+            buffer = io.BytesIO()
+            image.save(buffer, format="PNG")
+            results.append(
+                {
+                    "index": job.index,
+                    "seed": job.seed,
+                    "png_base64": b64encode(buffer.getvalue()).decode("utf-8"),
+                }
+            )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    finally:
+        _pop_worker_cancel_event(req.generation_id)
+
+    return {
+        "success": True,
+        "cancelled": cancelled,
+        "completed_count": len(results),
+        "results": results,
+    }
+
+
+@app.post(_WORKER_CANCEL_PATH)
+async def worker_cancel_generation(req: CancelGenerationRequest, request: Request) -> dict:
+    """Internal worker endpoint: cooperatively cancel an active generation."""
+    _require_worker_api_auth(request)
+    cancel_events: dict[str, threading.Event] = getattr(app.state, "worker_cancel_events", {})
+    event = cancel_events.get(req.generation_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Generation not found")
     event.set()
     return {"success": True, "generation_id": req.generation_id, "status": "cancelling"}
+
+
+@app.get("/api/worker/health")
+async def worker_health(request: Request) -> dict:
+    """Internal worker endpoint: readiness probe."""
+    _require_worker_api_auth(request)
+    model_mgr: ModelManager = app.state.model_manager
+    return {
+        "success": True,
+        "status": "ok",
+        "loaded_model_hf_id": model_mgr.current_model_id,
+    }
 
 
 @app.get("/api/gallery")

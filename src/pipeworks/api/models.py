@@ -216,6 +216,10 @@ class GenerateRequest(BaseModel):
         default=None,
         description="Optional client-supplied batch identifier used for cancellation.",
     )
+    gpu_worker_id: str | None = Field(
+        default=None,
+        description="Optional GPU worker identifier from /api/config.",
+    )
 
 
 class CancelGenerationRequest(BaseModel):
@@ -225,6 +229,28 @@ class CancelGenerationRequest(BaseModel):
         ...,
         description="Client-supplied generation batch identifier to cancel.",
     )
+
+
+class WorkerGenerateJob(BaseModel):
+    """One compiled generation unit routed to a worker host."""
+
+    index: int = Field(ge=0)
+    seed: int = Field(ge=0)
+    prompt: str
+    negative_prompt: str | None = None
+
+
+class WorkerGenerateBatchRequest(BaseModel):
+    """Request body for ``POST /api/worker/generate-batch``."""
+
+    generation_id: str
+    hf_id: str
+    width: int = Field(ge=64)
+    height: int = Field(ge=64)
+    steps: int = Field(ge=1)
+    guidance: float
+    scheduler: str | None = None
+    jobs: list[WorkerGenerateJob] = Field(min_length=1, max_length=1000)
 
 
 class FavouriteRequest(BaseModel):

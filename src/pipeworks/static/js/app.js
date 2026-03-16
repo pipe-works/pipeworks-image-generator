@@ -34,6 +34,7 @@ const State = {
   policyPromptOptions: [],
   policyPromptGroups: [],
   selectedModel: null,
+  selectedGpuWorkerId: null,
   sectionModes: {
     subject: "manual",
     setting: "manual",
@@ -145,6 +146,26 @@ function updateStatusBar() {
   const seed = $("#inp-seed").value;
   const isRandom = $("#chk-random-seed").checked;
   $("#status-seed").textContent = isRandom ? "seed random" : `seed ${seed || "—"}`;
+}
+
+function getSelectedGpuWorker() {
+  if (!State.config) return null;
+  const workers = State.config.gpu_workers || [];
+  if (workers.length === 0) return null;
+
+  const selectedId = ($("#sel-gpu-worker")?.value || State.selectedGpuWorkerId || "").trim();
+  const selected = workers.find(worker => worker.id === selectedId && worker.enabled !== false);
+  if (selected) return selected;
+
+  const defaultId = (State.config.default_gpu_worker_id || "").trim();
+  const defaultWorker = workers.find(worker => worker.id === defaultId && worker.enabled !== false);
+  if (defaultWorker) return defaultWorker;
+
+  return workers.find(worker => worker.enabled !== false) || null;
+}
+
+function selectedGpuWorkerLabel() {
+  return getSelectedGpuWorker()?.label || "GPU worker";
 }
 
 
@@ -528,6 +549,29 @@ function populateControls() {
     selModel.value = firstAvailableModel.id;
   }
 
+  // GPU worker target selector
+  const selGpuWorker = $("#sel-gpu-worker");
+  if (selGpuWorker) {
+    selGpuWorker.innerHTML = "";
+    (cfg.gpu_workers || []).forEach(worker => {
+      if (worker.enabled === false) return;
+      selGpuWorker.appendChild(el("option", { value: worker.id }, worker.label));
+    });
+
+    const preferredWorker = (cfg.default_gpu_worker_id || "").trim();
+    const hasPreferred = preferredWorker
+      && selGpuWorker.querySelector(`option[value="${preferredWorker}"]`);
+    if (hasPreferred) {
+      selGpuWorker.value = preferredWorker;
+      State.selectedGpuWorkerId = preferredWorker;
+    } else if (selGpuWorker.options.length > 0) {
+      selGpuWorker.selectedIndex = 0;
+      State.selectedGpuWorkerId = selGpuWorker.value;
+    } else {
+      State.selectedGpuWorkerId = null;
+    }
+  }
+
   // Gallery model filter
   const selGalleryModel = $("#sel-gallery-model");
   cfg.models.forEach(m => {
@@ -808,6 +852,7 @@ function buildGeneratePayload() {
 
   const payload = {
     model_id: State.selectedModel,
+    gpu_worker_id: getSelectedGpuWorker()?.id || null,
     prompt_schema_version: 2,
     aspect_ratio_id: aspectId,
     width: ar.width,
@@ -869,6 +914,7 @@ async function generate() {
 
   State.isGenerating = true;
   State.stopRequested = false;
+  const workerLabel = selectedGpuWorkerLabel();
   State.currentGenerationId = globalThis.crypto?.randomUUID?.() || `gen-${Date.now()}`;
   const btn = $("#btn-generate");
   const stopBtn = $("#btn-stop-generation");
@@ -882,7 +928,7 @@ async function generate() {
   const progressWrap = $("#progress-wrap");
   progressWrap.style.display = "";
 
-  setStatus(`Generating ${State.batchSize} image(s)…`, true);
+  setStatus(`Generating ${State.batchSize} image(s) on ${workerLabel}…`, true);
 
   try {
     payload.generation_id = State.currentGenerationId;
@@ -921,19 +967,19 @@ async function generate() {
       const completed = data.completed_count || data.images.length;
       if (completed > 0) {
         toast(`Stopped after ${completed} image(s)`, "info");
-        setStatus(`Stopped after ${completed} image(s)`, false);
+        setStatus(`Stopped after ${completed} image(s) on ${workerLabel}`, false);
       } else {
         toast("Stopped before any images completed", "info");
-        setStatus("Stopped before any images completed", false);
+        setStatus(`Stopped before any images completed on ${workerLabel}`, false);
       }
     } else {
       toast(`Generated ${data.images.length} image(s)`, "ok");
-      setStatus(`Done — ${data.images.length} image(s) generated`);
+      setStatus(`Done — ${data.images.length} image(s) generated on ${workerLabel}`);
     }
 
   } catch (e) {
-    toast(`Generation failed: ${e.message}`, "err");
-    setStatus("Generation failed", false);
+    toast(`Generation failed on ${workerLabel}: ${e.message}`, "err");
+    setStatus(`Generation failed on ${workerLabel}`, false);
   } finally {
     State.isGenerating = false;
     State.currentGenerationId = null;
@@ -1852,6 +1898,10 @@ function wireEvents() {
 
   // Model change
   $("#sel-model").addEventListener("change", onModelChange);
+  $("#sel-gpu-worker")?.addEventListener("change", () => {
+    State.selectedGpuWorkerId = $("#sel-gpu-worker").value;
+    setStatus(`GPU machine set to ${selectedGpuWorkerLabel()}.`);
+  });
 
   // Aspect ratio change
   $("#sel-aspect").addEventListener("change", onAspectChange);
