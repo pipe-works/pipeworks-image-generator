@@ -26,6 +26,11 @@ from base64 import b64encode
 from io import BytesIO
 from unittest.mock import patch
 
+from pipeworks.api.services.deprecations import (
+    LEGACY_PROMPT_SCHEMA_DEPRECATION_HEADER,
+    LEGACY_PROMPT_SCHEMA_DEPRECATION_VALUE,
+)
+
 
 class SequenceRandom:
     """Minimal deterministic RNG stub for placeholder integration tests."""
@@ -783,6 +788,42 @@ class TestGenerate:
         assert "oil painting" in data["compiled_prompt"].lower()
         assert "8K" in data["compiled_prompt"]
 
+    def test_generate_v1_prompt_schema_sets_deprecation_header(self, test_client):
+        """Legacy prompt payloads should include deterministic deprecation header."""
+        resp = test_client.post("/api/generate", json=self._make_generate_payload())
+        assert resp.status_code == 200
+        assert resp.headers.get(LEGACY_PROMPT_SCHEMA_DEPRECATION_HEADER) == (
+            LEGACY_PROMPT_SCHEMA_DEPRECATION_VALUE
+        )
+
+    def test_generate_v2_prompt_schema_does_not_set_deprecation_header(self, test_client):
+        """Section-schema payloads should not include legacy deprecation header."""
+        resp = test_client.post(
+            "/api/generate",
+            json={
+                "model_id": "z-image-turbo",
+                "prompt_schema_version": 2,
+                "subject_mode": "manual",
+                "manual_subject": "A goblin machinist portrait.",
+                "setting_mode": "manual",
+                "manual_setting": "Inside a cramped brass workshop.",
+                "details_mode": "manual",
+                "manual_details": "Clockwork tools and grease marks.",
+                "lighting_mode": "manual",
+                "manual_lighting": "Soft overhead lantern light.",
+                "atmosphere_mode": "manual",
+                "manual_atmosphere": "Quiet and methodical mood.",
+                "aspect_ratio_id": "1:1",
+                "width": 1024,
+                "height": 1024,
+                "steps": 4,
+                "guidance": 0.0,
+                "batch_size": 1,
+            },
+        )
+        assert resp.status_code == 200
+        assert LEGACY_PROMPT_SCHEMA_DEPRECATION_HEADER not in resp.headers
+
     def test_generate_batch_reexpands_placeholders_for_each_image(
         self,
         test_client,
@@ -1080,6 +1121,9 @@ class TestPromptCompile:
         assert data["token_counts"]["total"] > 0
         assert "A test scene." in data["compiled_prompt"]
         assert "Main Scene:" in data["compiled_prompt"]
+        assert resp.headers.get(LEGACY_PROMPT_SCHEMA_DEPRECATION_HEADER) == (
+            LEGACY_PROMPT_SCHEMA_DEPRECATION_VALUE
+        )
 
     def test_compile_structured_sections_prompt(self, test_client):
         """Section-schema prompt compile should include all labeled sections."""
@@ -1118,6 +1162,7 @@ class TestPromptCompile:
         assert data["token_counts"]["details"] > 0
         assert data["token_counts"]["lighting"] > 0
         assert data["token_counts"]["atmosphere"] > 0
+        assert LEGACY_PROMPT_SCHEMA_DEPRECATION_HEADER not in resp.headers
 
     def test_compile_returns_flux2_token_counts(self, test_client):
         """Prompt preview should return token counts for FLUX.2-klein-4B as well."""

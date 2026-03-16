@@ -5,6 +5,8 @@ from __future__ import annotations
 import pytest
 
 from pipeworks.api import runtime_mode
+from pipeworks.api.services import deprecations
+from pipeworks.api.services.deprecations import LEGACY_POLICY_ENV_ALIAS_WARNING_TEMPLATE
 
 _RUNTIME_ENV_VARS = (
     "PW_POLICY_SOURCE_MODE",
@@ -105,3 +107,19 @@ def test_reset_runtime_mode_uses_env_source_mode_and_clears_overrides(monkeypatc
 
     assert state.mode_key == "server_prod"
     assert state.active_server_url == "https://api.pipe-works.org"
+
+
+def test_runtime_mode_warns_when_legacy_env_alias_is_effective(monkeypatch, caplog):
+    """Legacy policy URL aliases should emit a one-time deprecation warning."""
+    deprecations._WARNED_KEYS.clear()
+    monkeypatch.setenv("PW_POLICY_REMOTE_DEV_MUD_API_BASE_URL", "https://legacy-dev.example.com")
+
+    with caplog.at_level("WARNING"):
+        runtime_mode._reset_runtime_mode_for_tests()
+        state = runtime_mode.get_runtime_mode()
+
+    assert state.active_server_url == "https://legacy-dev.example.com"
+    warning_text = (
+        LEGACY_POLICY_ENV_ALIAS_WARNING_TEMPLATE % "PW_POLICY_REMOTE_DEV_MUD_API_BASE_URL"
+    )
+    assert warning_text in caplog.text
