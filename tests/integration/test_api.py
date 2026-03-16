@@ -127,39 +127,131 @@ class TestGetConfig:
         assert "append_library" in data
 
     def test_config_returns_policy_prompt_options(self, test_client):
-        """Response should include policy-backed prompt snippet options."""
+        """Without runtime login, policy-backed snippet options should be empty."""
         resp = test_client.get("/api/config")
         assert resp.status_code == 200
         data = resp.json()
         assert "policy_prompt_options" in data
         assert isinstance(data["policy_prompt_options"], list)
+        assert data["policy_prompt_options"] == []
+        assert data["runtime_auth"]["status"] in {"missing_session", "unauthenticated"}
 
     def test_config_returns_policy_prompt_groups(self, test_client):
-        """Response should include all policy directories for dropdown groups."""
+        """Without runtime login, policy snippet groups should be empty."""
         resp = test_client.get("/api/config")
         assert resp.status_code == 200
         data = resp.json()
         assert "policy_prompt_groups" in data
         assert isinstance(data["policy_prompt_groups"], list)
-        assert "policies" in data["policy_prompt_groups"]
-        assert "axis" in data["policy_prompt_groups"]
-        assert "image/registries" in data["policy_prompt_groups"]
-        assert "image/tone_profiles" in data["policy_prompt_groups"]
+        assert data["policy_prompt_groups"] == []
 
-    def test_config_extracts_prompt_text_from_species_yaml(self, test_client):
-        """Species YAML blocks should contribute `text` content as snippets."""
-        resp = test_client.get("/api/config")
+    def test_runtime_mode_switch_accepts_server_url_override(self, test_client):
+        """Runtime mode endpoint should accept explicit dev/prod URL overrides."""
+        resp = test_client.post(
+            "/api/runtime-mode",
+            json={"mode_key": "server_prod", "server_url": "https://mud.example.com/"},
+        )
         assert resp.status_code == 200
-        data = resp.json()
-        options_by_id = {option["id"]: option for option in data["policy_prompt_options"]}
+        payload = resp.json()
+        assert payload["mode_key"] == "server_prod"
+        assert payload["active_server_url"] == "https://mud.example.com"
 
-        goblin = options_by_id.get("image/blocks/species/goblin_v1.yaml")
-        assert goblin is not None
-        assert "A goblin of pipe-works canon" in goblin["value"]
-        assert "human-like hands and feet" in goblin["value"]
+    def test_runtime_auth_reports_missing_session_without_login(self, test_client):
+        """Runtime auth endpoint should fail closed until a runtime session exists."""
+        resp = test_client.get("/api/runtime-auth")
+        assert resp.status_code == 200
+        payload = resp.json()
+        assert payload["session_present"] is False
+        assert payload["access_granted"] is False
+        assert payload["status"] in {"missing_session", "unauthenticated"}
 
-        # Registry YAMLs are metadata and should not appear as snippets.
-        assert "image/registries/species_registry.yaml" not in options_by_id
+    def test_policy_prompts_load_from_canonical_api_after_runtime_login(self, test_client):
+        """Snippet dropdown payload should come from canonical policy APIs after login."""
+
+        def _fake_login_fetch(*, base_url, method, path, body):
+            assert base_url == "http://127.0.0.1:8000"
+            assert method == "POST"
+            assert path == "/login"
+            assert body == {"username": "admin", "password": "pw"}
+            return {
+                "session_id": "session-admin-1",
+                "role": "admin",
+                "available_worlds": [{"id": "pipeworks_web", "name": "Pipeworks Web"}],
+            }
+
+        def _fake_authenticated_fetch(*, runtime, method, path, query_params, json_payload=None):
+            assert runtime.base_url == "http://127.0.0.1:8000"
+            assert runtime.session_id == "session-admin-1"
+            assert method == "GET"
+            assert json_payload is None
+            assert query_params == {}
+            if path == "/api/policy-capabilities":
+                return {
+                    "allowed_policy_types": ["prompt", "species_block", "registry"],
+                    "allowed_statuses": ["draft", "active"],
+                }
+            if path == "/api/policies":
+                return {
+                    "items": [
+                        {
+                            "policy_id": "prompt:image.prompts.creatures:goblin_workshop",
+                            "policy_type": "prompt",
+                            "namespace": "image.prompts.creatures",
+                            "policy_key": "goblin_workshop",
+                            "variant": "v1",
+                            "content": {"text": "A goblin workshop scene."},
+                        },
+                        {
+                            "policy_id": "species_block:image.blocks.species:goblin",
+                            "policy_type": "species_block",
+                            "namespace": "image.blocks.species",
+                            "policy_key": "goblin",
+                            "variant": "v2",
+                            "content": {"text": "A goblin of pipe-works canon."},
+                        },
+                        {
+                            "policy_id": "registry:image.registries:species_registry",
+                            "policy_type": "registry",
+                            "namespace": "image.registries",
+                            "policy_key": "species_registry",
+                            "variant": "v1",
+                            "content": {"references": []},
+                        },
+                    ]
+                }
+            raise AssertionError(f"Unexpected path: {path}")
+
+        with (
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json_anonymous", side_effect=_fake_login_fetch
+            ),
+            patch("pipeworks.api.main._fetch_mud_api_json", side_effect=_fake_authenticated_fetch),
+        ):
+            login_resp = test_client.post(
+                "/api/runtime-login",
+                json={"username": "admin", "password": "pw"},
+            )
+            assert login_resp.status_code == 200
+            assert login_resp.json()["success"] is True
+
+            snippets_resp = test_client.get("/api/policy-prompts")
+            assert snippets_resp.status_code == 200
+            payload = snippets_resp.json()
+            assert payload["runtime_auth"]["status"] == "authorized"
+            assert payload["runtime_auth"]["access_granted"] is True
+            assert payload["policy_prompt_groups"] == [
+                "image.blocks.species",
+                "image.prompts.creatures",
+            ]
+
+            options_by_id = {option["id"]: option for option in payload["policy_prompt_options"]}
+            assert "prompt:image.prompts.creatures:goblin_workshop:v1" in options_by_id
+            assert "species_block:image.blocks.species:goblin:v2" in options_by_id
+            assert "registry:image.registries:species_registry:v1" not in options_by_id
+            assert (
+                options_by_id["species_block:image.blocks.species:goblin:v2"]["value"]
+                == "A goblin of pipe-works canon."
+            )
 
     def test_disable_http_cache_adds_no_cache_headers(self, test_client):
         """No-cache headers should be emitted when local dev mode enables them."""

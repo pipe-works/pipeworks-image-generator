@@ -29,6 +29,10 @@ const PROMPT_SECTION_LABELS = {
 
 const State = {
   config: null,
+  runtimeMode: null,
+  runtimeAuth: null,
+  policyPromptOptions: [],
+  policyPromptGroups: [],
   selectedModel: null,
   sectionModes: {
     subject: "manual",
@@ -98,6 +102,16 @@ function el(tag, attrs = {}, ...children) {
     else if (c) e.appendChild(c);
   }
   return e;
+}
+
+async function fetchJson(url, options = {}) {
+  const response = await fetch(url, options);
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    const detail = payload.detail || `HTTP ${response.status}`;
+    throw new Error(detail);
+  }
+  return response.json();
 }
 
 
@@ -200,13 +214,285 @@ function activateTab(tabId) {
 
 // ── Config loading ─────────────────────────────────────────────────────────────
 
+function populatePolicySelect(selectEl, options, groups) {
+  if (!selectEl) return;
+  selectEl.innerHTML = "";
+  selectEl.appendChild(el("option", { value: "" }, "— Add snippet from policies —"));
+
+  const grouped = new Map();
+  groups.forEach(group => {
+    if (group && !grouped.has(group)) grouped.set(group, []);
+  });
+  options.forEach(option => {
+    const group = option.group || "policies";
+    if (!grouped.has(group)) grouped.set(group, []);
+    grouped.get(group).push(option);
+  });
+
+  [...grouped.keys()].sort().forEach(group => {
+    const optGroup = document.createElement("optgroup");
+    optGroup.label = group;
+    const entries = grouped.get(group) || [];
+    if (entries.length === 0) {
+      optGroup.appendChild(
+        el(
+          "option",
+          { value: "", disabled: "disabled" },
+          "— No prompt snippets in this directory —",
+        ),
+      );
+    } else {
+      entries.forEach(option => {
+        const opt = el("option", { value: option.id }, option.label);
+        optGroup.appendChild(opt);
+      });
+    }
+    selectEl.appendChild(optGroup);
+  });
+
+  selectEl.value = "";
+}
+
+function applyPolicyPromptDropdowns() {
+  const options = State.policyPromptOptions || [];
+  const groups = State.policyPromptGroups || [];
+  PROMPT_SECTIONS.forEach(section => {
+    populatePolicySelect($(`#sel-${section}`), options, groups);
+  });
+}
+
+function runtimeModeLabel() {
+  const modeKey = State.runtimeMode?.mode_key || "";
+  const option = (State.runtimeMode?.options || []).find(candidate => candidate.mode_key === modeKey);
+  return option?.label || modeKey || "Unknown";
+}
+
+function runtimeActiveServerUrl() {
+  const runtimeMode = State.runtimeMode;
+  const activeUrl = (runtimeMode?.active_server_url || "").trim();
+  if (activeUrl) {
+    return activeUrl;
+  }
+  const activeOption = (runtimeMode?.options || []).find(
+    option => option.mode_key === runtimeMode?.mode_key,
+  );
+  return (activeOption?.default_server_url || "").trim();
+}
+
+function runtimeAuthStatus() {
+  return String(State.runtimeAuth?.status || "");
+}
+
+function isRuntimeSessionAuthorized() {
+  return Boolean(State.runtimeAuth?.access_granted);
+}
+
+function updateRuntimeSourceStatusLine() {
+  const sourceStatus = $("#runtime-source-status");
+  if (!sourceStatus) return;
+
+  const serverUrl = runtimeActiveServerUrl();
+  const snippetCount = (State.policyPromptOptions || []).length;
+  const snippetText = `${snippetCount} snippet${snippetCount === 1 ? "" : "s"}`;
+  sourceStatus.textContent = serverUrl
+    ? `${serverUrl} · ${snippetText}`
+    : `Server URL unavailable · ${snippetText}`;
+}
+
+function applyRuntimeControls() {
+  const modeSelect = $("#runtime-mode-select");
+  const modeUrl = $("#runtime-mode-url");
+  const modeApply = $("#runtime-mode-apply");
+  const loginUsername = $("#runtime-login-username");
+  const loginPassword = $("#runtime-login-password");
+  const loginApply = $("#runtime-login-apply");
+  const modeBadge = $("#runtime-mode-badge");
+  const authBadge = $("#runtime-auth-badge");
+
+  if (!modeSelect || !modeUrl || !modeApply || !loginUsername || !loginPassword || !loginApply) {
+    updateRuntimeSourceStatusLine();
+    return;
+  }
+
+  const runtimeMode = State.runtimeMode;
+  modeSelect.innerHTML = "";
+  (runtimeMode?.options || []).forEach(option => {
+    modeSelect.appendChild(el("option", { value: option.mode_key }, option.label));
+  });
+  if (runtimeMode?.mode_key && modeSelect.querySelector(`option[value="${runtimeMode.mode_key}"]`)) {
+    modeSelect.value = runtimeMode.mode_key;
+  }
+
+  const activeOption = (runtimeMode?.options || []).find(
+    option => option.mode_key === runtimeMode?.mode_key,
+  );
+  const activeServerUrl = (runtimeMode?.active_server_url || "").trim();
+  const defaultServerUrl = (activeOption?.default_server_url || "").trim();
+  modeUrl.value = activeServerUrl || defaultServerUrl;
+  modeApply.disabled = !(modeUrl.value || "").trim();
+
+  if (isRuntimeSessionAuthorized()) {
+    loginApply.textContent = "Logout";
+    loginApply.disabled = false;
+  } else {
+    loginApply.textContent = "Login";
+    loginApply.disabled = !(loginUsername.value || "").trim() || !(loginPassword.value || "").trim();
+  }
+
+  if (modeBadge) {
+    modeBadge.classList.remove("badge--muted", "badge--active", "badge--info");
+    modeBadge.classList.add(runtimeMode?.mode_key === "server_dev" ? "badge--active" : "badge--info");
+    modeBadge.textContent = runtimeMode ? `${runtimeModeLabel()} · Server API` : "Mode unavailable";
+  }
+
+  if (authBadge) {
+    authBadge.classList.remove(
+      "badge--muted",
+      "badge--active",
+      "badge--info",
+      "badge--warn",
+      "badge--err",
+    );
+    const authStatus = runtimeAuthStatus();
+    if (!authStatus) {
+      authBadge.classList.add("badge--muted");
+      authBadge.textContent = "Auth Pending";
+    } else if (authStatus === "authorized") {
+      authBadge.classList.add("badge--active");
+      authBadge.textContent = "Auth OK";
+    } else if (authStatus === "missing_session") {
+      authBadge.classList.add("badge--warn");
+      authBadge.textContent = "Session Missing";
+    } else if (authStatus === "forbidden") {
+      authBadge.classList.add("badge--err");
+      authBadge.textContent = "Role Denied";
+    } else if (authStatus === "unauthenticated") {
+      authBadge.classList.add("badge--warn");
+      authBadge.textContent = "Session Invalid";
+    } else {
+      authBadge.classList.add("badge--err");
+      authBadge.textContent = "Auth Error";
+    }
+  }
+
+  updateRuntimeSourceStatusLine();
+}
+
+async function loadRuntimeMode() {
+  State.runtimeMode = await fetchJson("/api/runtime-mode");
+  applyRuntimeControls();
+}
+
+async function refreshRuntimeAuthState({ silent = false } = {}) {
+  try {
+    State.runtimeAuth = await fetchJson("/api/runtime-auth");
+  } catch (error) {
+    State.runtimeAuth = {
+      status: "error",
+      access_granted: false,
+      detail: error.message,
+    };
+    if (!silent) {
+      setStatus(`Runtime auth failed: ${error.message}`);
+    }
+  }
+  applyRuntimeControls();
+  return State.runtimeAuth;
+}
+
+async function loadPolicyPrompts({ silent = false } = {}) {
+  try {
+    const payload = await fetchJson("/api/policy-prompts");
+    State.policyPromptOptions = payload.policy_prompt_options || [];
+    State.policyPromptGroups = payload.policy_prompt_groups || [];
+    if (payload.runtime_auth) {
+      State.runtimeAuth = payload.runtime_auth;
+    }
+    applyPolicyPromptDropdowns();
+    applyRuntimeControls();
+    if (!silent) {
+      const source = runtimeModeLabel();
+      setStatus(`Loaded ${State.policyPromptOptions.length} snippet(s) from ${source}.`);
+    }
+  } catch (error) {
+    State.policyPromptOptions = [];
+    State.policyPromptGroups = [];
+    applyPolicyPromptDropdowns();
+    applyRuntimeControls();
+    if (!silent) {
+      setStatus(`Policy snippets unavailable: ${error.message}`);
+    }
+  }
+}
+
+async function setRuntimeMode(modeKey, { explicitServerUrl = null } = {}) {
+  const requestPayload = { mode_key: modeKey };
+  if (explicitServerUrl !== null) {
+    const serverUrl = String(explicitServerUrl || "").trim();
+    if (serverUrl) requestPayload.server_url = serverUrl;
+  }
+  State.runtimeMode = await fetchJson("/api/runtime-mode", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(requestPayload),
+  });
+  await refreshRuntimeAuthState({ silent: true });
+  await loadPolicyPrompts({ silent: true });
+  applyRuntimeControls();
+}
+
+async function loginRuntimeSession() {
+  const username = ($("#runtime-login-username")?.value || "").trim();
+  const password = ($("#runtime-login-password")?.value || "").trim();
+  if (!username || !password) {
+    setStatus("Username and password are required for runtime login.");
+    return;
+  }
+
+  setStatus(`Logging in to ${runtimeModeLabel()}...`, true);
+  const payload = await fetchJson("/api/runtime-login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+
+  if ($("#runtime-login-password")) {
+    $("#runtime-login-password").value = "";
+  }
+  await refreshRuntimeAuthState({ silent: true });
+  await loadPolicyPrompts({ silent: true });
+  applyRuntimeControls();
+
+  if (payload.success) {
+    setStatus(`Login successful as ${payload.role}.`);
+  } else {
+    setStatus(payload.detail || "Login succeeded, but role is not authorized.");
+  }
+}
+
+async function logoutRuntimeSession() {
+  await fetchJson("/api/runtime-logout", { method: "POST" });
+  if ($("#runtime-login-password")) {
+    $("#runtime-login-password").value = "";
+  }
+  await refreshRuntimeAuthState({ silent: true });
+  await loadPolicyPrompts({ silent: true });
+  applyRuntimeControls();
+  setStatus(`Logged out from ${runtimeModeLabel()}.`);
+}
+
 async function loadConfig() {
   try {
-    const res = await fetch("/api/config");
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    State.config = await res.json();
+    const payload = await fetchJson("/api/config");
+    State.config = payload;
+    if (payload.runtime_mode) {
+      State.runtimeMode = payload.runtime_mode;
+    }
+    if (payload.runtime_auth) {
+      State.runtimeAuth = payload.runtime_auth;
+    }
     populateControls();
-    setStatus("Ready");
+    applyRuntimeControls();
   } catch (e) {
     setStatus("Config load failed", false);
     toast(`Failed to load config: ${e.message}`, "err");
@@ -215,47 +501,8 @@ async function loadConfig() {
 
 function populateControls() {
   const cfg = State.config;
-  const policyOptions = cfg.policy_prompt_options || [];
-  const policyGroups = cfg.policy_prompt_groups || [];
-
-  function populatePolicySelect(selectEl, options, groups) {
-    if (!selectEl) return;
-    selectEl.innerHTML = "";
-    selectEl.appendChild(el("option", { value: "" }, "— Add snippet from policies —"));
-
-    const grouped = new Map();
-    groups.forEach(group => {
-      if (group && !grouped.has(group)) grouped.set(group, []);
-    });
-    options.forEach(option => {
-      const group = option.group || "policies";
-      if (!grouped.has(group)) grouped.set(group, []);
-      grouped.get(group).push(option);
-    });
-
-    [...grouped.keys()].sort().forEach(group => {
-      const optGroup = document.createElement("optgroup");
-      optGroup.label = group;
-      const entries = grouped.get(group) || [];
-      if (entries.length === 0) {
-        optGroup.appendChild(
-          el(
-            "option",
-            { value: "", disabled: "disabled" },
-            "— No prompt snippets in this directory —",
-          ),
-        );
-      } else {
-        entries.forEach(option => {
-          const opt = el("option", { value: option.id }, option.label);
-          optGroup.appendChild(opt);
-        });
-      }
-      selectEl.appendChild(optGroup);
-    });
-
-    selectEl.value = "";
-  }
+  State.policyPromptOptions = cfg.policy_prompt_options || [];
+  State.policyPromptGroups = cfg.policy_prompt_groups || [];
 
   // Models
   const selModel = $("#sel-model");
@@ -288,10 +535,8 @@ function populateControls() {
     selGalleryModel.appendChild(opt);
   });
 
-  // Section snippet dropdowns sourced from policies.
-  PROMPT_SECTIONS.forEach(section => {
-    populatePolicySelect($(`#sel-${section}`), policyOptions, policyGroups);
-  });
+  // Section snippet dropdowns sourced from canonical mud-server APIs.
+  applyPolicyPromptDropdowns();
 
   // Version badge in header (populated from API, single source of truth)
   if (cfg.version) {
@@ -402,8 +647,8 @@ function setSectionPromptMode(section, mode) {
 }
 
 function appendPolicySnippetToSection(section, optionId) {
-  if (!optionId || !State.config) return;
-  const option = (State.config.policy_prompt_options || []).find(item => item.id === optionId);
+  if (!optionId) return;
+  const option = (State.policyPromptOptions || []).find(item => item.id === optionId);
   if (!option || !(option.value || "").trim()) return;
 
   const textarea = $(`#txt-${section}`);
@@ -1553,6 +1798,58 @@ function wireEvents() {
     btn.addEventListener("click", () => activateTab(btn.dataset.tab));
   });
 
+  // Runtime snippet source controls
+  $("#runtime-mode-select")?.addEventListener("change", async (event) => {
+    const nextMode = event.target.value;
+    try {
+      setStatus(`Switching snippet source to ${nextMode}...`, true);
+      await setRuntimeMode(nextMode);
+      setStatus(`Snippet source switched to ${runtimeModeLabel()}.`);
+    } catch (error) {
+      toast(`Runtime mode switch failed: ${error.message}`, "err");
+      setStatus(`Runtime mode switch failed: ${error.message}`);
+      await loadRuntimeMode();
+      await refreshRuntimeAuthState({ silent: true });
+      await loadPolicyPrompts({ silent: true });
+    }
+  });
+
+  $("#runtime-mode-url")?.addEventListener("input", () => {
+    const applyButton = $("#runtime-mode-apply");
+    if (!applyButton) return;
+    applyButton.disabled = !($("#runtime-mode-url")?.value || "").trim();
+  });
+
+  $("#runtime-mode-apply")?.addEventListener("click", async () => {
+    const modeKey = $("#runtime-mode-select")?.value;
+    const serverUrl = ($("#runtime-mode-url")?.value || "").trim();
+    if (!modeKey) return;
+    try {
+      setStatus(`Applying snippet source URL for ${runtimeModeLabel()}...`, true);
+      await setRuntimeMode(modeKey, { explicitServerUrl: serverUrl });
+      setStatus(`Snippet source URL updated for ${runtimeModeLabel()}.`);
+    } catch (error) {
+      toast(`Failed to apply URL: ${error.message}`, "err");
+      setStatus(`Failed to apply URL: ${error.message}`);
+    }
+  });
+
+  $("#runtime-login-username")?.addEventListener("input", applyRuntimeControls);
+  $("#runtime-login-password")?.addEventListener("input", applyRuntimeControls);
+
+  $("#runtime-login-apply")?.addEventListener("click", async () => {
+    try {
+      if (isRuntimeSessionAuthorized()) {
+        await logoutRuntimeSession();
+      } else {
+        await loginRuntimeSession();
+      }
+    } catch (error) {
+      toast(`Runtime session action failed: ${error.message}`, "err");
+      setStatus(`Runtime session action failed: ${error.message}`);
+    }
+  });
+
   // Model change
   $("#sel-model").addEventListener("change", onModelChange);
 
@@ -1718,6 +2015,14 @@ async function init() {
   setStatus("Loading config…", true);
   wireEvents();
   await loadConfig();
+  try {
+    await loadRuntimeMode();
+    await refreshRuntimeAuthState({ silent: true });
+    await loadPolicyPrompts({ silent: true });
+  } catch (error) {
+    toast(`Runtime controls unavailable: ${error.message}`, "warn");
+  }
+  setStatus("Ready");
   updateStatusBar();
 }
 

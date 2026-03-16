@@ -723,7 +723,11 @@ def test_client(
         patch("pipeworks.api.main.TEMPLATES_DIR", test_config.templates_dir),
         patch("pipeworks.api.main.GALLERY_DB", test_config.data_dir / "gallery.json"),
     ):
-        from pipeworks.api.main import app
+        from pipeworks.api import runtime_mode as runtime_mode_module
+        from pipeworks.api.main import app, runtime_browser_sessions
+
+        runtime_mode_module._reset_runtime_mode_for_tests()
+        runtime_browser_sessions.clear()
 
         # Inject the mock model manager onto app.state.
         app.state.model_manager = mock_model_manager
