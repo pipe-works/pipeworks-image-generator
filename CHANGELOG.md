@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.1](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.13.0...pipeworks-image-generator-v0.13.1) (2026-03-16)
+
+
+### Fixes
+
+* **config:** ignore non-PIPEWORKS dotenv keys ([#77](https://github.com/pipe-works/pipeworks-image-generator/issues/77)) ([c603f8f](https://github.com/pipe-works/pipeworks-image-generator/commit/c603f8f53c755b12012ca52fdc6d2ad303e76760))
+
 ## [0.13.0](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.12.0...pipeworks-image-generator-v0.13.0) (2026-03-16)
 
 
