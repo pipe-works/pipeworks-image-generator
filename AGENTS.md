@@ -121,13 +121,18 @@ At the time of writing:
 ## Architecture Notes
 
 - `PipeworksConfig` is loaded via Pydantic Settings using `PIPEWORKS_*` environment variables and `.env`.
-- `pipeworks.api.main` resolves config paths at import time and mounts static files immediately.
+- `pipeworks.api.main` is a thin bootstrap that resolves config paths at import
+  time, mounts static files, and registers routers.
+- Route groups live under `src/pipeworks/api/routers/`.
+- Orchestration helpers live under `src/pipeworks/api/services/`.
 - Prompt libraries are split across `static/data/prepend.json`,
   `static/data/main.json`, and `static/data/append.json`, then merged for UI
   selection.
 - Gallery persistence is file-based JSON under `static/data/`, not SQLite.
 - Generated images are stored under `static/gallery/`.
 - The frontend is plain HTML/CSS/JS with no bundler or build step.
+- `src/pipeworks/static/js/app.js` is the composition root; feature logic is
+  split under `src/pipeworks/static/js/app/`.
 - The model manager keeps a single diffusers pipeline in memory at a time.
 
 ## Constraints That Matter
@@ -135,6 +140,13 @@ At the time of writing:
 - Always use `pyenv exec` for repo commands unless there is a strong reason not to.
 - Avoid tests or changes that download real models unless the task explicitly requires it; the normal test suite uses mocks.
 - Turbo models require `guidance_scale=0.0`; do not remove that enforcement casually.
+- Legacy prompt payload v1 (`prepend/prompt/append`) is still supported for one
+  release but is deprecated; keep v2 (`prompt_schema_version=2`) as the target.
+- `prompts.json` fallback is deprecated and scheduled for removal next release;
+  prefer split prompt files in `static/data/`.
+- Legacy `PW_POLICY_*` runtime URL aliases are deprecated and scheduled for
+  removal next release; prefer `PW_POLICY_DEV_MUD_API_BASE_URL` and
+  `PW_POLICY_PROD_MUD_API_BASE_URL`.
 - Be careful with import-time side effects in `config.py` and `api/main.py`;
   path handling and directory creation are part of the app contract.
 - Keep changes consistent with the current stack: FastAPI, Pydantic, pytest, Ruff, Black, and vanilla frontend assets.

@@ -14,8 +14,8 @@ Multi-model AI image generation with a FastAPI REST API and web frontend.
 Pipeworks Image Generator is a Python-based image generation system
 that provides a FastAPI REST API backed by HuggingFace Diffusers
 pipelines, with a vanilla HTML/CSS/JS frontend. It supports multiple
-diffusion models, a three-part prompt composition system with fixed
-boilerplate sections, a JSON-based gallery with favourites, and a
+diffusion models, section-schema prompt composition for Subject/Setting/Details/
+Lighting/Atmosphere, a JSON-based gallery with favourites, and a
 Ledgerfall pamphleteer aesthetic design system.
 
 ### Key Features
@@ -132,6 +132,31 @@ All endpoints are documented in the FastAPI auto-generated docs at `/docs`.
 | DELETE | `/api/gallery/{id}` | Delete image |
 | GET | `/api/stats` | Gallery statistics |
 
+## Deprecations (Removed Next Release)
+
+These compatibility paths remain active in this release and are scheduled for
+removal in the next release:
+
+- v1 prompt payloads (`prepend/prompt/append` schema) still work, but
+  `/api/generate` and `/api/prompt/compile` now return
+  `X-Pipeworks-Deprecation` when the legacy schema is used.
+- `static/data/prompts.json` fallback is still supported, but startup logs a
+  warning when fallback data is consumed.
+- Legacy runtime env aliases still resolve, but startup logs a warning when one
+  of these aliases is selected as effective source:
+  - `PW_POLICY_MUD_API_BASE_URL`
+  - `PW_POLICY_LOCAL_MUD_API_BASE_URL`
+  - `PW_POLICY_REMOTE_DEV_MUD_API_BASE_URL`
+  - `PW_POLICY_REMOTE_PROD_MUD_API_BASE_URL`
+
+Migration target for forward compatibility:
+
+- Prompt requests: send `prompt_schema_version=2`.
+- Prompt libraries: migrate to split files (`prepend.json`, `main.json`,
+  `append.json`) under `static/data/`.
+- Runtime policy URLs: use `PW_POLICY_DEV_MUD_API_BASE_URL` and
+  `PW_POLICY_PROD_MUD_API_BASE_URL`.
+
 ## Architecture
 
 ```text
@@ -140,10 +165,13 @@ src/pipeworks/
 │   ├── config.py          # Pydantic Settings (PIPEWORKS_* env vars)
 │   └── model_manager.py   # Diffusers pipeline lifecycle
 ├── api/                   # FastAPI REST API
-│   ├── main.py            # App, routes, CLI entry point
+│   ├── main.py            # Thin app bootstrap + router registration + CLI
 │   ├── models.py          # Pydantic request models
-│   └── prompt_builder.py  # Three-part prompt compilation
+│   ├── routers/           # Runtime, GPU, generation, prompt, gallery routes
+│   ├── services/          # Prompt/runtime/GPU/generation/zip orchestration
+│   └── prompt_builder.py  # Prompt compilation
 ├── static/                # CSS, JS, fonts, data, gallery images
+│   └── js/app/            # Frontend feature modules (no bundler)
 └── templates/             # index.html
 ```
 
@@ -172,6 +200,13 @@ settings use `PW_POLICY_*` variables. See `.env.example` for the full list.
 | `PW_POLICY_SOURCE_MODE` | `server_dev` | Active snippet source mode (`server_dev`, `server_prod`) |
 | `PW_POLICY_DEV_MUD_API_BASE_URL` | `http://127.0.0.1:8000` | Canonical policy API URL for dev mode |
 | `PW_POLICY_PROD_MUD_API_BASE_URL` | `https://mud-api.example.com` | Canonical policy API URL for prod mode |
+
+Deprecated aliases (still accepted this release, removed next release):
+
+- `PW_POLICY_MUD_API_BASE_URL`
+- `PW_POLICY_LOCAL_MUD_API_BASE_URL`
+- `PW_POLICY_REMOTE_DEV_MUD_API_BASE_URL`
+- `PW_POLICY_REMOTE_PROD_MUD_API_BASE_URL`
 
 Examples:
 
