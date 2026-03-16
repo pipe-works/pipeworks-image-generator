@@ -55,6 +55,7 @@ from __future__ import annotations
 import io
 import json
 import logging
+import os
 import random
 import threading
 import time
@@ -1203,6 +1204,7 @@ def _persist_runtime_gpu_settings(
     }
     GPU_SETTINGS_DB.parent.mkdir(parents=True, exist_ok=True)
     GPU_SETTINGS_DB.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    os.chmod(GPU_SETTINGS_DB, 0o600)
 
 
 def _load_runtime_gpu_settings_from_disk() -> None:
@@ -1211,6 +1213,9 @@ def _load_runtime_gpu_settings_from_disk() -> None:
         return
 
     try:
+        current_mode = GPU_SETTINGS_DB.stat().st_mode & 0o777
+        if current_mode != 0o600:
+            os.chmod(GPU_SETTINGS_DB, 0o600)
         parsed = json.loads(GPU_SETTINGS_DB.read_text(encoding="utf-8"))
         if not isinstance(parsed, dict):
             raise ValueError("GPU settings payload must be an object.")
