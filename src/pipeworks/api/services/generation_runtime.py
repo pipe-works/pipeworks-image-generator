@@ -10,7 +10,6 @@ from typing import TypedDict
 from fastapi import HTTPException
 
 from pipeworks.api.models import GenerateRequest
-from pipeworks.api.services.prompt_resolution import request_uses_section_schema
 from pipeworks.core.config import GpuWorkerConfig, PipeworksConfig
 
 
@@ -190,7 +189,7 @@ class GenerationRuntimeService:
             "model_id": req.model_id,
             "model_label": model_cfg["label"],
             "compiled_prompt": compiled_prompt,
-            "prompt_schema_version": 2 if request_uses_section_schema(req) else 1,
+            "prompt_schema_version": 2,
             "prepend_prompt_id": req.prepend_prompt_id,
             "prompt_mode": req.prompt_mode,
             "manual_prompt": req.manual_prompt,

@@ -1,4 +1,4 @@
-"""Prompt catalog loading helpers and legacy fallback support."""
+"""Prompt catalog loading helpers."""
 
 from __future__ import annotations
 
@@ -6,10 +6,6 @@ import json
 import logging
 from pathlib import Path
 
-from pipeworks.api.services.deprecations import (
-    LEGACY_PROMPTS_JSON_FALLBACK_WARNING,
-    warn_once,
-)
 from pipeworks.core.model_manager import get_model_runtime_support
 
 logger = logging.getLogger(__name__)
@@ -28,23 +24,15 @@ def load_json(path: Path, default):
 
 def _load_prompt_list(
     path: Path,
-    *,
-    legacy_prompts: dict,
-    legacy_key: str,
-) -> tuple[list[dict], bool]:
-    """Load one prompt-library file with optional legacy fallback support."""
+) -> list[dict]:
+    """Load one prompt-library file from split prompt sources."""
     data = load_json(path, None)
 
     prompts: list[dict] = []
-    used_legacy_fallback = False
     if isinstance(data, list):
         prompts = data
     elif isinstance(data, dict):
         prompts = data.get("prompts", [])
-
-    if not prompts:
-        prompts = legacy_prompts.get(legacy_key, [])
-        used_legacy_fallback = bool(prompts)
 
     normalized: list[dict] = []
     for prompt in prompts:
@@ -54,7 +42,7 @@ def _load_prompt_list(
         item.setdefault("source_section", path.stem)
         normalized.append(item)
 
-    return normalized, used_legacy_fallback
+    return normalized
 
 
 def _merge_prompt_lists(*prompt_lists: list[dict]) -> list[dict]:
@@ -92,30 +80,9 @@ def annotate_models_with_runtime_support(models: list[dict]) -> list[dict]:
 
 def load_prompt_catalog(*, data_dir: Path) -> dict:
     """Load split prompt files and merged selector catalog."""
-    legacy_prompts = load_json(data_dir / "prompts.json", {})
-
-    prepend_library, prepend_legacy = _load_prompt_list(
-        data_dir / "prepend.json",
-        legacy_prompts=legacy_prompts,
-        legacy_key="prepend_prompts",
-    )
-    main_library, main_legacy = _load_prompt_list(
-        data_dir / "main.json",
-        legacy_prompts=legacy_prompts,
-        legacy_key="automated_prompts",
-    )
-    append_library, append_legacy = _load_prompt_list(
-        data_dir / "append.json",
-        legacy_prompts=legacy_prompts,
-        legacy_key="append_prompts",
-    )
-
-    if prepend_legacy or main_legacy or append_legacy:
-        warn_once(
-            logger=logger,
-            key="legacy-prompts-json-fallback",
-            message=LEGACY_PROMPTS_JSON_FALLBACK_WARNING,
-        )
+    prepend_library = _load_prompt_list(data_dir / "prepend.json")
+    main_library = _load_prompt_list(data_dir / "main.json")
+    append_library = _load_prompt_list(data_dir / "append.json")
 
     merged_prompts = _merge_prompt_lists(prepend_library, main_library, append_library)
 

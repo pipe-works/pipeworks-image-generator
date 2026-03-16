@@ -8,29 +8,22 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
 
 from pipeworks.api.gallery_store import load_gallery_entries, save_gallery_entries
 from pipeworks.api.models import CancelGenerationRequest, GenerateRequest
 from pipeworks.api.prompt_builder import (
-    build_prompt,
     build_structured_prompt,
     expand_prompt_placeholders,
-    resolve_prompt_variants,
     resolve_structured_prompt_variants,
 )
 from pipeworks.api.routers.gpu_worker import WORKER_CANCEL_PATH, WORKER_GENERATE_BATCH_PATH
-from pipeworks.api.services.deprecations import (
-    LEGACY_PROMPT_SCHEMA_DEPRECATION_HEADER,
-    LEGACY_PROMPT_SCHEMA_DEPRECATION_VALUE,
-)
 from pipeworks.api.services.generation_runtime import GenerationJob, GenerationRuntimeService
 from pipeworks.api.services.gpu_workers import GpuWorkerService
 from pipeworks.api.services.prompt_catalog import load_json, load_prompt_catalog
 from pipeworks.api.services.prompt_resolution import (
-    request_uses_section_schema,
-    resolve_prompt_parts,
+    ensure_prompt_schema_v2,
     resolve_structured_prompt_sections,
 )
 from pipeworks.api.services.runtime_policy import RuntimePolicyService
@@ -58,12 +51,14 @@ def create_generation_router(deps: GenerationRouterDependencies) -> APIRouter:
     router = APIRouter()
 
     @router.post("/api/generate")
-    async def generate_images(req: GenerateRequest, request: Request, response: Response) -> dict:
+    async def generate_images(req: GenerateRequest, request: Request) -> dict:
         if req.batch_size < 1 or req.batch_size > deps.max_batch_size:
             raise HTTPException(
                 status_code=400,
                 detail=f"batch_size must be between 1 and {deps.max_batch_size}",
             )
+
+        ensure_prompt_schema_v2(req)
 
         target_worker = deps.gpu_worker_service.resolve_gpu_worker_or_400(req.gpu_worker_id)
         generation_id = req.generation_id
@@ -104,37 +99,17 @@ def create_generation_router(deps: GenerationRouterDependencies) -> APIRouter:
                     detail=unavailable_reason,
                 )
 
-        use_section_schema = request_uses_section_schema(req)
-        if not use_section_schema:
-            response.headers[LEGACY_PROMPT_SCHEMA_DEPRECATION_HEADER] = (
-                LEGACY_PROMPT_SCHEMA_DEPRECATION_VALUE
-            )
-
-        policy_prompt_options: list[dict] = []
-        if use_section_schema:
-            policy_prompt_options, _, _ = (
-                deps.runtime_policy_service.load_policy_prompts_for_request(
-                    request=request,
-                    response=None,
-                    explicit_session_id=None,
-                    normalize_base_url=deps.normalize_base_url,
-                )
-            )
-
-        raw_sections = (
-            resolve_structured_prompt_sections(
-                req,
-                prompts,
-                policy_options=policy_prompt_options,
-                strict=True,
-            )
-            if use_section_schema
-            else {}
+        policy_prompt_options, _, _ = deps.runtime_policy_service.load_policy_prompts_for_request(
+            request=request,
+            response=None,
+            explicit_session_id=None,
+            normalize_base_url=deps.normalize_base_url,
         )
-        raw_prepend_value, raw_main_scene, raw_append_value = (
-            resolve_prompt_parts(req, prompts, strict=True)
-            if not use_section_schema
-            else ("", "", "")
+        raw_sections = resolve_structured_prompt_sections(
+            req,
+            prompts,
+            policy_options=policy_prompt_options,
+            strict=True,
         )
         raw_negative_prompt = (req.negative_prompt or "").strip()
 
@@ -143,26 +118,11 @@ def create_generation_router(deps: GenerationRouterDependencies) -> APIRouter:
         jobs: list[GenerationJob] = []
         for index in range(req.batch_size):
             image_seed = base_seed + index
-            if use_section_schema:
-                section_values = resolve_structured_prompt_variants(raw_sections)
-                compiled_prompt = build_structured_prompt(
-                    section_values,
-                    expand_placeholders=False,
-                )
-            else:
-                prepend_value, main_scene, append_value = resolve_prompt_variants(
-                    raw_prepend_value,
-                    raw_main_scene,
-                    raw_append_value,
-                )
-                compiled_prompt = build_prompt(
-                    prepend_value,
-                    main_scene,
-                    append_value,
-                    prepend_mode=req.prepend_mode,
-                    append_mode=req.append_mode,
-                    expand_placeholders=False,
-                )
+            section_values = resolve_structured_prompt_variants(raw_sections)
+            compiled_prompt = build_structured_prompt(
+                section_values,
+                expand_placeholders=False,
+            )
             negative_prompt = (
                 expand_prompt_placeholders(raw_negative_prompt) if raw_negative_prompt else None
             )

@@ -26,11 +26,6 @@ from base64 import b64encode
 from io import BytesIO
 from unittest.mock import patch
 
-from pipeworks.api.services.deprecations import (
-    LEGACY_PROMPT_SCHEMA_DEPRECATION_HEADER,
-    LEGACY_PROMPT_SCHEMA_DEPRECATION_VALUE,
-)
-
 
 class SequenceRandom:
     """Minimal deterministic RNG stub for placeholder integration tests."""
@@ -453,9 +448,17 @@ class TestGenerate:
         """
         payload = {
             "model_id": "z-image-turbo",
-            "prepend_prompt_id": "none",
-            "prompt_mode": "manual",
-            "manual_prompt": "A goblin workshop.",
+            "prompt_schema_version": 2,
+            "subject_mode": "manual",
+            "manual_subject": "A goblin workshop.",
+            "setting_mode": "manual",
+            "manual_setting": "",
+            "details_mode": "manual",
+            "manual_details": "",
+            "lighting_mode": "manual",
+            "manual_lighting": "",
+            "atmosphere_mode": "manual",
+            "manual_atmosphere": "",
             "aspect_ratio_id": "1:1",
             "width": 1024,
             "height": 1024,
@@ -596,9 +599,17 @@ class TestGenerate:
                 "/api/generate",
                 json={
                     "model_id": "flux-2-klein-4b",
-                    "prepend_prompt_id": "none",
-                    "prompt_mode": "manual",
-                    "manual_prompt": "A test scene.",
+                    "prompt_schema_version": 2,
+                    "subject_mode": "manual",
+                    "manual_subject": "A test scene.",
+                    "setting_mode": "manual",
+                    "manual_setting": "",
+                    "details_mode": "manual",
+                    "manual_details": "",
+                    "lighting_mode": "manual",
+                    "manual_lighting": "",
+                    "atmosphere_mode": "manual",
+                    "manual_atmosphere": "",
                     "aspect_ratio_id": "1:1",
                     "width": 1024,
                     "height": 1024,
@@ -610,52 +621,59 @@ class TestGenerate:
         assert resp.status_code == 503
         assert "Flux2KleinPipeline" in resp.json()["detail"]
 
-    def test_generate_manual_missing_prompt(self, test_client):
-        """Manual mode without a prompt should still generate successfully."""
+    def test_generate_manual_missing_subject(self, test_client):
+        """Manual mode without Subject text should still generate successfully."""
         resp = test_client.post(
             "/api/generate",
             json=self._make_generate_payload(
-                prompt_mode="manual",
-                manual_prompt="",
+                manual_subject="",
             ),
         )
         assert resp.status_code == 200
         assert resp.json()["success"] is True
 
-    def test_generate_automated_mode(self, test_client):
-        """Automated mode with a valid preset should succeed."""
+    def test_generate_automated_subject_mode(self, test_client):
+        """Automated Subject mode with a valid preset should succeed."""
         resp = test_client.post(
             "/api/generate",
             json=self._make_generate_payload(
-                prompt_mode="automated",
-                automated_prompt_id="goblin-workshop",
-                manual_prompt=None,
+                subject_mode="automated",
+                automated_subject_prompt_id="goblin-workshop",
+                manual_subject=None,
             ),
         )
         assert resp.status_code == 200
         data = resp.json()
         assert data["success"] is True
 
-    def test_generate_automated_missing_id(self, test_client):
-        """Automated mode without automated_prompt_id should still succeed."""
+    def test_generate_automated_subject_missing_id(self, test_client):
+        """Automated Subject mode without preset id should still succeed."""
         resp = test_client.post(
             "/api/generate",
             json=self._make_generate_payload(
-                prompt_mode="automated",
-                automated_prompt_id=None,
+                subject_mode="automated",
+                automated_subject_prompt_id=None,
             ),
         )
         assert resp.status_code == 200
         assert resp.json()["success"] is True
 
-    def test_generate_invalid_prompt_mode(self, test_client):
-        """An invalid prompt_mode should return 400."""
-        resp = test_client.post(
-            "/api/generate",
-            json=self._make_generate_payload(prompt_mode="invalid"),
-        )
+    def test_generate_requires_prompt_schema_v2(self, test_client):
+        """Legacy v1 payload path should now be rejected."""
+        legacy_payload = {
+            "model_id": "z-image-turbo",
+            "prompt_mode": "manual",
+            "manual_prompt": "A legacy scene.",
+            "aspect_ratio_id": "1:1",
+            "width": 1024,
+            "height": 1024,
+            "steps": 4,
+            "guidance": 0.0,
+            "batch_size": 1,
+        }
+        resp = test_client.post("/api/generate", json=legacy_payload)
         assert resp.status_code == 400
-        assert "prompt_mode" in resp.json()["detail"]
+        assert "prompt_schema_version=2" in resp.json()["detail"]
 
     def test_generate_invalid_batch_size_zero(self, test_client):
         """batch_size of 0 should return 400."""
@@ -681,72 +699,79 @@ class TestGenerate:
         )
         assert resp.status_code == 200
 
-    def test_generate_with_prepend_prompt(self, test_client):
-        """A valid prepend_prompt_id should be resolved into the compiled prompt."""
+    def test_generate_with_automated_subject_prompt(self, test_client):
+        """A valid automated_subject_prompt_id should resolve into compiled prompt."""
         resp = test_client.post(
             "/api/generate",
-            json=self._make_generate_payload(prepend_prompt_id="oil-painting"),
-        )
-        assert resp.status_code == 200
-        data = resp.json()
-        # The compiled prompt should contain the oil painting style text.
-        assert "oil painting" in data["compiled_prompt"].lower()
-
-    def test_generate_prepend_can_use_main_library_prompt(self, test_client):
-        """Prepend should accept a prompt sourced from main.json."""
-        resp = test_client.post(
-            "/api/generate",
-            json=self._make_generate_payload(prepend_prompt_id="goblin-workshop"),
+            json=self._make_generate_payload(
+                subject_mode="automated",
+                automated_subject_prompt_id="goblin-workshop",
+                manual_subject=None,
+            ),
         )
         assert resp.status_code == 200
         data = resp.json()
         assert "clockwork automaton" in data["compiled_prompt"].lower()
 
-    def test_generate_with_append_prompt(self, test_client):
-        """A valid append_prompt_id should be resolved into the compiled prompt."""
-        resp = test_client.post(
-            "/api/generate",
-            json=self._make_generate_payload(append_prompt_id="high-detail"),
-        )
-        assert resp.status_code == 200
-        data = resp.json()
-        assert "8K" in data["compiled_prompt"]
-
-    def test_generate_manual_prepend(self, test_client):
-        """Manual prepend mode should use the free-text prepend value."""
+    def test_generate_automated_subject_can_use_append_library_prompt(self, test_client):
+        """Subject automation should accept a prompt sourced from append.json."""
         resp = test_client.post(
             "/api/generate",
             json=self._make_generate_payload(
-                prepend_mode="manual",
-                manual_prepend="Watercolour painting style.",
+                subject_mode="automated",
+                automated_subject_prompt_id="high-detail",
+                manual_subject=None,
+            ),
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "award-winning quality" in data["compiled_prompt"].lower()
+
+    def test_generate_with_automated_details_prompt(self, test_client):
+        """A valid automated_details_prompt_id should resolve into compiled prompt."""
+        resp = test_client.post(
+            "/api/generate",
+            json=self._make_generate_payload(
+                details_mode="automated",
+                automated_details_prompt_id="high-detail",
+                manual_details=None,
+            ),
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "award-winning quality" in data["compiled_prompt"].lower()
+
+    def test_generate_manual_setting(self, test_client):
+        """Manual Setting text should appear in compiled prompt."""
+        resp = test_client.post(
+            "/api/generate",
+            json=self._make_generate_payload(
+                manual_setting="Watercolour painting style.",
             ),
         )
         assert resp.status_code == 200
         data = resp.json()
         assert "Watercolour painting style." in data["compiled_prompt"]
 
-    def test_generate_manual_append(self, test_client):
-        """Manual append mode should use the free-text append value."""
+    def test_generate_manual_atmosphere(self, test_client):
+        """Manual Atmosphere text should appear in compiled prompt."""
         resp = test_client.post(
             "/api/generate",
             json=self._make_generate_payload(
-                append_mode="manual",
-                manual_append="Cinematic lighting, dramatic shadows.",
+                manual_atmosphere="Cinematic lighting, dramatic shadows.",
             ),
         )
         assert resp.status_code == 200
         data = resp.json()
         assert "Cinematic lighting, dramatic shadows." in data["compiled_prompt"]
 
-    def test_generate_manual_prepend_and_append(self, test_client):
-        """Both manual prepend and append should appear in the compiled prompt."""
+    def test_generate_manual_setting_and_details(self, test_client):
+        """Multiple manual section values should appear in compiled prompt."""
         resp = test_client.post(
             "/api/generate",
             json=self._make_generate_payload(
-                prepend_mode="manual",
-                manual_prepend="Ink sketch style.",
-                append_mode="manual",
-                manual_append="High contrast.",
+                manual_setting="Ink sketch style.",
+                manual_details="High contrast.",
             ),
         )
         assert resp.status_code == 200
@@ -774,30 +799,8 @@ class TestGenerate:
         data = resp.json()
         assert data["images"][0]["scheduler"] is None
 
-    def test_generate_template_mode_backward_compat(self, test_client):
-        """Default template mode (no prepend_mode/append_mode) should still work."""
-        resp = test_client.post(
-            "/api/generate",
-            json=self._make_generate_payload(
-                prepend_prompt_id="oil-painting",
-                append_prompt_id="high-detail",
-            ),
-        )
-        assert resp.status_code == 200
-        data = resp.json()
-        assert "oil painting" in data["compiled_prompt"].lower()
-        assert "8K" in data["compiled_prompt"]
-
-    def test_generate_v1_prompt_schema_sets_deprecation_header(self, test_client):
-        """Legacy prompt payloads should include deterministic deprecation header."""
-        resp = test_client.post("/api/generate", json=self._make_generate_payload())
-        assert resp.status_code == 200
-        assert resp.headers.get(LEGACY_PROMPT_SCHEMA_DEPRECATION_HEADER) == (
-            LEGACY_PROMPT_SCHEMA_DEPRECATION_VALUE
-        )
-
-    def test_generate_v2_prompt_schema_does_not_set_deprecation_header(self, test_client):
-        """Section-schema payloads should not include legacy deprecation header."""
+    def test_generate_v2_prompt_schema_success(self, test_client):
+        """Section-schema payloads should still generate successfully."""
         resp = test_client.post(
             "/api/generate",
             json={
@@ -822,7 +825,7 @@ class TestGenerate:
             },
         )
         assert resp.status_code == 200
-        assert LEGACY_PROMPT_SCHEMA_DEPRECATION_HEADER not in resp.headers
+        assert resp.json()["success"] is True
 
     def test_generate_batch_reexpands_placeholders_for_each_image(
         self,
@@ -837,8 +840,7 @@ class TestGenerate:
             resp = test_client.post(
                 "/api/generate",
                 json=self._make_generate_payload(
-                    prompt_mode="manual",
-                    manual_prompt="A {red|blue|green} automaton.",
+                    manual_subject="A {red|blue|green} automaton.",
                     batch_size=3,
                     seed=100,
                 ),
@@ -1098,15 +1100,37 @@ class TestWorkerEndpoints:
 class TestPromptCompile:
     """Test POST /api/prompt/compile — prompt preview."""
 
-    def test_compile_manual_prompt(self, test_client):
-        """Manual prompt should compile with boilerplate sections."""
+    def _make_compile_payload(self, **overrides) -> dict:
+        payload = {
+            "model_id": "z-image-turbo",
+            "prompt_schema_version": 2,
+            "subject_mode": "manual",
+            "manual_subject": "A test scene.",
+            "setting_mode": "manual",
+            "manual_setting": "",
+            "details_mode": "manual",
+            "manual_details": "",
+            "lighting_mode": "manual",
+            "manual_lighting": "",
+            "atmosphere_mode": "manual",
+            "manual_atmosphere": "",
+            "aspect_ratio_id": "1:1",
+            "width": 1024,
+            "height": 1024,
+            "steps": 4,
+            "guidance": 0.0,
+        }
+        payload.update(overrides)
+        return payload
+
+    def test_compile_requires_prompt_schema_v2(self, test_client):
+        """Legacy compile payloads should now be rejected."""
         resp = test_client.post(
             "/api/prompt/compile",
             json={
                 "model_id": "z-image-turbo",
-                "prepend_prompt_id": "none",
                 "prompt_mode": "manual",
-                "manual_prompt": "A test scene.",
+                "manual_prompt": "A legacy scene.",
                 "aspect_ratio_id": "1:1",
                 "width": 1024,
                 "height": 1024,
@@ -1114,40 +1138,20 @@ class TestPromptCompile:
                 "guidance": 0.0,
             },
         )
-        assert resp.status_code == 200
-        data = resp.json()
-        assert "compiled_prompt" in data
-        assert data["token_counts"]["method"] == "tokenizer"
-        assert data["token_counts"]["total"] > 0
-        assert "A test scene." in data["compiled_prompt"]
-        assert "Main Scene:" in data["compiled_prompt"]
-        assert resp.headers.get(LEGACY_PROMPT_SCHEMA_DEPRECATION_HEADER) == (
-            LEGACY_PROMPT_SCHEMA_DEPRECATION_VALUE
-        )
+        assert resp.status_code == 400
+        assert "prompt_schema_version=2" in resp.json()["detail"]
 
     def test_compile_structured_sections_prompt(self, test_client):
         """Section-schema prompt compile should include all labeled sections."""
         resp = test_client.post(
             "/api/prompt/compile",
-            json={
-                "model_id": "z-image-turbo",
-                "prompt_schema_version": 2,
-                "subject_mode": "manual",
-                "manual_subject": "A goblin machinist portrait.",
-                "setting_mode": "manual",
-                "manual_setting": "Inside a cramped brass workshop.",
-                "details_mode": "manual",
-                "manual_details": "Clockwork tools and grease marks.",
-                "lighting_mode": "manual",
-                "manual_lighting": "Soft overhead lantern light.",
-                "atmosphere_mode": "manual",
-                "manual_atmosphere": "Quiet and methodical mood.",
-                "aspect_ratio_id": "1:1",
-                "width": 1024,
-                "height": 1024,
-                "steps": 4,
-                "guidance": 0.0,
-            },
+            json=self._make_compile_payload(
+                manual_subject="A goblin machinist portrait.",
+                manual_setting="Inside a cramped brass workshop.",
+                manual_details="Clockwork tools and grease marks.",
+                manual_lighting="Soft overhead lantern light.",
+                manual_atmosphere="Quiet and methodical mood.",
+            ),
         )
         assert resp.status_code == 200
         data = resp.json()
@@ -1162,34 +1166,25 @@ class TestPromptCompile:
         assert data["token_counts"]["details"] > 0
         assert data["token_counts"]["lighting"] > 0
         assert data["token_counts"]["atmosphere"] > 0
-        assert LEGACY_PROMPT_SCHEMA_DEPRECATION_HEADER not in resp.headers
 
     def test_compile_returns_flux2_token_counts(self, test_client):
         """Prompt preview should return token counts for FLUX.2-klein-4B as well."""
         resp = test_client.post(
             "/api/prompt/compile",
-            json={
-                "model_id": "flux-2-klein-4b",
-                "prepend_mode": "manual",
-                "manual_prepend": "Ink wash style.",
-                "prompt_mode": "manual",
-                "manual_prompt": "A moonlit machine garden.",
-                "append_mode": "manual",
-                "manual_append": "Soft bloom.",
-                "aspect_ratio_id": "1:1",
-                "width": 1024,
-                "height": 1024,
-                "steps": 28,
-                "guidance": 4.0,
-            },
+            json=self._make_compile_payload(
+                model_id="flux-2-klein-4b",
+                manual_subject="A moonlit machine garden.",
+                manual_details="Ink wash style and soft bloom.",
+                steps=28,
+                guidance=4.0,
+            ),
         )
         assert resp.status_code == 200
         data = resp.json()
         assert data["token_counts"]["method"] == "tokenizer"
-        assert data["token_counts"]["prepend"] > 0
-        assert data["token_counts"]["main"] > 0
-        assert data["token_counts"]["append"] > 0
-        assert data["token_counts"]["total"] >= data["token_counts"]["main"]
+        assert data["token_counts"]["subject"] > 0
+        assert data["token_counts"]["details"] > 0
+        assert data["token_counts"]["total"] >= data["token_counts"]["subject"]
 
     def test_compile_expands_placeholders_once_per_request(self, test_client):
         """Prompt preview should expand placeholder groups in the response text."""
@@ -1199,18 +1194,10 @@ class TestPromptCompile:
         ):
             resp = test_client.post(
                 "/api/prompt/compile",
-                json={
-                    "model_id": "z-image-turbo",
-                    "prompt_mode": "manual",
-                    "manual_prompt": "A {red|blue} automaton.",
-                    "append_mode": "manual",
-                    "manual_append": "Wrapped in {smoke|fog}.",
-                    "aspect_ratio_id": "1:1",
-                    "width": 1024,
-                    "height": 1024,
-                    "steps": 4,
-                    "guidance": 0.0,
-                },
+                json=self._make_compile_payload(
+                    manual_subject="A {red|blue} automaton.",
+                    manual_atmosphere="Wrapped in {smoke|fog}.",
+                ),
             )
 
         assert resp.status_code == 200
@@ -1218,152 +1205,72 @@ class TestPromptCompile:
         assert "A blue automaton." in data["compiled_prompt"]
         assert "Wrapped in fog." in data["compiled_prompt"]
 
-    def test_compile_blank_manual_prompt_omits_main_scene_header(self, test_client):
-        """Blank manual scene text should not emit an empty Main Scene section."""
+    def test_compile_blank_manual_subject_omits_subject_header(self, test_client):
+        """Blank Subject text should not emit an empty Subject section."""
         resp = test_client.post(
             "/api/prompt/compile",
-            json={
-                "model_id": "z-image-turbo",
-                "prepend_prompt_id": "none",
-                "prompt_mode": "manual",
-                "manual_prompt": "",
-                "aspect_ratio_id": "1:1",
-                "width": 1024,
-                "height": 1024,
-                "steps": 4,
-                "guidance": 0.0,
-            },
+            json=self._make_compile_payload(manual_subject=""),
         )
         assert resp.status_code == 200
         data = resp.json()
-        assert "Main Scene:" not in data["compiled_prompt"]
+        assert "Subject:" not in data["compiled_prompt"]
 
-    def test_compile_automated_prompt(self, test_client):
-        """Automated prompt should resolve the preset value."""
+    def test_compile_automated_subject_prompt(self, test_client):
+        """Automated Subject should resolve preset value."""
         resp = test_client.post(
             "/api/prompt/compile",
-            json={
-                "model_id": "z-image-turbo",
-                "prepend_prompt_id": "none",
-                "prompt_mode": "automated",
-                "automated_prompt_id": "goblin-workshop",
-                "aspect_ratio_id": "1:1",
-                "width": 1024,
-                "height": 1024,
-                "steps": 4,
-                "guidance": 0.0,
-            },
+            json=self._make_compile_payload(
+                subject_mode="automated",
+                automated_subject_prompt_id="goblin-workshop",
+                manual_subject=None,
+            ),
         )
         assert resp.status_code == 200
         data = resp.json()
         assert "goblin" in data["compiled_prompt"].lower()
 
-    def test_compile_automated_can_use_append_library_prompt(self, test_client):
-        """Main scene should accept a prompt sourced from append.json."""
+    def test_compile_automated_details_can_use_append_library_prompt(self, test_client):
+        """Section automation should accept prompts sourced from append.json."""
         resp = test_client.post(
             "/api/prompt/compile",
-            json={
-                "model_id": "z-image-turbo",
-                "prepend_prompt_id": "none",
-                "prompt_mode": "automated",
-                "automated_prompt_id": "high-detail",
-                "aspect_ratio_id": "1:1",
-                "width": 1024,
-                "height": 1024,
-                "steps": 4,
-                "guidance": 0.0,
-            },
+            json=self._make_compile_payload(
+                details_mode="automated",
+                automated_details_prompt_id="high-detail",
+                manual_details=None,
+            ),
         )
         assert resp.status_code == 200
         data = resp.json()
         assert "award-winning quality" in data["compiled_prompt"].lower()
 
-    def test_compile_automated_none_omits_scene(self, test_client):
-        """Automated mode should allow the scene preset to be omitted."""
+    def test_compile_automated_none_omits_subject(self, test_client):
+        """Automated Subject mode should allow preset omission."""
         resp = test_client.post(
             "/api/prompt/compile",
-            json={
-                "model_id": "z-image-turbo",
-                "prepend_prompt_id": "none",
-                "prompt_mode": "automated",
-                "automated_prompt_id": "none",
-                "aspect_ratio_id": "1:1",
-                "width": 1024,
-                "height": 1024,
-                "steps": 4,
-                "guidance": 0.0,
-            },
+            json=self._make_compile_payload(
+                subject_mode="automated",
+                automated_subject_prompt_id="none",
+                manual_subject=None,
+            ),
         )
         assert resp.status_code == 200
         data = resp.json()
-        assert "Main Scene:" not in data["compiled_prompt"]
+        assert "Subject:" not in data["compiled_prompt"]
 
-    def test_compile_manual_prepend(self, test_client):
-        """Manual prepend mode should include free-text prepend in compiled prompt."""
+    def test_compile_manual_multiple_sections(self, test_client):
+        """Multiple manual section values should appear in compiled prompt."""
         resp = test_client.post(
             "/api/prompt/compile",
-            json={
-                "model_id": "z-image-turbo",
-                "prepend_mode": "manual",
-                "manual_prepend": "Pencil sketch style.",
-                "prompt_mode": "manual",
-                "manual_prompt": "A castle.",
-                "aspect_ratio_id": "1:1",
-                "width": 1024,
-                "height": 1024,
-                "steps": 4,
-                "guidance": 0.0,
-            },
+            json=self._make_compile_payload(
+                manual_subject="A dragon.",
+                manual_setting="Woodcut engraving.",
+                manual_atmosphere="Dramatic shadows.",
+            ),
         )
         assert resp.status_code == 200
         data = resp.json()
-        assert "Pencil sketch style." in data["compiled_prompt"]
-        assert "A castle." in data["compiled_prompt"]
-
-    def test_compile_manual_append(self, test_client):
-        """Manual append mode should include free-text append in compiled prompt."""
-        resp = test_client.post(
-            "/api/prompt/compile",
-            json={
-                "model_id": "z-image-turbo",
-                "prompt_mode": "manual",
-                "manual_prompt": "A castle.",
-                "append_mode": "manual",
-                "manual_append": "Vibrant colours.",
-                "aspect_ratio_id": "1:1",
-                "width": 1024,
-                "height": 1024,
-                "steps": 4,
-                "guidance": 0.0,
-            },
-        )
-        assert resp.status_code == 200
-        data = resp.json()
-        assert "Vibrant colours." in data["compiled_prompt"]
-
-    def test_compile_manual_prepend_and_append(self, test_client):
-        """Both manual prepend and append should appear in compiled prompt."""
-        resp = test_client.post(
-            "/api/prompt/compile",
-            json={
-                "model_id": "z-image-turbo",
-                "prepend_mode": "manual",
-                "manual_prepend": "Woodcut engraving.",
-                "prompt_mode": "manual",
-                "manual_prompt": "A dragon.",
-                "append_mode": "manual",
-                "manual_append": "Dramatic shadows.",
-                "aspect_ratio_id": "1:1",
-                "width": 1024,
-                "height": 1024,
-                "steps": 4,
-                "guidance": 0.0,
-            },
-        )
-        assert resp.status_code == 200
-        data = resp.json()
-        assert "Woodcut engraving." in data["compiled_prompt"]
         assert "A dragon." in data["compiled_prompt"]
+        assert "Woodcut engraving." in data["compiled_prompt"]
         assert "Dramatic shadows." in data["compiled_prompt"]
 
 
@@ -1390,9 +1297,17 @@ class TestGallery:
             "/api/generate",
             json={
                 "model_id": "z-image-turbo",
-                "prepend_prompt_id": "none",
-                "prompt_mode": "manual",
-                "manual_prompt": "test",
+                "prompt_schema_version": 2,
+                "subject_mode": "manual",
+                "manual_subject": "test",
+                "setting_mode": "manual",
+                "manual_setting": "",
+                "details_mode": "manual",
+                "manual_details": "",
+                "lighting_mode": "manual",
+                "manual_lighting": "",
+                "atmosphere_mode": "manual",
+                "manual_atmosphere": "",
                 "aspect_ratio_id": "1:1",
                 "width": 1024,
                 "height": 1024,
