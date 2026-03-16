@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.0](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.12.0...pipeworks-image-generator-v0.13.0) (2026-03-16)
+
+
+### Features
+
+* **runtime:** load snippets from canonical policy APIs ([#75](https://github.com/pipe-works/pipeworks-image-generator/issues/75)) ([8c8543f](https://github.com/pipe-works/pipeworks-image-generator/commit/8c8543fccbd0364be609c42fab1bd7e9ef43f1cd))
+
 ## [0.12.0](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.11.0...pipeworks-image-generator-v0.12.0) (2026-03-09)
 
 
