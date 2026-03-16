@@ -140,13 +140,11 @@ At the time of writing:
 - Always use `pyenv exec` for repo commands unless there is a strong reason not to.
 - Avoid tests or changes that download real models unless the task explicitly requires it; the normal test suite uses mocks.
 - Turbo models require `guidance_scale=0.0`; do not remove that enforcement casually.
-- Legacy prompt payload v1 (`prepend/prompt/append`) is still supported for one
-  release but is deprecated; keep v2 (`prompt_schema_version=2`) as the target.
-- `prompts.json` fallback is deprecated and scheduled for removal next release;
-  prefer split prompt files in `static/data/`.
-- Legacy `PW_POLICY_*` runtime URL aliases are deprecated and scheduled for
-  removal next release; prefer `PW_POLICY_DEV_MUD_API_BASE_URL` and
-  `PW_POLICY_PROD_MUD_API_BASE_URL`.
+- Prompt APIs now require v2 payloads (`prompt_schema_version=2`).
+- Prompt catalog loading uses split files only (`prepend.json`, `main.json`,
+  `append.json`).
+- Runtime URL resolution uses canonical env vars only:
+  `PW_POLICY_DEV_MUD_API_BASE_URL` and `PW_POLICY_PROD_MUD_API_BASE_URL`.
 - Be careful with import-time side effects in `config.py` and `api/main.py`;
   path handling and directory creation are part of the app contract.
 - Keep changes consistent with the current stack: FastAPI, Pydantic, pytest, Ruff, Black, and vanilla frontend assets.

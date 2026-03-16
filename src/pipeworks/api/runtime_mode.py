@@ -7,16 +7,10 @@ can choose which canonical API host backs snippet dropdown loading:
 
 from __future__ import annotations
 
-import logging
 import os
 from dataclasses import dataclass
 from threading import RLock
 from urllib.parse import urlparse
-
-from pipeworks.api.services.deprecations import (
-    LEGACY_POLICY_ENV_ALIAS_WARNING_TEMPLATE,
-    warn_once,
-)
 
 _MODE_SERVER_DEV = "server_dev"
 _MODE_SERVER_PROD = "server_prod"
@@ -24,17 +18,11 @@ _MODE_SERVER_PROD = "server_prod"
 _SOURCE_SERVER_API = "server_api"
 
 _SOURCE_MODE_ENV = "PW_POLICY_SOURCE_MODE"
-_LEGACY_BASE_URL_ENV = "PW_POLICY_MUD_API_BASE_URL"
 _DEV_BASE_URL_ENV = "PW_POLICY_DEV_MUD_API_BASE_URL"
 _PROD_BASE_URL_ENV = "PW_POLICY_PROD_MUD_API_BASE_URL"
-_LOCAL_BASE_URL_ENV = "PW_POLICY_LOCAL_MUD_API_BASE_URL"
-_REMOTE_DEV_BASE_URL_ENV = "PW_POLICY_REMOTE_DEV_MUD_API_BASE_URL"
-_REMOTE_PROD_BASE_URL_ENV = "PW_POLICY_REMOTE_PROD_MUD_API_BASE_URL"
 
 _DEFAULT_DEV_BASE_URL = "http://127.0.0.1:8000"
 _DEFAULT_PROD_BASE_URL = "https://api.pipe-works.org"
-
-logger = logging.getLogger(__name__)
 
 
 class RuntimeModeUnavailableError(RuntimeError):
@@ -119,47 +107,11 @@ def require_server_api_url() -> str:
 
 def _build_options() -> tuple[RuntimeModeOption, ...]:
     """Build deterministic runtime mode options from environment defaults."""
-    dev_candidates = (
-        (_DEV_BASE_URL_ENV, os.getenv(_DEV_BASE_URL_ENV)),
-        (_REMOTE_DEV_BASE_URL_ENV, os.getenv(_REMOTE_DEV_BASE_URL_ENV)),
-        (_LOCAL_BASE_URL_ENV, os.getenv(_LOCAL_BASE_URL_ENV)),
-        (_LEGACY_BASE_URL_ENV, os.getenv(_LEGACY_BASE_URL_ENV)),
-    )
-    prod_candidates = (
-        (_PROD_BASE_URL_ENV, os.getenv(_PROD_BASE_URL_ENV)),
-        (_REMOTE_PROD_BASE_URL_ENV, os.getenv(_REMOTE_PROD_BASE_URL_ENV)),
-    )
-
-    dev_selected_env = None
-    dev_raw_value = None
-    for env_name, raw_value in dev_candidates:
-        if raw_value:
-            dev_selected_env = env_name
-            dev_raw_value = raw_value
-            break
-    prod_selected_env = None
-    prod_raw_value = None
-    for env_name, raw_value in prod_candidates:
-        if raw_value:
-            prod_selected_env = env_name
-            prod_raw_value = raw_value
-            break
+    dev_raw_value = os.getenv(_DEV_BASE_URL_ENV)
+    prod_raw_value = os.getenv(_PROD_BASE_URL_ENV)
 
     dev_default = _normalize_server_url(dev_raw_value or _DEFAULT_DEV_BASE_URL)
     prod_default = _normalize_server_url(prod_raw_value or _DEFAULT_PROD_BASE_URL)
-
-    for selected_env in (dev_selected_env, prod_selected_env):
-        if selected_env and selected_env in {
-            _LEGACY_BASE_URL_ENV,
-            _LOCAL_BASE_URL_ENV,
-            _REMOTE_DEV_BASE_URL_ENV,
-            _REMOTE_PROD_BASE_URL_ENV,
-        }:
-            warn_once(
-                logger=logger,
-                key=f"legacy-policy-env:{selected_env}",
-                message=LEGACY_POLICY_ENV_ALIAS_WARNING_TEMPLATE % selected_env,
-            )
 
     return (
         RuntimeModeOption(
