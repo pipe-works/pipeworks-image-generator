@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.14.0](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.13.1...pipeworks-image-generator-v0.14.0) (2026-03-16)
+
+
+### Features
+
+* **remote-worker:** add config-driven GPU worker routing ([#79](https://github.com/pipe-works/pipeworks-image-generator/issues/79)) ([ba2345c](https://github.com/pipe-works/pipeworks-image-generator/commit/ba2345c180a099bc5faef7b20c5e315fc78f7e1a))
+* **remote-worker:** add runtime GPU settings UI and API ([#81](https://github.com/pipe-works/pipeworks-image-generator/issues/81)) ([6ab8ac4](https://github.com/pipe-works/pipeworks-image-generator/commit/6ab8ac4aad73069013aaca993bf2f2b4c56ac37d))
+
 ## [0.13.1](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.13.0...pipeworks-image-generator-v0.13.1) (2026-03-16)
 
 
