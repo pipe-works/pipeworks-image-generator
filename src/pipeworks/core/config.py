@@ -17,6 +17,7 @@ Example ``.env`` file::
     PIPEWORKS_DEVICE=cuda
     PIPEWORKS_NUM_INFERENCE_STEPS=9
     PIPEWORKS_OUTPUTS_DIR=outputs
+    PIPEWORKS_GALLERY_DIR=static/gallery
 
 Global Configuration Instance
 ------------------------------
@@ -41,7 +42,8 @@ The configuration automatically creates required directories on initialisation:
 
 - ``models_dir``  — Cached HuggingFace model files
 - ``outputs_dir`` — Generated images (used by the gallery)
-- ``gallery_dir`` — Web-accessible gallery images (inside ``static/``)
+- ``gallery_dir`` — Web-accessible gallery images
+- ``gallery_db`` — JSON metadata for the gallery
 
 Z-Image-Turbo Constraints
 --------------------------
@@ -176,7 +178,9 @@ class PipeworksConfig(BaseSettings):
             Directory containing ``models.json``, ``prepend.json``,
             ``main.json``, and ``append.json``.
         gallery_dir : Path
-            Directory for gallery image files (inside ``static/``).
+            Directory for gallery image files.
+        gallery_db : Path
+            JSON metadata file for gallery entries.
         templates_dir : Path
             Directory containing the HTML template(s).
 
@@ -317,8 +321,15 @@ class PipeworksConfig(BaseSettings):
     gallery_dir: Path = Field(
         default=_PACKAGE_DIR / "static" / "gallery",
         description=(
-            "Directory for gallery image files.  Located inside static/ so "
-            "that images are directly web-accessible via /static/gallery/."
+            "Directory for gallery image files. May live outside the packaged "
+            "static tree when the host mounts /static/gallery separately."
+        ),
+    )
+    gallery_db: Path | None = Field(
+        default=None,
+        description=(
+            "Path to gallery.json metadata. Defaults to data_dir/gallery.json "
+            "for backward compatibility unless explicitly overridden."
         ),
     )
     templates_dir: Path = Field(
@@ -355,7 +366,7 @@ class PipeworksConfig(BaseSettings):
         default_factory=lambda: [
             GpuWorkerConfig(
                 id="local",
-                label="Local GPU",
+                label="Luminal GPU",
                 mode="local",
                 enabled=True,
             )
@@ -453,12 +464,16 @@ class PipeworksConfig(BaseSettings):
         """
         super().__init__(**kwargs)
 
+        if self.gallery_db is None:
+            self.gallery_db = self.data_dir / "gallery.json"
+
         # Create directories that must exist before the application can
         # function.  Static/data/templates directories ship with the package
         # and are not created here — only runtime-writable directories.
         self.models_dir.mkdir(parents=True, exist_ok=True)
         self.outputs_dir.mkdir(parents=True, exist_ok=True)
         self.gallery_dir.mkdir(parents=True, exist_ok=True)
+        self.gallery_db.parent.mkdir(parents=True, exist_ok=True)
 
 
 # ---------------------------------------------------------------------------

@@ -22,6 +22,22 @@ class GenerationJob(TypedDict):
     negative_prompt: str | None
 
 
+class GenerationStatus(TypedDict):
+    """Serializable in-flight generation status snapshot."""
+
+    generation_id: str
+    phase: str
+    message: str
+    worker_label: str
+    model_id: str
+    model_label: str
+    batch_size: int
+    completed_count: int
+    cache_miss: bool
+    done: bool
+    error: str | None
+
+
 class GenerationRuntimeService:
     """In-memory cancellation and remote-target tracking for active generations."""
 
@@ -30,6 +46,8 @@ class GenerationRuntimeService:
         self._generation_cancel_events: dict[str, threading.Event] = {}
         self._worker_cancel_events: dict[str, threading.Event] = {}
         self._remote_generation_targets: dict[str, GpuWorkerConfig] = {}
+        self._generation_statuses: dict[str, GenerationStatus] = {}
+        self._lock = threading.Lock()
 
     def register_generation_cancel_event(self, generation_id: str | None) -> threading.Event | None:
         if not generation_id:
@@ -62,6 +80,84 @@ class GenerationRuntimeService:
 
     def get_remote_generation_target(self, generation_id: str) -> GpuWorkerConfig | None:
         return self._remote_generation_targets.get(generation_id)
+
+    def has_cached_model(self, hf_id: str) -> bool:
+        """Best-effort check for an existing Hugging Face cache entry."""
+        model_dir_name = f"models--{hf_id.replace('/', '--')}"
+        model_dir = self._config.models_dir / model_dir_name
+        snapshots_dir = model_dir / "snapshots"
+        refs_dir = model_dir / "refs"
+        if any(snapshots_dir.iterdir()) if snapshots_dir.exists() else False:
+            return True
+        return refs_dir.exists() and any(refs_dir.iterdir())
+
+    def register_generation_status(
+        self,
+        *,
+        generation_id: str | None,
+        model_id: str,
+        model_label: str,
+        worker_label: str,
+        batch_size: int,
+        cache_miss: bool,
+    ) -> None:
+        """Create the initial status snapshot for a new generation."""
+        if not generation_id:
+            return
+        with self._lock:
+            self._generation_statuses[generation_id] = {
+                "generation_id": generation_id,
+                "phase": "queued",
+                "message": f"Queued on {worker_label}.",
+                "worker_label": worker_label,
+                "model_id": model_id,
+                "model_label": model_label,
+                "batch_size": batch_size,
+                "completed_count": 0,
+                "cache_miss": cache_miss,
+                "done": False,
+                "error": None,
+            }
+
+    def update_generation_status(
+        self,
+        generation_id: str | None,
+        *,
+        phase: str,
+        message: str,
+        completed_count: int | None = None,
+        done: bool | None = None,
+        error: str | None = None,
+    ) -> None:
+        """Update the status snapshot for an in-flight generation."""
+        if not generation_id:
+            return
+        with self._lock:
+            status = self._generation_statuses.get(generation_id)
+            if not status:
+                return
+            status["phase"] = phase
+            status["message"] = message
+            if completed_count is not None:
+                status["completed_count"] = completed_count
+            if done is not None:
+                status["done"] = done
+            status["error"] = error
+
+    def get_generation_status(self, generation_id: str) -> GenerationStatus | None:
+        """Return a copy of the current generation status, if any."""
+        with self._lock:
+            status = self._generation_statuses.get(generation_id)
+            if status is None:
+                return None
+            return dict(status)
+
+    def pop_generation_status(self, generation_id: str | None) -> None:
+        """Drop the status snapshot when a generation lifecycle ends."""
+        if not generation_id:
+            return
+        with self._lock:
+            self._generation_statuses.pop(generation_id, None)
 
     def register_worker_cancel_event(self, generation_id: str) -> threading.Event:
         event = threading.Event()

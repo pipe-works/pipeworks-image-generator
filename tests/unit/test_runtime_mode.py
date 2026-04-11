@@ -33,7 +33,7 @@ def test_get_runtime_mode_defaults_to_server_dev_profile():
 
     assert state.mode_key == "server_dev"
     assert state.source_kind == "server_api"
-    assert state.active_server_url == "http://127.0.0.1:8000"
+    assert state.active_server_url == "http://127.0.0.1:18000"
     assert [option.mode_key for option in state.options] == [
         "server_dev",
         "server_prod",
@@ -114,4 +114,4 @@ def test_runtime_mode_ignores_legacy_env_aliases(monkeypatch):
     runtime_mode._reset_runtime_mode_for_tests()
 
     state = runtime_mode.get_runtime_mode()
-    assert state.active_server_url == "http://127.0.0.1:8000"
+    assert state.active_server_url == "http://127.0.0.1:18000"

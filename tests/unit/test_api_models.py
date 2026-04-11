@@ -313,6 +313,6 @@ class TestGpuSettingsRequests:
 
     def test_gpu_settings_test_request_allows_missing_token(self):
         """Health test request should permit blank token (saved-token fallback)."""
-        req = GpuSettingsTestRequest(remote_base_url="http://100.107.250.105:7860")
-        assert req.remote_base_url == "http://100.107.250.105:7860"
+        req = GpuSettingsTestRequest(remote_base_url="https://gpu-worker.example")
+        assert req.remote_base_url == "https://gpu-worker.example"
         assert req.bearer_token is None

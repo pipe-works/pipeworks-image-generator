@@ -21,7 +21,7 @@ _SOURCE_MODE_ENV = "PW_POLICY_SOURCE_MODE"
 _DEV_BASE_URL_ENV = "PW_POLICY_DEV_MUD_API_BASE_URL"
 _PROD_BASE_URL_ENV = "PW_POLICY_PROD_MUD_API_BASE_URL"
 
-_DEFAULT_DEV_BASE_URL = "http://127.0.0.1:8000"
+_DEFAULT_DEV_BASE_URL = "http://127.0.0.1:18000"
 _DEFAULT_PROD_BASE_URL = "https://api.pipe-works.org"
 
 
@@ -116,14 +116,14 @@ def _build_options() -> tuple[RuntimeModeOption, ...]:
     return (
         RuntimeModeOption(
             mode_key=_MODE_SERVER_DEV,
-            label="Server (Dev)",
+            label="Luminal Mud API (Dev)",
             source_kind=_SOURCE_SERVER_API,
             default_server_url=dev_default or _DEFAULT_DEV_BASE_URL,
             url_editable=True,
         ),
         RuntimeModeOption(
             mode_key=_MODE_SERVER_PROD,
-            label="Server (Production)",
+            label="Mud API (Production)",
             source_kind=_SOURCE_SERVER_API,
             default_server_url=prod_default or _DEFAULT_PROD_BASE_URL,
             url_editable=True,

@@ -183,7 +183,7 @@ class GpuWorkerService:
         if local_worker is None:
             local_worker = GpuWorkerConfig(
                 id="local",
-                label="Local GPU",
+                label="Luminal GPU",
                 mode="local",
                 enabled=True,
             )

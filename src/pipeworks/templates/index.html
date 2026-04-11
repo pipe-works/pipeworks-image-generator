@@ -33,28 +33,28 @@
     </nav>
   </header>
 
-  <section class="runtime-mode-shell" aria-label="Snippet source">
+  <section class="runtime-mode-shell" aria-label="Policy snippet source">
     <div class="runtime-mode-shell__controls">
-      <span class="runtime-mode-shell__title">Snippet Source</span>
+      <span class="runtime-mode-shell__title">Policy Snippet Source</span>
       <span id="runtime-mode-badge" class="badge badge--muted">Loading</span>
-      <span id="runtime-auth-badge" class="badge badge--muted">Auth Pending</span>
+      <span id="runtime-auth-badge" class="badge badge--muted">Session Pending</span>
       <span id="runtime-source-status" class="runtime-mode-shell__status" aria-live="polite">
         Source pending
       </span>
-      <label for="runtime-mode-select" class="control-label runtime-mode-shell__label">Mode</label>
-      <select id="runtime-mode-select" class="select select--sm" aria-label="Snippet source">
-        <option value="server_dev">Server (Dev)</option>
-        <option value="server_prod">Server (Production)</option>
+      <label for="runtime-mode-select" class="control-label runtime-mode-shell__label">Policy API</label>
+      <select id="runtime-mode-select" class="select select--sm" aria-label="Policy snippet source">
+        <option value="server_dev">Luminal Mud API (Dev)</option>
+        <option value="server_prod">Mud API (Production)</option>
       </select>
       <input
         id="runtime-mode-url"
         class="input runtime-mode-shell__input"
         type="url"
-        placeholder="https://mud-dev.example.com"
-        aria-label="Mud server URL"
+        placeholder="http://127.0.0.1:18000"
+        aria-label="Mud API URL"
       />
       <button id="runtime-mode-apply" class="btn btn--secondary btn--sm" type="button">
-        Apply URL
+        Apply API URL
       </button>
       <input
         id="runtime-login-username"
@@ -73,33 +73,33 @@
       <button id="runtime-login-apply" class="btn btn--secondary btn--sm" type="button">
         Login
       </button>
-      <span class="runtime-mode-shell__title" style="margin-left:var(--sp-3)">GPU Settings</span>
+      <span class="runtime-mode-shell__title" style="margin-left:var(--sp-3)">Worker Settings</span>
       <label class="toggle-label" style="margin-bottom:0">
         <input type="checkbox" id="chk-use-remote-gpu" />
-        <span class="toggle-text">Use Remote GPU</span>
+        <span class="toggle-text">Enable Remote Worker</span>
       </label>
       <input
         id="inp-remote-gpu-url"
         class="input runtime-mode-shell__input"
         type="url"
-        placeholder="http://100.107.250.105:7860"
-        aria-label="Remote GPU URL"
+        placeholder="https://gpu-worker.example"
+        aria-label="Remote worker URL"
       />
       <input
         id="inp-remote-gpu-token"
         class="input runtime-mode-shell__input"
         type="text"
         placeholder="Bearer token"
-        aria-label="Remote GPU bearer token"
+        aria-label="Remote worker bearer token"
       />
       <button id="btn-gpu-token-generate" class="btn btn--secondary btn--sm" type="button">
-        Generate Token
+        Generate Worker Token
       </button>
       <button id="btn-gpu-test" class="btn btn--secondary btn--sm" type="button">
-        Test GPU
+        Test Worker
       </button>
       <button id="btn-gpu-save" class="btn btn--secondary btn--sm" type="button">
-        Save GPU
+        Save Worker
       </button>
       <span id="gpu-settings-status" class="runtime-mode-shell__status" aria-live="polite">
         GPU settings pending
@@ -143,7 +143,7 @@
                 <select class="select" id="sel-model" style="width:100%"></select>
               </div>
               <div class="ctrl-full">
-                <label class="control-label">GPU Machine</label>
+                <label class="control-label">Generation Target</label>
                 <select class="select" id="sel-gpu-worker" style="width:100%"></select>
               </div>
               <div class="model-info-card" id="model-info-card">

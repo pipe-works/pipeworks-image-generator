@@ -103,6 +103,11 @@ class TestConfigDirectoryCreation:
         assert test_config.gallery_dir.exists()
         assert test_config.gallery_dir.is_dir()
 
+    def test_gallery_db_parent_created(self, test_config: PipeworksConfig):
+        """gallery_db parent should exist after config initialisation."""
+        assert test_config.gallery_db.parent.exists()
+        assert test_config.gallery_db.parent.is_dir()
+
     def test_creates_nested_directories(self, temp_dir: Path):
         """Config should create deeply nested directories via parents=True."""
         deep_models = temp_dir / "a" / "b" / "c" / "models"
@@ -181,7 +186,7 @@ class TestConfigValidation:
             "\n".join(
                 [
                     "PW_POLICY_SOURCE_MODE=server_dev",
-                    "PW_POLICY_DEV_MUD_API_BASE_URL=http://127.0.0.1:8000",
+                    "PW_POLICY_DEV_MUD_API_BASE_URL=http://127.0.0.1:18000",
                     "PW_POLICY_PROD_MUD_API_BASE_URL=https://mud-api.example.com",
                 ]
             ),

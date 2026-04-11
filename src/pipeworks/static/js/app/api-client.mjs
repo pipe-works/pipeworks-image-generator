@@ -60,6 +60,9 @@ export function createApiClient({ fetchJson }) {
         body: JSON.stringify(payload),
       });
     },
+    getGenerationStatus(generationId) {
+      return fetchJson(`/api/generate/status/${encodeURIComponent(generationId)}`);
+    },
     cancelGeneration(generationId) {
       return fetchJson("/api/generate/cancel", {
         method: "POST",

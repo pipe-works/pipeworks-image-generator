@@ -1,307 +1,281 @@
-# Pipeworks Image Generator
-
-[![Test and Lint](https://github.com/pipe-works/pipeworks-image-generator/actions/workflows/ci.yml/badge.svg)](https://github.com/pipe-works/pipeworks-image-generator/actions/workflows/ci.yml)
+[![CI](https://github.com/pipe-works/pipeworks-image-generator/actions/workflows/ci.yml/badge.svg)](https://github.com/pipe-works/pipeworks-image-generator/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/pipe-works/pipeworks-image-generator/branch/main/graph/badge.svg)](https://codecov.io/gh/pipe-works/pipeworks-image-generator)
-[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-Multi-model AI image generation with a FastAPI REST API and web frontend.
+# pipeworks-image-generator
 
-## Overview
+`pipeworks-image-generator` is the PipeWorks browser-facing image generation
+application. It combines a FastAPI API, a vanilla HTML/CSS/JS frontend, local
+or remote GPU execution, and JSON-backed gallery persistence for prompt
+composition, generation, and review workflows.
 
-Pipeworks Image Generator is a Python-based image generation system
-that provides a FastAPI REST API backed by HuggingFace Diffusers
-pipelines, with a vanilla HTML/CSS/JS frontend. It supports multiple
-diffusion models, section-schema prompt composition for Subject/Setting/Details/
-Lighting/Atmosphere, a JSON-based gallery with favourites, and a
-Ledgerfall pamphleteer aesthetic design system.
+## PipeWorks Workspace
 
-### Key Features
+These repositories are designed to live inside a shared PipeWorks workspace
+rooted at `/srv/work/pipeworks`.
 
-- **Multi-Model Support**: Load any HuggingFace text-to-image model via `AutoPipelineForText2Image`
-- **FastAPI REST API**: Endpoints for generation, gallery management, prompt preview, runtime snippet source/auth, and statistics
-- **Web Frontend**: Vanilla HTML/CSS/JS interface with the pipe-works design system — no build step
-- **Three-Part Prompt System**: Compose prompts from prepend styles, scene descriptions, and
-  append modifiers interleaved with fixed boilerplate
-- **Canonical Policy Snippets**: Composer snippet dropdowns are sourced from canonical mud-server policy APIs
-- **JSON Gallery**: Browse, filter, favourite, and delete generated images — no database required
-- **Turbo Model Support**: Automatic guidance scale enforcement for turbo-distilled models
-- **Deterministic Generation**: Seeded `torch.Generator` ensures same seed = same image
-- **Self-Hosted Friendly**: Inference and policy APIs can run on your own machines/network
-- **Comprehensive Tests**: 90 tests at 91%+ coverage
+- `repos/` contains source checkouts only.
+- `venvs/` contains per-project virtual environments such as `pw-mud-server`.
+- `runtime/` contains mutable runtime state such as databases, exports, session
+  files, and caches.
+- `logs/` contains service-owned log output when a project writes logs outside
+  the process manager.
+- `config/` contains workspace-level configuration files that should not be
+  treated as source.
+- `bin/` contains optional workspace helper scripts.
+- `home/` is reserved for workspace-local user data when a project needs it.
+
+Across the PipeWorks ecosphere, the rule is simple: keep source in `repos/`,
+keep mutable state outside the repo checkout, and use explicit paths between
+repos when one project depends on another.
+
+## What This Repo Owns
+
+This repository is the source of truth for:
+
+- the `pipeworks` CLI entry point
+- the FastAPI application under `src/pipeworks/api/`
+- the browser UI and static assets under `src/pipeworks/templates/` and
+  `src/pipeworks/static/`
+- prompt compilation and runtime policy integration for image-generation
+  requests
+- local and remote GPU-worker orchestration
+- gallery metadata and image-management behavior
+- deployment templates under `deploy/`
+
+This repository does not own:
+
+- canonical PipeWorks runtime policy state
+- mud-server itself
+- HuggingFace model hosting
+- broader workspace-level host operations outside this repo's own deploy
+  templates
+
+## Main App Surfaces
+
+### Browser UI
+
+The browser UI provides:
+
+- model selection and generation controls
+- structured prompt composition across subject, setting, details, lighting,
+  and atmosphere
+- runtime mode and policy-snippet source selection
+- gallery browsing, filtering, favourites, and deletion
+
+### FastAPI API
+
+The API exposes:
+
+- `/api/config` for model and runtime metadata
+- `/api/generate` for image batch generation
+- `/api/prompt/compile` for prompt preview
+- `/api/runtime-*` and `/api/policy-prompts` for canonical mud-server-backed
+  snippet and auth flows
+- `/api/gallery*` and `/api/stats` for gallery persistence and reporting
+- `/api/worker/*` for bounded internal remote-worker execution endpoints
+
+### Execution Modes
+
+The application can run in two broad modes:
+
+- controller plus local GPU inference on the same machine
+- controller on one machine with image generation forwarded to a remote GPU
+  worker over HTTP with bearer-token protection
+
+That split matters. The browser/controller surface and the heavy inference
+surface can be colocated, but they do not have to be.
+
+## Relationship To Other PipeWorks Repos
+
+- `pipeworks_mud_server`
+  canonical source for policy snippets and runtime login-backed policy APIs
+- `pipeworks-image-generator`
+  browser-facing image-generation UI, prompt compilation, gallery behavior, and
+  local or remote inference orchestration
+- `pipeworks-policy-workbench`
+  operator and developer workbench for policy objects rather than image
+  generation itself
+
+The image generator may consume canonical mud-server policy APIs, but it does
+not become the policy authority by doing so.
+
+## Repository Layout
+
+- `src/pipeworks/api/main.py` FastAPI bootstrap, router registration, and CLI
+  startup
+- `src/pipeworks/api/routers/` route groups for generation, gallery, runtime,
+  prompt, and worker endpoints
+- `src/pipeworks/api/services/` orchestration for runtime policy, generation,
+  worker transport, and prompt resolution
+- `src/pipeworks/api/gallery_store.py` JSON-backed gallery persistence helpers
+- `src/pipeworks/core/config.py` Pydantic settings and runtime path handling
+- `src/pipeworks/core/model_manager.py` Diffusers pipeline lifecycle and
+  generation behavior
+- `src/pipeworks/templates/index.html` browser UI shell
+- `src/pipeworks/static/` CSS, fonts, prompt-library data, and frontend JS
+- `tests/` unit and integration coverage
+- `docs/` Sphinx documentation sources
+- `deploy/` example env, `systemd`, and nginx files
 
 ## Quick Start
 
-### Prerequisites
+### Requirements
 
-- Python 3.12+
-- CUDA-capable GPU (16GB+ VRAM recommended)
-- 50GB+ free disk space (for model cache)
+- Python `>=3.12`
+- a PipeWorks workspace rooted at `/srv/work/pipeworks`
+- a compatible GPU and ML runtime if you want local inference
+- sufficient disk space for model cache and generated outputs
+- a Hugging Face access token if you want higher API rate limits or need to
+  pull gated/private models
+- access to a running `pipeworks_mud_server` if you want canonical
+  mud-server-backed snippet workflows rather than local-only prompt library use
 
-### Installation
+### Install
 
-```bash
-git clone https://github.com/pipe-works/pipeworks-image-generator.git
-cd pipeworks-image-generator
-pip install -e .
-```
-
-`FLUX.2-klein-4B` requires a Diffusers build with `Flux2KleinPipeline`
-support. At the moment that support may require installing Diffusers from
-GitHub rather than PyPI:
+Create a project venv and install from `pyproject.toml`:
 
 ```bash
-pip install --upgrade "git+https://github.com/huggingface/diffusers.git"
+python3.12 -m venv /srv/work/pipeworks/venvs/pw-image-generator
+/srv/work/pipeworks/venvs/pw-image-generator/bin/pip install -e ".[dev]"
 ```
 
-### Configuration (Optional)
+If you also want docs tooling:
+
+```bash
+/srv/work/pipeworks/venvs/pw-image-generator/bin/pip install -e ".[dev,docs]"
+```
+
+For host-managed service use, the venv should be built from a system-level
+Python `3.12` install rather than from a user-home interpreter.
+
+### Prepare Runtime Paths
+
+For a workspace-backed run, keep mutable state outside the repo checkout.
+A typical layout is:
+
+- model cache under `/srv/work/pipeworks/runtime/image-generator/models`
+- generated outputs under `/srv/work/pipeworks/runtime/image-generator/outputs`
+- gallery images under `/srv/work/pipeworks/runtime/image-generator/gallery`
+- gallery metadata under
+  `/srv/work/pipeworks/runtime/image-generator/gallery.json`
+- workspace-managed env/config under `/srv/work/pipeworks/config/image-generator/`
+
+### Prepare Environment
+
+For local development:
 
 ```bash
 cp .env.example .env
-# Edit .env with your preferences (device, dtype, port, etc.)
 ```
 
-### Launch
+Important variables in the current codebase include:
+
+- `PIPEWORKS_SERVER_HOST`
+- `PIPEWORKS_SERVER_PORT`
+- `PIPEWORKS_MODELS_DIR`
+- `PIPEWORKS_OUTPUTS_DIR`
+- `PIPEWORKS_GALLERY_DIR`
+- `PIPEWORKS_GALLERY_DB`
+- `PIPEWORKS_DEVICE`
+- `PIPEWORKS_TORCH_DTYPE`
+- `PW_POLICY_SOURCE_MODE`
+- `PW_POLICY_DEV_MUD_API_BASE_URL`
+- `PW_POLICY_PROD_MUD_API_BASE_URL`
+
+Hugging Face token setup:
 
 ```bash
-pipeworks
+export HF_TOKEN=your_token_here
 ```
 
-The web UI will be available at `http://0.0.0.0:7860`.
-
-## Usage
-
-### Web Interface
-
-1. Open the web UI in your browser
-2. Select a model from the dropdown
-3. Choose a prompt mode (manual text or automated preset)
-4. Optionally select prepend/append style modifiers
-5. Set dimensions, steps, guidance, and seed
-6. Click Generate
-
-Generated images appear in the gallery with full metadata. You can
-favourite, filter, and delete images directly from the interface.
-
-### Programmatic Usage
-
-```python
-from pipeworks.core.config import config
-from pipeworks.core.model_manager import ModelManager
-
-# Create manager and load a model
-mgr = ModelManager(config)
-mgr.load_model("Tongyi-MAI/Z-Image-Turbo")
-
-# Generate an image
-image = mgr.generate(
-    prompt="A goblin repairing a clockwork automaton in a dimly lit workshop.",
-    width=1024,
-    height=1024,
-    steps=4,
-    guidance_scale=0.0,
-    seed=42,
-)
-
-image.save("output.png")
-mgr.unload()  # Free GPU memory
-```
-
-### REST API
-
-All endpoints are documented in the FastAPI auto-generated docs at `/docs`.
-
-| Method | Path | Purpose |
-|--------|------|---------|
-| GET | `/` | Web UI |
-| GET | `/api/config` | Available models and prompt presets |
-| POST | `/api/generate` | Generate image batch |
-| POST | `/api/prompt/compile` | Preview compiled prompt |
-| GET | `/api/runtime-mode` | Read snippet source mode (server dev/prod) |
-| POST | `/api/runtime-mode` | Switch snippet source mode / URL |
-| GET | `/api/runtime-auth` | Check runtime login/access for canonical policy APIs |
-| POST | `/api/runtime-login` | Login to selected mud-server runtime |
-| POST | `/api/runtime-logout` | Logout runtime session |
-| GET | `/api/policy-prompts` | Load canonical policy snippet options/groups |
-| GET | `/api/gallery` | Paginated gallery listing |
-| GET | `/api/gallery/{id}` | Single gallery entry |
-| GET | `/api/gallery/{id}/prompt` | Prompt metadata |
-| POST | `/api/gallery/favourite` | Toggle favourite status |
-| DELETE | `/api/gallery/{id}` | Delete image |
-| GET | `/api/stats` | Gallery statistics |
-
-## Prompt and Runtime Baseline
-
-- `/api/generate` and `/api/prompt/compile` require `prompt_schema_version=2`.
-- Prompt library loading uses split files only:
-  `static/data/prepend.json`, `static/data/main.json`, `static/data/append.json`.
-- Runtime policy URL selection uses canonical env vars only:
-  `PW_POLICY_DEV_MUD_API_BASE_URL` and `PW_POLICY_PROD_MUD_API_BASE_URL`.
-
-## Architecture
-
-```text
-src/pipeworks/
-├── core/                  # Generation engine (no HTTP dependency)
-│   ├── config.py          # Pydantic Settings (PIPEWORKS_* env vars)
-│   └── model_manager.py   # Diffusers pipeline lifecycle
-├── api/                   # FastAPI REST API
-│   ├── main.py            # Thin app bootstrap + router registration + CLI
-│   ├── models.py          # Pydantic request models
-│   ├── routers/           # Runtime, GPU, generation, prompt, gallery routes
-│   ├── services/          # Prompt/runtime/GPU/generation/zip orchestration
-│   └── prompt_builder.py  # Prompt compilation
-├── static/                # CSS, JS, fonts, data, gallery images
-│   └── js/app/            # Frontend feature modules (no bundler)
-└── templates/             # index.html
-```
-
-### Design Decisions
-
-- **FastAPI over Gradio**: Direct control over API design, static file serving, and frontend customisation
-- **JSON over SQLite**: Gallery persistence in a single `gallery.json` file — simple, portable, no migrations
-- **ModelManager over Adapter Registry**: One pipeline in memory at a time with explicit model switching
-- **Vanilla JS over React/Vue**: No build step, instant page loads, full control over the design system
-- **Lifespan over on_event**: Modern FastAPI lifecycle pattern for startup/shutdown
-
-## Configuration
-
-Most settings use `PIPEWORKS_*` environment variables. Runtime snippet source
-settings use `PW_POLICY_*` variables. See `.env.example` for the full list.
-
-| Variable | Default | Description |
-|---|---|---|
-| `PIPEWORKS_DEVICE` | `cuda` | Compute device (cuda, mps, cpu) |
-| `PIPEWORKS_TORCH_DTYPE` | `bfloat16` | Model precision |
-| `PIPEWORKS_NUM_INFERENCE_STEPS` | `9` | Default inference steps |
-| `PIPEWORKS_SERVER_HOST` | `0.0.0.0` | Server bind address |
-| `PIPEWORKS_SERVER_PORT` | `7860` | Server port |
-| `PIPEWORKS_DISABLE_HTTP_CACHE` | `false` | Disable browser caching for local frontend testing |
-| `PIPEWORKS_MODELS_DIR` | `models` | Model cache directory |
-| `PW_POLICY_SOURCE_MODE` | `server_dev` | Active snippet source mode (`server_dev`, `server_prod`) |
-| `PW_POLICY_DEV_MUD_API_BASE_URL` | `http://127.0.0.1:8000` | Canonical policy API URL for dev mode |
-| `PW_POLICY_PROD_MUD_API_BASE_URL` | `https://mud-api.example.com` | Canonical policy API URL for prod mode |
-
-Examples:
+Or place it in your local `.env`:
 
 ```bash
-# Local dev mud server
-PW_POLICY_SOURCE_MODE=server_dev
-PW_POLICY_DEV_MUD_API_BASE_URL=http://127.0.0.1:8000
-PW_POLICY_PROD_MUD_API_BASE_URL=https://mud-api.example.com
+HF_TOKEN=your_token_here
 ```
+
+This is optional for public model access, but recommended. Without `HF_TOKEN`,
+the app may hit lower anonymous rate limits and model downloads can be slower
+or unavailable for gated resources.
+
+### Run Locally
 
 ```bash
-# Shared/staging mud server
-PW_POLICY_SOURCE_MODE=server_prod
-PW_POLICY_DEV_MUD_API_BASE_URL=https://mud-dev.example.com
-PW_POLICY_PROD_MUD_API_BASE_URL=https://mud-api.example.com
+/srv/work/pipeworks/venvs/pw-image-generator/bin/pipeworks
 ```
 
-## Remote GPU Worker Setup
+The repo-local default bind is:
 
-Pipeworks can run as:
+- `0.0.0.0:7860`
 
-- **Controller** (the machine hosting the web UI and gallery)
-- **Worker** (the machine with the NVIDIA GPU)
+That default is intended for direct local development. Hosted deployments
+should normally override the bind address and port through external env/config
+rather than treating the repo default as the service contract.
 
-### 1) Configure and run the worker host
+## Runtime Conventions
 
-On the GPU machine, set a worker token list in `.env` (or export it before launch):
+Prompt-library behavior follows the split JSON files shipped in
+`src/pipeworks/static/data/`:
+
+- `prepend.json`
+- `main.json`
+- `append.json`
+- `models.json`
+
+Prompt APIs currently require `prompt_schema_version=2`.
+
+Gallery behavior is file-backed, not database-backed:
+
+- image files live in the configured gallery directory
+- metadata lives in `gallery.json`
+- missing image files are reconciled and pruned from metadata on load
+
+Remote GPU-worker support is optional. Worker execution requires explicit URL
+and bearer-token configuration and should be treated as an explicit trust
+boundary, not as an implicit local shortcut.
+
+## Validation And Development
+
+Run the main checks from the repo root:
 
 ```bash
-PIPEWORKS_SERVER_HOST=0.0.0.0
-PIPEWORKS_SERVER_PORT=8123
-PIPEWORKS_WORKER_API_BEARER_TOKENS=["<worker-token-here>"]
+/srv/work/pipeworks/venvs/pw-image-generator/bin/pytest -q
+/srv/work/pipeworks/venvs/pw-image-generator/bin/ruff check src tests
+/srv/work/pipeworks/venvs/pw-image-generator/bin/black --check src tests
+/srv/work/pipeworks/venvs/pw-image-generator/bin/mypy src
 ```
 
-Shell export form (same value, quoted for your shell):
+Useful targeted checks:
 
 ```bash
-export PIPEWORKS_WORKER_API_BEARER_TOKENS='["<worker-token-here>"]'
+/srv/work/pipeworks/venvs/pw-image-generator/bin/pytest tests/unit/test_config.py -q
+/srv/work/pipeworks/venvs/pw-image-generator/bin/pytest tests/integration/test_api.py -q
 ```
 
-Then start `pipeworks` on that machine and verify health:
+## Deployment Templates
 
-```bash
-curl -H "Authorization: Bearer <worker-token-here>" \
-  http://<worker-host>:8123/api/worker/health
-```
+Host-neutral deployment examples are shipped in:
 
-### 2) Configure the controller UI
+- `deploy/env/image-generator.env.example`
+- `deploy/systemd/pipeworks-image-generator.service`
+- `deploy/nginx/images.pipeworks.luminal.local`
 
-On the controller machine, open **GPU Settings** in the web UI and set:
+These are deployment templates, not the runtime authority themselves. Keep
+machine-specific rollout detail in runbooks, MOCs, or host-level docs rather
+than in this README.
 
-- `Use remote GPU` = enabled
-- `Remote URL` = `http://<worker-host>:8123`
-- `Bearer token` = same token as worker host
-- Optionally `Default to remote`
+## Documentation
 
-Click **Test** to verify connectivity, then click **Save GPU** to persist the setting.
+Additional documentation lives in:
 
-### 3) Runtime file and secret handling
-
-- Remote GPU runtime settings are stored in `outputs/gpu_workers.runtime.json`.
-- This file can include bearer tokens and is intentionally gitignored.
-- Pipeworks writes this file with owner-only permissions (`0600`) on POSIX systems.
-- Treat `.env` and runtime token files as secrets and never commit real tokens.
-
-### Troubleshooting
-
-- `401 Unauthorized` from `/api/worker/health`: token mismatch between controller and worker.
-- `Connection refused`: worker host/port not reachable from controller.
-- `Torch not compiled with CUDA enabled` on controller: generation is still running locally;
-  save/select remote worker and retry.
-
-## Development
-
-```bash
-# Install with dev dependencies
-pip install -e ".[dev]"
-
-# Run tests
-pytest
-
-# Lint and format
-ruff check src/ tests/
-black src/ tests/
-```
-
-### Test Suite
-
-- **90 tests** across 6 test files
-- **91%+ coverage** on core and API packages
-- Unit tests for config, model manager, prompt builder, Pydantic models
-- Integration tests for all 10 API endpoints via FastAPI TestClient
-
-## System Requirements
-
-### Minimum
-
-- Python 3.12+
-- NVIDIA GPU with 16GB VRAM
-- 50GB disk space
-- 16GB RAM
-
-### Recommended
-
-- NVIDIA RTX 4090/5090 or equivalent
-- 64GB+ RAM
-- 100GB+ SSD storage
-
-## Acknowledgments
-
-- [Z-Image-Turbo](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo) by Tongyi-MAI
-- [Stable Diffusion v1.5](https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5) by Stability AI
-- [SDXL 1.0](https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0) by Stability AI
-- [FLUX.2-klein-4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) by Black Forest Labs
-- [Diffusers](https://github.com/huggingface/diffusers) by HuggingFace
-- [FastAPI](https://fastapi.tiangolo.com/) by Sebastián Ramírez
-- [PyTorch](https://pytorch.org/)
-- [Pydantic](https://docs.pydantic.dev/)
+- `docs/`
+- `AGENTS.md`
+- `CLAUDE.md`
 
 ## License
 
-GPL-3.0-or-later. See [LICENSE](LICENSE) for details.
+[GPL-3.0-or-later](LICENSE)
