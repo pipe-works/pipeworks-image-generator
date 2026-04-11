@@ -124,6 +124,20 @@ export function createRuntimeGpuController({
     return String(state.runtimeAuth?.status || "");
   }
 
+  function describeRuntimeServer(url) {
+    const normalized = String(url || "").trim();
+    if (!normalized) return "Policy API URL unavailable";
+    try {
+      const parsed = new URL(normalized);
+      if (["127.0.0.1", "localhost", "::1"].includes(parsed.hostname)) {
+        return `Luminal-local mud API ${normalized}`;
+      }
+    } catch {
+      // Keep the raw URL if parsing fails.
+    }
+    return `Policy API ${normalized}`;
+  }
+
   function isRuntimeSessionAuthorized() {
     return Boolean(state.runtimeAuth?.access_granted);
   }
@@ -135,9 +149,7 @@ export function createRuntimeGpuController({
     const serverUrl = runtimeActiveServerUrl();
     const snippetCount = (state.policyPromptOptions || []).length;
     const snippetText = `${snippetCount} snippet${snippetCount === 1 ? "" : "s"}`;
-    sourceStatus.textContent = serverUrl
-      ? `${serverUrl} · ${snippetText}`
-      : `Server URL unavailable · ${snippetText}`;
+    sourceStatus.textContent = `${describeRuntimeServer(serverUrl)} · ${snippetText}`;
   }
 
   function applyRuntimeControls() {
@@ -183,7 +195,7 @@ export function createRuntimeGpuController({
     if (modeBadge) {
       modeBadge.classList.remove("badge--muted", "badge--active", "badge--info");
       modeBadge.classList.add(runtimeMode?.mode_key === "server_dev" ? "badge--active" : "badge--info");
-      modeBadge.textContent = runtimeMode ? `${runtimeModeLabel()} · Server API` : "Mode unavailable";
+      modeBadge.textContent = runtimeMode ? `${runtimeModeLabel()} · Policy API` : "Mode unavailable";
     }
 
     if (authBadge) {
@@ -197,22 +209,22 @@ export function createRuntimeGpuController({
       const authStatus = runtimeAuthStatus();
       if (!authStatus) {
         authBadge.classList.add("badge--muted");
-        authBadge.textContent = "Auth Pending";
+        authBadge.textContent = "Session Pending";
       } else if (authStatus === "authorized") {
         authBadge.classList.add("badge--active");
-        authBadge.textContent = "Auth OK";
+        authBadge.textContent = "Session Ready";
       } else if (authStatus === "missing_session") {
         authBadge.classList.add("badge--warn");
-        authBadge.textContent = "Session Missing";
+        authBadge.textContent = "No Runtime Session";
       } else if (authStatus === "forbidden") {
         authBadge.classList.add("badge--err");
-        authBadge.textContent = "Role Denied";
+        authBadge.textContent = "Runtime Role Denied";
       } else if (authStatus === "unauthenticated") {
         authBadge.classList.add("badge--warn");
-        authBadge.textContent = "Session Invalid";
+        authBadge.textContent = "Runtime Session Invalid";
       } else {
         authBadge.classList.add("badge--err");
-        authBadge.textContent = "Auth Error";
+        authBadge.textContent = "Runtime Auth Error";
       }
     }
 
@@ -422,7 +434,7 @@ export function createRuntimeGpuController({
       applyGpuSettingsForm(payload);
       if (!silent) {
         const stateLabel = payload.use_remote_gpu ? "enabled" : "disabled";
-        setGpuSettingsStatus(`Remote GPU ${stateLabel}.`);
+        setGpuSettingsStatus(`Remote worker ${stateLabel}.`);
       }
     } catch (error) {
       if (!silent) {
@@ -437,12 +449,12 @@ export function createRuntimeGpuController({
     const remoteToken = ($("#inp-remote-gpu-token")?.value || "").trim();
 
     if (useRemote && !remoteUrl) {
-      toast("Remote GPU URL is required", "warn");
-      setGpuSettingsStatus("Remote GPU URL required.");
+      toast("Remote worker URL is required", "warn");
+      setGpuSettingsStatus("Remote worker URL required.");
       return;
     }
 
-    setGpuSettingsStatus("Saving GPU settings...");
+    setGpuSettingsStatus("Saving worker settings...");
     const payload = await apiClient.updateGpuSettings({
       use_remote_gpu: useRemote,
       remote_base_url: remoteUrl || null,
@@ -453,12 +465,12 @@ export function createRuntimeGpuController({
 
     applyGpuSettingsForm(payload);
     await loadConfig();
-    setGpuSettingsStatus("GPU settings saved.");
-    setStatus("GPU settings saved.");
+    setGpuSettingsStatus("Worker settings saved.");
+    setStatus("Worker settings saved.");
     if (payload.generated_bearer_token) {
-      toast("Generated a new remote bearer token. Copy it to the remote worker.", "info", 5000);
+      toast("Generated a new worker bearer token. Copy it to the remote worker.", "info", 5000);
     } else {
-      toast("GPU settings saved", "ok");
+      toast("Worker settings saved", "ok");
     }
   }
 
@@ -467,26 +479,26 @@ export function createRuntimeGpuController({
     const remoteUrl = ($("#inp-remote-gpu-url")?.value || "").trim();
     const remoteToken = ($("#inp-remote-gpu-token")?.value || "").trim();
     if (!useRemote) {
-      setGpuSettingsStatus("Enable remote GPU first.");
+      setGpuSettingsStatus("Enable remote worker first.");
       return;
     }
     if (!remoteUrl) {
-      setGpuSettingsStatus("Remote GPU URL required.");
+      setGpuSettingsStatus("Remote worker URL required.");
       return;
     }
 
-    setGpuSettingsStatus("Testing remote GPU...");
+    setGpuSettingsStatus("Testing remote worker...");
     try {
       await apiClient.testGpuSettings({
         remote_base_url: remoteUrl,
         bearer_token: remoteToken || null,
         timeout_seconds: 8,
       });
-      setGpuSettingsStatus("Remote GPU health check succeeded.");
-      toast("Remote GPU is reachable", "ok");
+      setGpuSettingsStatus("Remote worker health check succeeded.");
+      toast("Remote worker is reachable", "ok");
     } catch (error) {
-      setGpuSettingsStatus(`Remote GPU check failed: ${error.message}`);
-      toast(`Remote GPU check failed: ${error.message}`, "err");
+      setGpuSettingsStatus(`Remote worker check failed: ${error.message}`);
+      toast(`Remote worker check failed: ${error.message}`, "err");
     }
   }
 
@@ -495,7 +507,7 @@ export function createRuntimeGpuController({
     if (!tokenField) return;
     tokenField.value = randomGpuToken();
     tokenField.placeholder = "Generated token (copy to remote worker)";
-    setGpuSettingsStatus("Generated token. Save settings to persist.");
+    setGpuSettingsStatus("Generated worker token. Save settings to persist.");
   }
 
   function onModelChange() {

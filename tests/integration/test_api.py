@@ -86,7 +86,7 @@ class TestGetConfig:
         previous_workers = main_module.config.gpu_workers
         previous_default = main_module.config.default_gpu_worker_id
         main_module.config.gpu_workers = [
-            GpuWorkerConfig(id="local", label="Local GPU", mode="local", enabled=True),
+            GpuWorkerConfig(id="local", label="Luminal GPU", mode="local", enabled=True),
             GpuWorkerConfig(
                 id="remote-1",
                 label="Remote GPU 1",
@@ -103,7 +103,7 @@ class TestGetConfig:
             data = resp.json()
             assert data["default_gpu_worker_id"] == "remote-1"
             assert data["gpu_workers"] == [
-                {"id": "local", "label": "Local GPU", "mode": "local", "enabled": True},
+                {"id": "local", "label": "Luminal GPU", "mode": "local", "enabled": True},
                 {"id": "remote-1", "label": "Remote GPU 1", "mode": "remote", "enabled": True},
             ]
             assert "bearer_token" not in json.dumps(data)
@@ -205,7 +205,7 @@ class TestGetConfig:
         """Snippet dropdown payload should come from canonical policy APIs after login."""
 
         def _fake_login_fetch(*, base_url, method, path, body):
-            assert base_url == "http://127.0.0.1:8000"
+            assert base_url == "http://127.0.0.1:18000"
             assert method == "POST"
             assert path == "/login"
             assert body == {"username": "admin", "password": "pw"}
@@ -216,7 +216,7 @@ class TestGetConfig:
             }
 
         def _fake_authenticated_fetch(*, runtime, method, path, query_params, json_payload=None):
-            assert runtime.base_url == "http://127.0.0.1:8000"
+            assert runtime.base_url == "http://127.0.0.1:18000"
             assert runtime.session_id == "session-admin-1"
             assert method == "GET"
             assert json_payload is None
@@ -327,9 +327,9 @@ class TestGpuSettings:
             "/api/gpu-settings",
             json={
                 "use_remote_gpu": True,
-                "remote_base_url": "http://100.107.250.105:7860",
+                "remote_base_url": "https://gpu-worker.example",
                 "bearer_token": "test-token",
-                "remote_label": "Remote GPU (Tailscale)",
+                "remote_label": "Remote Worker",
             },
         )
         assert save_resp.status_code == 200
@@ -342,7 +342,7 @@ class TestGpuSettings:
         config_payload = config_resp.json()
         workers_by_id = {worker["id"]: worker for worker in config_payload["gpu_workers"]}
         assert "remote-ts" in workers_by_id
-        assert workers_by_id["remote-ts"]["label"] == "Remote GPU (Tailscale)"
+        assert workers_by_id["remote-ts"]["label"] == "Remote Worker"
         assert "bearer_token" not in json.dumps(config_payload)
 
     def test_update_gpu_settings_generates_token_when_missing(self, test_client):
@@ -357,7 +357,7 @@ class TestGpuSettings:
             "/api/gpu-settings",
             json={
                 "use_remote_gpu": True,
-                "remote_base_url": "http://100.107.250.105:7860",
+                "remote_base_url": "https://gpu-worker.example",
                 "bearer_token": None,
             },
         )
@@ -374,7 +374,7 @@ class TestGpuSettings:
             "/api/gpu-settings",
             json={
                 "use_remote_gpu": True,
-                "remote_base_url": "http://100.107.250.105:7860",
+                "remote_base_url": "https://gpu-worker.example",
                 "bearer_token": "saved-token",
             },
         )
@@ -390,7 +390,7 @@ class TestGpuSettings:
                 return b'{"success": true, "status": "ok"}'
 
         def _fake_urlopen(request, timeout):
-            assert request.full_url == "http://100.107.250.105:7860/api/worker/health"
+            assert request.full_url == "https://gpu-worker.example/api/worker/health"
             assert request.get_header("Authorization") == "Bearer saved-token"
             assert timeout == 8
             return _FakeResponse()
@@ -399,7 +399,7 @@ class TestGpuSettings:
             resp = test_client.post(
                 "/api/gpu-settings/test",
                 json={
-                    "remote_base_url": "http://100.107.250.105:7860",
+                    "remote_base_url": "https://gpu-worker.example",
                     "bearer_token": None,
                     "timeout_seconds": 8,
                 },
@@ -419,7 +419,7 @@ class TestGpuSettings:
             "/api/gpu-settings",
             json={
                 "use_remote_gpu": True,
-                "remote_base_url": "http://100.107.250.105:7860",
+                "remote_base_url": "https://gpu-worker.example",
                 "bearer_token": "test-token",
             },
         )
@@ -484,7 +484,7 @@ class TestGenerate:
         assert resp.status_code == 200
         image = resp.json()["images"][0]
         assert image["compute_target_id"] == "local"
-        assert image["compute_target_label"] == "Local GPU"
+        assert image["compute_target_label"] == "Luminal GPU"
 
     def test_generate_remote_worker_success(self, test_client, mock_model_manager):
         """Remote worker mode should save returned images to local gallery metadata."""
@@ -989,6 +989,57 @@ class TestGenerate:
         assert generate_resp.status_code == 200
         assert generate_resp.json()["cancelled"] is True
 
+    def test_generation_status_reports_live_model_download_phase(
+        self,
+        test_client,
+        mock_model_manager,
+    ):
+        """Status endpoint should expose first-run Luminal download/load progress."""
+        generation_id = "gen-status-test"
+        load_started = threading.Event()
+        allow_load_to_finish = threading.Event()
+        responses = {}
+
+        def _slow_load_model(hf_id):
+            load_started.set()
+            allow_load_to_finish.wait(timeout=0.5)
+            mock_model_manager.current_model_id = hf_id
+
+        mock_model_manager.load_model.side_effect = _slow_load_model
+
+        def _run_generate():
+            responses["generate"] = test_client.post(
+                "/api/generate",
+                json=self._make_generate_payload(
+                    model_id="sd-v1-5",
+                    generation_id=generation_id,
+                ),
+            )
+
+        generate_thread = threading.Thread(target=_run_generate)
+        generate_thread.start()
+        try:
+            assert load_started.wait(timeout=0.5) is True
+            status_resp = test_client.get(f"/api/generate/status/{generation_id}")
+            assert status_resp.status_code == 200
+            payload = status_resp.json()
+            assert payload["generation_id"] == generation_id
+            assert payload["model_id"] == "sd-v1-5"
+            assert payload["worker_label"] == "Luminal GPU"
+            assert payload["cache_miss"] is True
+            assert payload["phase"] in {"downloading_model", "loading_model"}
+            assert "Luminal" in payload["message"]
+        finally:
+            allow_load_to_finish.set()
+            generate_thread.join()
+
+        assert responses["generate"].status_code == 200
+
+    def test_generation_status_unknown_id_returns_404(self, test_client):
+        """Status endpoint should fail closed for unknown generation ids."""
+        resp = test_client.get("/api/generate/status/missing-generation")
+        assert resp.status_code == 404
+
     def test_cancel_generation_unknown_id_returns_404(self, test_client):
         """Cancelling a non-existent batch should return 404."""
         resp = test_client.post(
@@ -1371,7 +1422,7 @@ class TestGallery:
         assert data["total"] == 4
         assert all(image["id"] != missing_entry["id"] for image in data["images"])
 
-        persisted_gallery = json.loads((test_config.data_dir / "gallery.json").read_text())
+        persisted_gallery = json.loads(test_config.gallery_db.read_text())
         assert len(persisted_gallery) == 4
         assert all(entry["id"] != missing_entry["id"] for entry in persisted_gallery)
 

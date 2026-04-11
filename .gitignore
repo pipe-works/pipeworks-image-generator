@@ -139,6 +139,8 @@ celerybeat.pid
 .envrc
 .venv
 env/
+!deploy/env/
+!deploy/env/image-generator.env.example
 venv/
 ENV/
 env.bak/

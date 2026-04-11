@@ -83,10 +83,11 @@ def test_config(temp_dir: Path) -> PipeworksConfig:
     static_dir = temp_dir / "static"
     data_dir = static_dir / "data"
     gallery_dir = static_dir / "gallery"
+    gallery_db = temp_dir / "runtime" / "gallery.json"
     templates_dir = temp_dir / "templates"
 
     # Create all necessary directories.
-    for d in [models_dir, outputs_dir, data_dir, gallery_dir, templates_dir]:
+    for d in [models_dir, outputs_dir, data_dir, gallery_dir, gallery_db.parent, templates_dir]:
         d.mkdir(parents=True, exist_ok=True)
 
     return PipeworksConfig(
@@ -95,6 +96,7 @@ def test_config(temp_dir: Path) -> PipeworksConfig:
         static_dir=str(static_dir),
         data_dir=str(data_dir),
         gallery_dir=str(gallery_dir),
+        gallery_db=str(gallery_db),
         templates_dir=str(templates_dir),
         device="cpu",
         torch_dtype="float32",
@@ -467,8 +469,8 @@ def sample_gallery(tmp_gallery_dir: Path, test_config: PipeworksConfig) -> list[
         }
         entries.append(entry)
 
-    # Write gallery.json to the data directory.
-    gallery_db = test_config.data_dir / "gallery.json"
+    # Write gallery.json to the configured gallery metadata path.
+    gallery_db = test_config.gallery_db
     with open(gallery_db, "w") as f:
         json.dump(entries, f, indent=2)
 
@@ -541,7 +543,7 @@ def sample_gallery_mixed_models(tmp_gallery_dir: Path, test_config: PipeworksCon
             }
         )
 
-    gallery_db = test_config.data_dir / "gallery.json"
+    gallery_db = test_config.gallery_db
     with open(gallery_db, "w") as f:
         json.dump(entries, f, indent=2)
 
@@ -677,7 +679,7 @@ def sample_gallery_with_runs(tmp_gallery_dir: Path, test_config: PipeworksConfig
         }
     )
 
-    gallery_db = test_config.data_dir / "gallery.json"
+    gallery_db = test_config.gallery_db
     with open(gallery_db, "w") as f:
         json.dump(entries, f, indent=2)
 
@@ -721,7 +723,7 @@ def test_client(
         patch("pipeworks.api.main.DATA_DIR", test_config.data_dir),
         patch("pipeworks.api.main.GALLERY_DIR", test_config.gallery_dir),
         patch("pipeworks.api.main.TEMPLATES_DIR", test_config.templates_dir),
-        patch("pipeworks.api.main.GALLERY_DB", test_config.data_dir / "gallery.json"),
+        patch("pipeworks.api.main.GALLERY_DB", test_config.gallery_db),
         patch(
             "pipeworks.api.main.GPU_SETTINGS_DB",
             test_config.outputs_dir / "gpu_workers.runtime.json",

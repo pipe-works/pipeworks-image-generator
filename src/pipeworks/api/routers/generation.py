@@ -91,9 +91,48 @@ def create_generation_router(deps: GenerationRouterDependencies) -> APIRouter:
             )
 
         hf_id = model_cfg["hf_id"]
+        model_label = str(model_cfg.get("label") or req.model_id)
+        cache_miss = (
+            target_worker.mode == "local"
+            and deps.generation_runtime_service.has_cached_model(hf_id) is False
+        )
+        deps.generation_runtime_service.register_generation_status(
+            generation_id=generation_id,
+            model_id=req.model_id,
+            model_label=model_label,
+            worker_label=target_worker.label,
+            batch_size=req.batch_size,
+            cache_miss=cache_miss,
+        )
+        if target_worker.mode == "local":
+            if cache_miss:
+                deps.generation_runtime_service.update_generation_status(
+                    generation_id,
+                    phase="downloading_model",
+                    message=f"Downloading {model_label} to Luminal… first run may take several minutes.",
+                )
+            else:
+                deps.generation_runtime_service.update_generation_status(
+                    generation_id,
+                    phase="preparing_model",
+                    message=f"Preparing {model_label} on Luminal…",
+                )
+        else:
+            deps.generation_runtime_service.update_generation_status(
+                generation_id,
+                phase="dispatching_remote",
+                message=f"Dispatching generation to {target_worker.label}…",
+            )
         if target_worker.mode == "local":
             is_available, unavailable_reason = deps.get_model_runtime_support(hf_id)
             if not is_available:
+                deps.generation_runtime_service.update_generation_status(
+                    generation_id,
+                    phase="failed",
+                    message=unavailable_reason or "Selected model is unavailable in this runtime.",
+                    done=True,
+                    error=unavailable_reason or "unavailable",
+                )
                 raise HTTPException(
                     status_code=503,
                     detail=unavailable_reason,
@@ -147,13 +186,37 @@ def create_generation_router(deps: GenerationRouterDependencies) -> APIRouter:
             if target_worker.mode == "local":
                 model_mgr: ModelManager = request.app.state.model_manager
                 if model_mgr.current_model_id != hf_id:
+                    deps.generation_runtime_service.update_generation_status(
+                        generation_id,
+                        phase="loading_model",
+                        message=f"Loading {model_label} on Luminal GPU…",
+                    )
                     await run_in_threadpool(model_mgr.load_model, hf_id)
 
                 for job in jobs:
                     if cancel_event and cancel_event.is_set():
+                        deps.generation_runtime_service.update_generation_status(
+                            generation_id,
+                            phase="cancelled",
+                            message=(
+                                f"Stopped after {len(generated)} of {req.batch_size} image(s) "
+                                f"on {target_worker.label}."
+                            ),
+                            completed_count=len(generated),
+                            done=True,
+                        )
                         cancelled = True
                         break
 
+                    deps.generation_runtime_service.update_generation_status(
+                        generation_id,
+                        phase="generating",
+                        message=(
+                            f"Generating image {job['index'] + 1} of {req.batch_size} "
+                            f"on {target_worker.label}…"
+                        ),
+                        completed_count=len(generated),
+                    )
                     image = await run_in_threadpool(
                         model_mgr.generate,
                         prompt=job["prompt"],
@@ -170,6 +233,15 @@ def create_generation_router(deps: GenerationRouterDependencies) -> APIRouter:
                     filename = f"{image_id}.png"
                     filepath = gallery_dir / filename
                     image.save(filepath, format="PNG")
+                    deps.generation_runtime_service.update_generation_status(
+                        generation_id,
+                        phase="saving_output",
+                        message=(
+                            f"Saving image {job['index'] + 1} of {req.batch_size} "
+                            f"to the Luminal gallery…"
+                        ),
+                        completed_count=len(generated),
+                    )
 
                     entry = deps.generation_runtime_service.build_gallery_entry(
                         req=req,
@@ -186,9 +258,23 @@ def create_generation_router(deps: GenerationRouterDependencies) -> APIRouter:
                     )
                     gallery.insert(0, entry)
                     generated.append(entry)
+                    deps.generation_runtime_service.update_generation_status(
+                        generation_id,
+                        phase="generating",
+                        message=(
+                            f"Completed {len(generated)} of {req.batch_size} image(s) "
+                            f"on {target_worker.label}."
+                        ),
+                        completed_count=len(generated),
+                    )
             else:
                 deps.generation_runtime_service.register_remote_generation_target(
                     generation_id, target_worker
+                )
+                deps.generation_runtime_service.update_generation_status(
+                    generation_id,
+                    phase="waiting_on_worker",
+                    message=f"Waiting for {target_worker.label} to return image data…",
                 )
                 worker_payload = deps.generation_runtime_service.build_remote_generate_payload(
                     generation_id=remote_generation_id,
@@ -244,6 +330,15 @@ def create_generation_router(deps: GenerationRouterDependencies) -> APIRouter:
                     filename = f"{image_id}.png"
                     filepath = gallery_dir / filename
                     filepath.write_bytes(png_bytes)
+                    deps.generation_runtime_service.update_generation_status(
+                        generation_id,
+                        phase="saving_output",
+                        message=(
+                            f"Saving image {job_index + 1} of {req.batch_size} "
+                            f"from {target_worker.label}…"
+                        ),
+                        completed_count=len(generated),
+                    )
 
                     entry = deps.generation_runtime_service.build_gallery_entry(
                         req=req,
@@ -260,10 +355,51 @@ def create_generation_router(deps: GenerationRouterDependencies) -> APIRouter:
                     )
                     gallery.insert(0, entry)
                     generated.append(entry)
+                    deps.generation_runtime_service.update_generation_status(
+                        generation_id,
+                        phase="waiting_on_worker",
+                        message=(
+                            f"Completed {len(generated)} of {req.batch_size} image(s) "
+                            f"from {target_worker.label}."
+                        ),
+                        completed_count=len(generated),
+                    )
 
                 cancelled = bool(worker_response.get("cancelled"))
 
             save_gallery_entries(gallery_db, gallery)
+            deps.generation_runtime_service.update_generation_status(
+                generation_id,
+                phase="complete" if not cancelled else "cancelled",
+                message=(
+                    f"Generated {len(generated)} of {req.batch_size} image(s) "
+                    f"on {target_worker.label}."
+                    if not cancelled
+                    else f"Stopped after {len(generated)} of {req.batch_size} image(s) on {target_worker.label}."
+                ),
+                completed_count=len(generated),
+                done=True,
+            )
+        except HTTPException as exc:
+            deps.generation_runtime_service.update_generation_status(
+                generation_id,
+                phase="failed",
+                message=str(exc.detail),
+                completed_count=len(generated),
+                done=True,
+                error=str(exc.detail),
+            )
+            raise
+        except Exception as exc:
+            deps.generation_runtime_service.update_generation_status(
+                generation_id,
+                phase="failed",
+                message=f"Generation failed on {target_worker.label}: {exc}",
+                completed_count=len(generated),
+                done=True,
+                error=str(exc),
+            )
+            raise
         finally:
             deps.generation_runtime_service.pop_generation_cancel_event(generation_id)
             deps.generation_runtime_service.pop_remote_generation_target(generation_id)
@@ -278,6 +414,14 @@ def create_generation_router(deps: GenerationRouterDependencies) -> APIRouter:
             "requested_count": req.batch_size,
             "completed_count": len(generated),
         }
+
+    @router.get("/api/generate/status/{generation_id}")
+    async def get_generation_status(generation_id: str) -> dict[str, object]:
+        """Return the current phase snapshot for an in-flight generation."""
+        status = deps.generation_runtime_service.get_generation_status(generation_id)
+        if status is None:
+            raise HTTPException(status_code=404, detail="Generation status not found")
+        return status
 
     @router.post("/api/generate/cancel")
     async def cancel_generation(req: CancelGenerationRequest) -> dict:

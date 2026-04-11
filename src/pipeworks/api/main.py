@@ -38,15 +38,15 @@ from pipeworks.core.prompt_token_counter import PromptTokenCounter
 logger = logging.getLogger(__name__)
 
 _MAX_BATCH_SIZE = 1000
-_DEFAULT_MUD_API_BASE_URL = "http://127.0.0.1:8000"
-_DEFAULT_REMOTE_GPU_BASE_URL = "http://100.107.250.105:7860"
-_DEFAULT_REMOTE_GPU_LABEL = "Remote GPU (Tailscale)"
+_DEFAULT_MUD_API_BASE_URL = "http://127.0.0.1:18000"
+_DEFAULT_REMOTE_GPU_BASE_URL = ""
+_DEFAULT_REMOTE_GPU_LABEL = "Remote Worker"
 
 STATIC_DIR: Path = config.static_dir
 DATA_DIR: Path = config.data_dir
 GALLERY_DIR: Path = config.gallery_dir
 TEMPLATES_DIR: Path = config.templates_dir
-GALLERY_DB: Path = DATA_DIR / "gallery.json"
+GALLERY_DB: Path = config.gallery_db
 GPU_SETTINGS_DB: Path = config.outputs_dir / "gpu_workers.runtime.json"
 
 GALLERY_DIR.mkdir(parents=True, exist_ok=True)
@@ -187,6 +187,9 @@ async def disable_http_cache_for_local_testing(request, call_next):
     return response
 
 
+# Allow gallery images to live outside the packaged static tree while keeping
+# their browser URLs stable at /static/gallery/<filename>.
+app.mount("/static/gallery", StaticFiles(directory=str(GALLERY_DIR)), name="static-gallery")
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 

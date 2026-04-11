@@ -1,274 +1,167 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+## Repo Overview
 
-## Project Overview
+Pipeworks Image Generator is a FastAPI-based image generation application with:
 
-Pipe-Works Image Generator is a Python-based image generation system
-with a FastAPI REST API backend and a vanilla HTML/CSS/JS frontend.
-It supports multiple diffusion models via HuggingFace Diffusers with
-real inference, a JSON-based gallery, and a three-part prompt
-composition system.
+- a browser-facing UI in `src/pipeworks/templates/` and `src/pipeworks/static/`
+- API routes under `src/pipeworks/api/`
+- generation/runtime config under `src/pipeworks/core/`
+- file-backed gallery persistence
+- optional remote GPU-worker execution
 
-**Key Technologies:**
+The package entry point is:
 
-- Python 3.12+ (type hints, modern syntax)
-- FastAPI + Uvicorn (REST API and static file serving)
-- HuggingFace Diffusers (multi-model pipeline support)
-- Pydantic / Pydantic Settings (configuration and request validation)
-- PyTorch (model inference)
-- Vanilla HTML/CSS/JS frontend (no build step)
+```bash
+pipeworks
+```
+
+That command launches the FastAPI app defined in `pipeworks.api.main`.
+
+## Workspace Assumptions
+
+The intended shared workspace root is:
+
+```bash
+/srv/work/pipeworks
+```
+
+Important workspace surfaces:
+
+- source repo: `/srv/work/pipeworks/repos/pipeworks-image-generator`
+- project venv: `/srv/work/pipeworks/venvs/pw-image-generator`
+- runtime state: `/srv/work/pipeworks/runtime/image-generator`
+- logs: `/srv/work/pipeworks/logs/image-generator`
+- workspace-managed config:
+  `/srv/work/pipeworks/config/image-generator`
+
+Keep source in the repo checkout and mutable state outside it.
+
+## Python And Venv Expectations
+
+- Python `3.12` is required.
+- `pyproject.toml` is the dependency authority.
+- For hosted service use, the venv must be built from a system-level Python
+  `3.12` install, not from a private interpreter under a user home directory.
+
+Typical install:
+
+```bash
+python3.12 -m venv /srv/work/pipeworks/venvs/pw-image-generator
+/srv/work/pipeworks/venvs/pw-image-generator/bin/pip install -e ".[dev]"
+```
+
+If docs tooling is needed:
+
+```bash
+/srv/work/pipeworks/venvs/pw-image-generator/bin/pip install -e ".[dev,docs]"
+```
+
+## Local Run Posture
+
+Local repo-default launch:
+
+```bash
+/srv/work/pipeworks/venvs/pw-image-generator/bin/pipeworks
+```
+
+The repo-local default bind is:
+
+- host `0.0.0.0`
+- port `7860`
+
+That is a development default, not the hosted-service contract.
+
+## Hosted Service Posture
+
+For hosted service use, the expected bind is driven by external env/config.
+
+Current Luminal-oriented host-managed example:
+
+- bind host `127.0.0.1`
+- bind port `8400`
+- nginx front door in front of the backend
+- workspace-managed writable paths for models, outputs, gallery images, and
+  gallery metadata
+
+Do not treat the repo-local `7860` default as the host-managed service truth.
+
+## Important Config Variables
+
+Core runtime settings:
+
+- `PIPEWORKS_SERVER_HOST`
+- `PIPEWORKS_SERVER_PORT`
+- `PIPEWORKS_MODELS_DIR`
+- `PIPEWORKS_OUTPUTS_DIR`
+- `PIPEWORKS_GALLERY_DIR`
+- `PIPEWORKS_GALLERY_DB`
+- `PIPEWORKS_DEVICE`
+- `PIPEWORKS_TORCH_DTYPE`
+
+Runtime policy integration:
+
+- `PW_POLICY_SOURCE_MODE`
+- `PW_POLICY_DEV_MUD_API_BASE_URL`
+- `PW_POLICY_PROD_MUD_API_BASE_URL`
+
+Optional remote worker settings:
+
+- `PIPEWORKS_GPU_WORKERS`
+- `PIPEWORKS_DEFAULT_GPU_WORKER_ID`
+- `PIPEWORKS_WORKER_API_BEARER_TOKENS`
+
+## Code Areas That Matter
+
+- `src/pipeworks/api/main.py`
+  app bootstrap, static mounts, CLI startup, and module-level path resolution
+- `src/pipeworks/api/routers/generation.py`
+  generation and cancellation API flows
+- `src/pipeworks/api/routers/gpu_worker.py`
+  remote worker API behavior
+- `src/pipeworks/api/gallery_store.py`
+  file-backed gallery persistence
+- `src/pipeworks/core/config.py`
+  settings, path defaults, and directory creation
+- `src/pipeworks/core/model_manager.py`
+  model lifecycle and generation execution
 
 ## Development Commands
 
-### Installation
+Main checks:
 
 ```bash
-# Development install with all dependencies
-pip install -e ".[dev]"
-
-# Production install only
-pip install -e .
+/srv/work/pipeworks/venvs/pw-image-generator/bin/pytest -q
+/srv/work/pipeworks/venvs/pw-image-generator/bin/ruff check src tests
+/srv/work/pipeworks/venvs/pw-image-generator/bin/black --check src tests
+/srv/work/pipeworks/venvs/pw-image-generator/bin/mypy src
 ```
 
-`FLUX.2-klein-4B` requires a Diffusers build with
-`Flux2KleinPipeline`. Until that build is on PyPI, install
-Diffusers from GitHub:
+Useful focused checks:
 
 ```bash
-pip install --upgrade "git+https://github.com/huggingface/diffusers.git"
+/srv/work/pipeworks/venvs/pw-image-generator/bin/pytest tests/unit/test_config.py -q --no-cov
+/srv/work/pipeworks/venvs/pw-image-generator/bin/pytest tests/integration/test_api.py -q --no-cov
 ```
 
-### Running the Application
+## Editing Guidance
 
-```bash
-# Launch FastAPI server (installed entry point)
-pipeworks
+- Keep `README.md`, `AGENTS.md`, and `CLAUDE.md` aligned when workflow or
+  deploy assumptions change.
+- Do not reintroduce stale `requirements.txt`-based guidance.
+- Be careful when editing `config.py` or `api/main.py`; they control real path
+  and mount behavior for both local development and hosted service use.
+- If a change affects hosted-service assumptions, also check deploy templates
+  under `deploy/`.
+- If a change affects runtime paths, update tests and fixture expectations.
 
-# Direct module execution
-python -m pipeworks.api.main
-```
+## Deploy Templates
 
-The server will be accessible at `http://0.0.0.0:7860` by default.
+This repo ships example deploy surfaces under:
 
-### Testing
+- `deploy/env/image-generator.env.example`
+- `deploy/systemd/pipeworks-image-generator.service`
+- `deploy/nginx/images.pipeworks.luminal.local`
 
-```bash
-# Run all tests with coverage
-pytest
-
-# Run specific test file
-pytest tests/unit/test_config.py
-
-# Run tests matching pattern
-pytest -k "test_turbo"
-
-# Run unit tests only (fast)
-pytest tests/unit/ -v
-
-# Run integration tests only (FastAPI TestClient)
-pytest tests/integration/ -v
-
-# Run without coverage (faster)
-pytest --no-cov
-```
-
-**Test Coverage:** 90 tests, 91%+ overall coverage. Core config and
-prompt builder at 100%, API routes at 91%, model manager at 87%.
-
-### Code Quality
-
-```bash
-# Check linting (ruff)
-ruff check src/ tests/
-
-# Auto-fix linting issues
-ruff check src/ tests/ --fix
-
-# Format code (black)
-black src/ tests/
-
-# Check formatting without changes
-black --check src/ tests/
-```
-
-**Code Standards:**
-
-- Line length: 100 characters
-- Target version: Python 3.12
-- Black formatter for consistent style
-- Ruff for linting (rules: E, F, I, N, W, UP)
-- **Pre-commit hooks enabled** — auto-fixes on commit
-
-## Architecture
-
-### High-Level Structure
-
-```text
-src/pipeworks/
-├── __init__.py            # Package root, re-exports ModelManager + config
-├── core/                  # Core generation engine (no HTTP dependency)
-│   ├── __init__.py        # Re-exports ModelManager, PipeworksConfig, config
-│   ├── config.py          # Pydantic Settings (PIPEWORKS_* env prefix)
-│   └── model_manager.py   # Diffusers pipeline lifecycle management
-├── api/                   # FastAPI REST API layer
-│   ├── __init__.py        # Module docstring
-│   ├── main.py            # FastAPI app, all routes, CLI entry point
-│   ├── models.py          # Pydantic request models (GenerateRequest, etc.)
-│   └── prompt_builder.py  # Three-part prompt template compilation
-├── static/                # Web-accessible static assets (served at /static/)
-│   ├── css/               # Stylesheets (app.css, pipe-works-base.css, fonts)
-│   ├── js/                # Frontend JavaScript (app.js)
-│   ├── data/              # models.json, prepend.json, main.json, append.json, gallery.json
-│   ├── fonts/             # Woff2 font files (16 files)
-│   └── gallery/           # Generated images (gitignored, auto-created)
-└── templates/             # HTML templates
-    └── index.html         # Main application page
-```
-
-### Key Architectural Patterns
-
-#### 1. Configuration System (`core/config.py`)
-
-- Single `PipeworksConfig` class using Pydantic Settings
-- All settings loaded from environment variables (prefix: `PIPEWORKS_`)
-- Global `config` instance: `from pipeworks.core.config import config`
-- Auto-creates `models_dir`, `outputs_dir`, `gallery_dir` on init
-- Path defaults resolve to package-internal `static/` and `templates/` directories
-
-#### 2. Model Manager (`core/model_manager.py`)
-
-- `ModelManager` manages one diffusers pipeline at a time
-- Lazy loading — model loads on first `generate()` or explicit `load_model()`
-- Model switching — unloads current model, clears CUDA, loads new one
-- Turbo enforcement — models with "turbo" in their HF ID get `guidance_scale=0.0`
-- Deterministic seeding — `torch.Generator(device).manual_seed(seed)` per call
-- Performance options — attention slicing, CPU offload, torch.compile (from config)
-
-#### 3. API Layer (`api/main.py`)
-
-FastAPI application with 10 REST endpoints:
-
-| Method   | Path                        | Purpose                           |
-|----------|-----------------------------|-----------------------------------|
-| GET      | `/`                         | Serve HTML page                   |
-| GET      | `/api/config`               | Models, prompts, aspect ratios    |
-| POST     | `/api/generate`             | Generate image batch              |
-| POST     | `/api/prompt/compile`       | Preview compiled prompt           |
-| GET      | `/api/gallery`              | Paginated gallery with filters    |
-| GET      | `/api/gallery/{id}`         | Single gallery entry              |
-| GET      | `/api/gallery/{id}/prompt`  | Prompt metadata for an image      |
-| POST     | `/api/gallery/favourite`    | Toggle favourite status           |
-| DELETE   | `/api/gallery/{id}`         | Delete image + metadata           |
-| GET      | `/api/stats`                | Gallery totals and per-model counts |
-
-- Lifespan context manager for ModelManager setup/teardown
-- JSON-based gallery persistence (no database)
-- StaticFiles mount for CSS/JS/fonts/gallery images
-- HTMLResponse for index.html (no template engine needed)
-
-#### 4. Three-Part Prompt System (`api/prompt_builder.py`)
-
-Prompts are compiled from three user-selectable parts interleaved with fixed boilerplate:
-
-```text
-[Prepend Style]  (optional)
-[Fixed: Ledgerfall pamphleteer aesthetic]
-Main Scene:
-[Manual Prompt or Automated Preset]
-[Fixed: Mood/atmosphere]
-[Append Modifier]  (optional)
-[Fixed: Colour palette directive]
-```
-
-#### 5. Frontend
-
-- Vanilla HTML/CSS/JS — no build step, no framework
-- Uses pipe-works design system tokens (`pipe-works-base.css`)
-- Fetches config dynamically via `GET /api/config` on page load
-- All interactions through REST API calls
-
-### Critical Implementation Details
-
-#### ModelManager Lifecycle
-
-```python
-from pipeworks.core.config import config
-from pipeworks.core.model_manager import ModelManager
-
-mgr = ModelManager(config)
-mgr.load_model("Tongyi-MAI/Z-Image-Turbo")
-
-image = mgr.generate(
-    prompt="a goblin workshop",
-    width=1024, height=1024,
-    steps=4, guidance_scale=0.0, seed=42,
-)
-
-mgr.unload()  # Frees GPU memory
-```
-
-#### Turbo Model Constraints
-
-- **Guidance Scale**: Must be 0.0 (enforced automatically in `model_manager.py`)
-- **Optimal Steps**: 4-9 inference steps
-- **Dtype**: bfloat16 recommended (config default)
-- **Device**: cuda preferred, falls back to cpu
-
-#### Gallery Persistence
-
-- Single `gallery.json` file in `static/data/`
-- Self-bootstrapping — created on first generation
-- Newest images inserted at position 0 (reverse chronological)
-- Image PNGs stored in `static/gallery/` (web-accessible)
-
-### Writing Tests
-
-**Unit tests** (`tests/unit/`):
-
-- `test_config.py` — Config defaults, validation, directory creation
-- `test_model_manager.py` — Loading, generation, turbo, unload (all mocked)
-- `test_prompt_builder.py` — Prompt compilation, empty parts, boilerplate
-- `test_api_models.py` — Pydantic validation, defaults, serialisation
-
-**Integration tests** (`tests/integration/`):
-
-- `test_api.py` — All 10 endpoints via FastAPI TestClient with mocked ModelManager
-
-**Test patterns:**
-
-- `conftest.py` provides `test_config`, `test_client`, `mock_model_manager`, `sample_gallery`
-- ModelManager mocking uses `sys.modules` injection for lazy torch/diffusers imports
-- API tests use `unittest.mock.patch` on module-level path constants
-
-### Adding Configuration Options
-
-1. Add field to `PipeworksConfig` in `src/pipeworks/core/config.py`
-2. Update `.env.example` with the new `PIPEWORKS_*` variable
-3. Access via `from pipeworks.core.config import config; config.my_setting`
-
-## Important Constraints
-
-1. **Turbo models require guidance_scale=0.0** — enforced in model_manager.py
-2. **Models directory is large** (50GB+) — always in `.gitignore`
-3. **No template engine** — HTMLResponse serves static index.html
-4. **Gallery is JSON-based** — no SQLite or database dependency
-5. **Type hints are required** — project uses modern Python typing throughout
-6. **All configuration via environment variables** — no hardcoded paths or credentials
-7. **Detailed comments and docstrings required** — all code must be thoroughly documented
-
-## Environment Variables
-
-See `.env.example` for all available settings. Key variables:
-
-| Variable | Default | Description |
-|---|---|---|
-| `PIPEWORKS_DEVICE` | `cuda` | Compute device (cuda, mps, cpu) |
-| `PIPEWORKS_TORCH_DTYPE` | `bfloat16` | Model precision |
-| `PIPEWORKS_NUM_INFERENCE_STEPS` | `9` | Default inference steps |
-| `PIPEWORKS_GUIDANCE_SCALE` | `0.0` | Default guidance (0.0 for turbo) |
-| `PIPEWORKS_SERVER_HOST` | `0.0.0.0` | Server bind address |
-| `PIPEWORKS_SERVER_PORT` | `7860` | Server port |
-| `PIPEWORKS_DISABLE_HTTP_CACHE` | `false` | Disable browser caching for local frontend testing |
-| `PIPEWORKS_MODELS_DIR` | `models` | Model cache location |
-| `PIPEWORKS_OUTPUTS_DIR` | `outputs` | Generated images directory |
+Treat those as checked-in templates. Machine-specific rollout state should live
+outside the repo.

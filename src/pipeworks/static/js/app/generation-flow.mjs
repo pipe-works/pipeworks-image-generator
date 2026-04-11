@@ -9,6 +9,42 @@ export function createGenerationFlow({
   createImageCard,
   updateOutputCount,
 }) {
+  function sleep(ms) {
+    return new Promise(resolve => {
+      window.setTimeout(resolve, ms);
+    });
+  }
+
+  function startGenerationStatusPolling({ generationId }) {
+    let stopped = false;
+
+    const poll = async () => {
+      while (!stopped) {
+        try {
+          const status = await apiClient.getGenerationStatus(generationId);
+          if (status?.message) {
+            setStatus(status.message, status.done !== true);
+          }
+          if (status?.done === true) {
+            stopped = true;
+            break;
+          }
+        } catch (error) {
+          if (stopped) break;
+        }
+        await sleep(750);
+      }
+    };
+
+    const pollingPromise = poll();
+    return {
+      stop: async () => {
+        stopped = true;
+        await pollingPromise;
+      },
+    };
+  }
+
   async function generate() {
     if (state.isGenerating) return;
 
@@ -41,11 +77,15 @@ export function createGenerationFlow({
     const progressWrap = $("#progress-wrap");
     progressWrap.style.display = "";
 
-    setStatus(`Generating ${state.batchSize} image(s) on ${workerLabel}…`, true);
+    setStatus(`Preparing ${state.batchSize} image(s) on ${workerLabel}…`, true);
+    const statusPolling = startGenerationStatusPolling({
+      generationId: state.currentGenerationId,
+    });
 
     try {
       payload.generation_id = state.currentGenerationId;
       const data = await apiClient.generate(payload);
+      await statusPolling.stop();
 
       if (payload.seed === null) {
         $("#inp-seed").placeholder = `Last: ${data.batch_seed}`;
@@ -77,6 +117,7 @@ export function createGenerationFlow({
         setStatus(`Done — ${data.images.length} image(s) generated on ${workerLabel}`);
       }
     } catch (error) {
+      await statusPolling.stop();
       toast(`Generation failed on ${workerLabel}: ${error.message}`, "err");
       setStatus(`Generation failed on ${workerLabel}`, false);
     } finally {
