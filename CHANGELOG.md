@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.3](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.14.2...pipeworks-image-generator-v0.14.3) (2026-04-11)
+
+
+### Fixes
+
+* **release:** clarify release-please commit requirements ([988f130](https://github.com/pipe-works/pipeworks-image-generator/commit/988f130c73c90471950085e449db5729f9bf8fa1))
+
 ## [0.14.2](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.14.1...pipeworks-image-generator-v0.14.2) (2026-03-16)
 
 
