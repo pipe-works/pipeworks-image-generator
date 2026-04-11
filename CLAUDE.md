@@ -149,6 +149,10 @@ Useful focused checks:
 - Keep `README.md`, `AGENTS.md`, and `CLAUDE.md` aligned when workflow or
   deploy assumptions change.
 - Do not reintroduce stale `requirements.txt`-based guidance.
+- When a change should ship, the final commit and PR title must use a
+  conventional prefix such as `feat:` or `fix:`. This repo uses
+  `release-please`, and plain titles like `Add X` or `Update Y` will be
+  ignored by release automation.
 - Be careful when editing `config.py` or `api/main.py`; they control real path
   and mount behavior for both local development and hosted service use.
 - If a change affects hosted-service assumptions, also check deploy templates

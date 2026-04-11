@@ -101,6 +101,9 @@ releasable changes.
   trigger release automation.
 - If you are preparing a PR that should ship, make sure the final title keeps
   the conventional prefix.
+- Do not merge shipping work with plain commit titles. `release-please` will
+  run on `main`, but it will skip unparseable commits and no release PR will
+  be created.
 
 ## Verified Baseline
 
