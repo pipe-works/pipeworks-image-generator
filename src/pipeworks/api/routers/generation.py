@@ -109,7 +109,10 @@ def create_generation_router(deps: GenerationRouterDependencies) -> APIRouter:
                 deps.generation_runtime_service.update_generation_status(
                     generation_id,
                     phase="downloading_model",
-                    message=f"Downloading {model_label} to Luminal… first run may take several minutes.",
+                    message=(
+                        f"Downloading {model_label} to Luminal… "
+                        "first run may take several minutes."
+                    ),
                 )
             else:
                 deps.generation_runtime_service.update_generation_status(
@@ -375,7 +378,10 @@ def create_generation_router(deps: GenerationRouterDependencies) -> APIRouter:
                     f"Generated {len(generated)} of {req.batch_size} image(s) "
                     f"on {target_worker.label}."
                     if not cancelled
-                    else f"Stopped after {len(generated)} of {req.batch_size} image(s) on {target_worker.label}."
+                    else (
+                        f"Stopped after {len(generated)} of {req.batch_size} image(s) "
+                        f"on {target_worker.label}."
+                    )
                 ),
                 completed_count=len(generated),
                 done=True,
