@@ -289,6 +289,71 @@ class TestGetConfig:
                 == "A goblin of pipe-works canon."
             )
 
+    def test_tone_profile_snippet_uses_prompt_block_field(self, test_client):
+        """tone_profile snippets pull text from canonical ``content.prompt_block``."""
+
+        def _fake_login_fetch(*, base_url, method, path, body):
+            return {
+                "session_id": "session-admin-1",
+                "role": "admin",
+                "available_worlds": [{"id": "pipeworks_web", "name": "Pipeworks Web"}],
+            }
+
+        def _fake_authenticated_fetch(*, runtime, method, path, query_params, json_payload=None):
+            if path == "/api/policy-capabilities":
+                return {
+                    "allowed_policy_types": ["prompt", "tone_profile"],
+                    "allowed_statuses": ["draft", "active"],
+                }
+            if path == "/api/policies":
+                return {
+                    "items": [
+                        {
+                            "policy_id": "tone_profile:image.tone_profiles:ledger_engraving",
+                            "policy_type": "tone_profile",
+                            "namespace": "image.tone_profiles",
+                            "policy_key": "ledger_engraving",
+                            "variant": "v1",
+                            "content": {
+                                "name": "ledger_engraving_v1",
+                                "prompt_block": "Linocut style with muted sepia palette.",
+                            },
+                        },
+                        {
+                            "policy_id": "tone_profile:image.tone_profiles:no_payload",
+                            "policy_type": "tone_profile",
+                            "namespace": "image.tone_profiles",
+                            "policy_key": "no_payload",
+                            "variant": "v1",
+                            "content": {"name": "no_payload_v1"},
+                        },
+                    ]
+                }
+            raise AssertionError(f"Unexpected path: {path}")
+
+        with (
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json_anonymous", side_effect=_fake_login_fetch
+            ),
+            patch("pipeworks.api.main._fetch_mud_api_json", side_effect=_fake_authenticated_fetch),
+        ):
+            login_resp = test_client.post(
+                "/api/runtime-login",
+                json={"username": "admin", "password": "pw"},
+            )
+            assert login_resp.status_code == 200
+
+            snippets_resp = test_client.get("/api/policy-prompts")
+            assert snippets_resp.status_code == 200
+            payload = snippets_resp.json()
+
+            options_by_id = {option["id"]: option for option in payload["policy_prompt_options"]}
+            tone_id = "tone_profile:image.tone_profiles:ledger_engraving:v1"
+            assert tone_id in options_by_id
+            assert options_by_id[tone_id]["value"] == "Linocut style with muted sepia palette."
+            # tone_profile without a prompt_block field is silently dropped.
+            assert "tone_profile:image.tone_profiles:no_payload:v1" not in options_by_id
+
     def test_disable_http_cache_adds_no_cache_headers(self, test_client):
         """No-cache headers should be emitted when local dev mode enables them."""
         from pipeworks.api import main as main_module
