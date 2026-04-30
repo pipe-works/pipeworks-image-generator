@@ -32,29 +32,32 @@ class _FakeTokenizer:
         return {"input_ids": normalized.split()}
 
 
-def test_count_prompt_parts_uses_chat_template_for_total_only(test_config):
-    """Section counts should be plain tokenizer counts; total should use chat wrapping."""
+def test_count_dynamic_prompt_sections_uses_chat_template_for_total_only(test_config):
+    """Per-slot counts should be plain tokenizer counts; total should use chat wrapping."""
     tokenizer = _FakeTokenizer()
     counter = PromptTokenCounter(test_config)
 
     with patch("pipeworks.core.prompt_token_counter._load_tokenizer", return_value=tokenizer):
-        counts = counter.count_prompt_parts(
+        counts = counter.count_dynamic_prompt_sections(
             hf_id="black-forest-labs/FLUX.2-klein-4B",
-            prepend_text="ink sketch",
-            main_text="a brass automaton",
-            append_text="dramatic lighting",
+            sections=[
+                {"label": "Style", "text": "ink sketch"},
+                {"label": "Subject", "text": "a brass automaton"},
+                {"label": "Lighting", "text": "dramatic lighting"},
+            ],
             compiled_prompt="ink sketch a brass automaton dramatic lighting",
         )
 
-    assert counts["prepend"] == 2
-    assert counts["main"] == 3
-    assert counts["append"] == 2
+    assert [entry["label"] for entry in counts["sections"]] == ["Style", "Subject", "Lighting"]
+    assert [entry["tokens"] for entry in counts["sections"]] == [2, 3, 2]
     assert counts["total"] == 7
     assert counts["method"] == "tokenizer"
     assert tokenizer.applied_prompts == ["ink sketch a brass automaton dramatic lighting"]
 
 
-def test_count_prompt_parts_falls_back_to_heuristic_when_tokenizer_load_fails(test_config):
+def test_count_dynamic_prompt_sections_falls_back_to_heuristic_when_tokenizer_load_fails(
+    test_config,
+):
     """A tokenizer load failure should not break prompt preview token counts."""
     counter = PromptTokenCounter(test_config)
 
@@ -62,16 +65,17 @@ def test_count_prompt_parts_falls_back_to_heuristic_when_tokenizer_load_fails(te
         "pipeworks.core.prompt_token_counter._load_tokenizer",
         side_effect=RuntimeError("offline"),
     ):
-        counts = counter.count_prompt_parts(
+        counts = counter.count_dynamic_prompt_sections(
             hf_id="black-forest-labs/FLUX.2-klein-4B",
-            prepend_text="ink sketch",
-            main_text="a brass automaton",
-            append_text="dramatic lighting",
-            compiled_prompt="ink sketch a brass automaton dramatic lighting",
+            sections=[
+                {"label": "Subject", "text": "a brass automaton"},
+            ],
+            compiled_prompt="a brass automaton",
         )
 
     assert counts["method"] == "heuristic"
     assert counts["total"] > 0
+    assert counts["sections"][0]["label"] == "Subject"
 
 
 def test_load_tokenizer_uses_tokenizer_subfolder():

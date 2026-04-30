@@ -354,56 +354,6 @@ def mock_prompt_token_counter() -> MagicMock:
     """Create a mock prompt token counter for compile preview responses."""
     counter = MagicMock()
 
-    def _count_prompt_parts(
-        *,
-        hf_id: str | None,
-        prepend_text: str,
-        main_text: str,
-        append_text: str,
-        compiled_prompt: str,
-    ) -> dict:
-        def _count_words(text: str) -> int:
-            return len(text.split()) if text.strip() else 0
-
-        return {
-            "prepend": _count_words(prepend_text),
-            "main": _count_words(main_text),
-            "append": _count_words(append_text),
-            "total": _count_words(compiled_prompt),
-            "method": "tokenizer" if hf_id else "heuristic",
-        }
-
-    counter.count_prompt_parts.side_effect = _count_prompt_parts
-
-    def _count_prompt_sections(
-        *,
-        hf_id: str | None,
-        subject_text: str,
-        setting_text: str,
-        details_text: str,
-        lighting_text: str,
-        atmosphere_text: str,
-        compiled_prompt: str,
-    ) -> dict:
-        def _count_words(text: str) -> int:
-            return len(text.split()) if text.strip() else 0
-
-        counts = {
-            "subject": _count_words(subject_text),
-            "setting": _count_words(setting_text),
-            "details": _count_words(details_text),
-            "lighting": _count_words(lighting_text),
-            "atmosphere": _count_words(atmosphere_text),
-            "total": _count_words(compiled_prompt),
-            "method": "tokenizer" if hf_id else "heuristic",
-        }
-        counts["prepend"] = counts["subject"]
-        counts["main"] = counts["details"]
-        counts["append"] = counts["atmosphere"]
-        return counts
-
-    counter.count_prompt_sections.side_effect = _count_prompt_sections
-
     def _count_dynamic_prompt_sections(
         *,
         hf_id: str | None,
@@ -468,15 +418,15 @@ def sample_gallery(tmp_gallery_dir: Path, test_config: PipeworksConfig) -> list[
             "model_id": "z-image-turbo",
             "model_label": "Z-Image Turbo",
             "compiled_prompt": f"Test prompt {i}",
-            "prepend_prompt_id": "none",
-            "prompt_mode": "manual",
-            "manual_prompt": f"Test prompt {i}",
-            "automated_prompt_id": None,
-            "append_prompt_id": "none",
-            "prepend_mode": "template",
-            "append_mode": "template",
-            "manual_prepend": None,
-            "manual_append": None,
+            "prompt_schema_version": 3,
+            "sections": [
+                {
+                    "label": "Subject",
+                    "mode": "manual",
+                    "manual_text": f"Test prompt {i}",
+                    "automated_prompt_id": None,
+                }
+            ],
             "aspect_ratio_id": "1:1",
             "width": 1024,
             "height": 1024,
@@ -542,15 +492,15 @@ def sample_gallery_mixed_models(tmp_gallery_dir: Path, test_config: PipeworksCon
                 "model_id": model_id,
                 "model_label": model_label,
                 "compiled_prompt": f"Prompt {index}",
-                "prepend_prompt_id": "none",
-                "prompt_mode": "manual",
-                "manual_prompt": f"Prompt {index}",
-                "automated_prompt_id": None,
-                "append_prompt_id": "none",
-                "prepend_mode": "template",
-                "append_mode": "template",
-                "manual_prepend": None,
-                "manual_append": None,
+                "prompt_schema_version": 3,
+                "sections": [
+                    {
+                        "label": "Subject",
+                        "mode": "manual",
+                        "manual_text": f"Prompt {index}",
+                        "automated_prompt_id": None,
+                    }
+                ],
                 "aspect_ratio_id": "1:1",
                 "width": 1024,
                 "height": 1024,
@@ -605,15 +555,15 @@ def sample_gallery_with_runs(tmp_gallery_dir: Path, test_config: PipeworksConfig
                 "model_id": "z-image-turbo",
                 "model_label": "Z-Image Turbo",
                 "compiled_prompt": f"Run A prompt {i}",
-                "prepend_prompt_id": "none",
-                "prompt_mode": "manual",
-                "manual_prompt": f"Run A prompt {i}",
-                "automated_prompt_id": None,
-                "append_prompt_id": "none",
-                "prepend_mode": "template",
-                "append_mode": "template",
-                "manual_prepend": None,
-                "manual_append": None,
+                "prompt_schema_version": 3,
+                "sections": [
+                    {
+                        "label": "Subject",
+                        "mode": "manual",
+                        "manual_text": f"Run A prompt {i}",
+                        "automated_prompt_id": None,
+                    }
+                ],
                 "aspect_ratio_id": "1:1",
                 "width": 1024,
                 "height": 1024,
@@ -642,15 +592,15 @@ def sample_gallery_with_runs(tmp_gallery_dir: Path, test_config: PipeworksConfig
                 "model_id": "sdxl-1-0",
                 "model_label": "SD-XL 1.0",
                 "compiled_prompt": f"Run B prompt {i}",
-                "prepend_prompt_id": "none",
-                "prompt_mode": "manual",
-                "manual_prompt": f"Run B prompt {i}",
-                "automated_prompt_id": None,
-                "append_prompt_id": "none",
-                "prepend_mode": "template",
-                "append_mode": "template",
-                "manual_prepend": None,
-                "manual_append": None,
+                "prompt_schema_version": 3,
+                "sections": [
+                    {
+                        "label": "Subject",
+                        "mode": "manual",
+                        "manual_text": f"Run B prompt {i}",
+                        "automated_prompt_id": None,
+                    }
+                ],
                 "aspect_ratio_id": "1:1",
                 "width": 1024,
                 "height": 1024,
@@ -678,15 +628,15 @@ def sample_gallery_with_runs(tmp_gallery_dir: Path, test_config: PipeworksConfig
             "model_id": "z-image-turbo",
             "model_label": "Z-Image Turbo",
             "compiled_prompt": "Run C prompt",
-            "prepend_prompt_id": "none",
-            "prompt_mode": "manual",
-            "manual_prompt": "Run C prompt",
-            "automated_prompt_id": None,
-            "append_prompt_id": "none",
-            "prepend_mode": "template",
-            "append_mode": "template",
-            "manual_prepend": None,
-            "manual_append": None,
+            "prompt_schema_version": 3,
+            "sections": [
+                {
+                    "label": "Subject",
+                    "mode": "manual",
+                    "manual_text": "Run C prompt",
+                    "automated_prompt_id": None,
+                }
+            ],
             "aspect_ratio_id": "1:1",
             "width": 1024,
             "height": 1024,

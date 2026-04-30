@@ -56,31 +56,15 @@ class GenerateRequest(BaseModel):
     """Request body for the ``POST /api/generate`` endpoint.
 
     Contains every parameter needed to generate a batch of images:
-    model selection, prompt composition parts, image dimensions, inference
-    settings, seed, and batch size.
+    model selection, prompt composition (curator-ordered policy slots),
+    image dimensions, inference settings, seed, and batch size.
 
     Attributes:
         model_id: Identifier of the model to use (must match an ``id`` value
             in ``models.json``).
-        prepend_mode: Either ``"template"`` (preset from the prompt library) or
-            ``"manual"`` (user-supplied text).  Defaults to ``"template"``.
-        prepend_prompt_id: Identifier of the prepend style prompt to apply.
-            Use ``"none"`` to skip.  Used when ``prepend_mode`` is
-            ``"template"``.
-        manual_prepend: Free-text prepend style.  Used when ``prepend_mode``
-            is ``"manual"``.
-        prompt_mode: Either ``"manual"`` (user-supplied prompt) or
-            ``"automated"`` (preset scene selection).
-        manual_prompt: Free-text prompt. Optional when ``prompt_mode`` is
-            ``"manual"``.
-        automated_prompt_id: Identifier of the automated scene preset.
-            Optional when ``prompt_mode`` is ``"automated"``.
-        append_mode: Either ``"template"`` (preset from the prompt library) or
-            ``"manual"`` (user-supplied text).  Defaults to ``"template"``.
-        append_prompt_id: Identifier of the append modifier.  Use
-            ``"none"`` to skip.  Used when ``append_mode`` is ``"template"``.
-        manual_append: Free-text append modifier.  Used when ``append_mode``
-            is ``"manual"``.
+        prompt_schema_version: Always ``3`` — required to disambiguate
+            from older schemas that may surface in archived metadata.
+        sections: Ordered list of policy slots (see ``PromptSection``).
         aspect_ratio_id: Identifier of the selected aspect ratio preset.
         width: Image width in pixels (should be a multiple of 64).
         height: Image height in pixels (should be a multiple of 64).
@@ -99,116 +83,16 @@ class GenerateRequest(BaseModel):
         ...,
         description="Model identifier from models.json (e.g. 'z-image-turbo').",
     )
-    prepend_mode: str = Field(
-        default="template",
-        description="Prepend mode: 'template' (use preset) or 'manual' (free text).",
+    prompt_schema_version: Literal[3] = Field(
+        default=3,
+        description="Prompt schema version. Always 3 — see `sections`.",
     )
-    prepend_prompt_id: str = Field(
-        default="none",
-        description="Prepend style prompt ID, or 'none' to skip (template mode).",
-    )
-    manual_prepend: str | None = Field(
-        default=None,
-        description="Free-text prepend style (used when prepend_mode='manual').",
-    )
-    prompt_mode: str = Field(
-        default="manual",
-        description="Prompt mode: 'manual' or 'automated'.",
-    )
-    manual_prompt: str | None = Field(
-        default=None,
-        description="Free-text prompt (optional when prompt_mode='manual').",
-    )
-    automated_prompt_id: str | None = Field(
-        default=None,
-        description="Automated scene preset ID (optional when prompt_mode='automated').",
-    )
-    append_mode: str = Field(
-        default="template",
-        description="Append mode: 'template' (use preset) or 'manual' (free text).",
-    )
-    append_prompt_id: str | None = Field(
-        default=None,
-        description="Append modifier prompt ID, or 'none' to skip (template mode).",
-    )
-    manual_append: str | None = Field(
-        default=None,
-        description="Free-text append modifier (used when append_mode='manual').",
-    )
-    prompt_schema_version: int | None = Field(
-        default=None,
+    sections: list[PromptSection] = Field(
+        default_factory=list,
         description=(
-            "Prompt schema version. "
-            "2 = fixed Subject/Setting/Details/Lighting/Atmosphere sections. "
-            "3 = dynamic ordered list of sections (see `sections` field)."
+            "Ordered list of prompt sections. Each section is compiled in "
+            "submitted order; empty sections are silently dropped."
         ),
-    )
-    sections: list[PromptSection] | None = Field(
-        default=None,
-        description=(
-            "Ordered list of prompt sections (schema v3). Each section is "
-            "compiled in submitted order; empty sections are silently dropped."
-        ),
-    )
-    subject_mode: str | None = Field(
-        default=None,
-        description="Subject mode: 'manual' or 'automated' (schema v2).",
-    )
-    manual_subject: str | None = Field(
-        default=None,
-        description="Free-text Subject section value (schema v2).",
-    )
-    automated_subject_prompt_id: str | None = Field(
-        default=None,
-        description="Automated Subject prompt snippet ID (schema v2).",
-    )
-    setting_mode: str | None = Field(
-        default=None,
-        description="Setting mode: 'manual' or 'automated' (schema v2).",
-    )
-    manual_setting: str | None = Field(
-        default=None,
-        description="Free-text Setting section value (schema v2).",
-    )
-    automated_setting_prompt_id: str | None = Field(
-        default=None,
-        description="Automated Setting prompt snippet ID (schema v2).",
-    )
-    details_mode: str | None = Field(
-        default=None,
-        description="Details mode: 'manual' or 'automated' (schema v2).",
-    )
-    manual_details: str | None = Field(
-        default=None,
-        description="Free-text Details section value (schema v2).",
-    )
-    automated_details_prompt_id: str | None = Field(
-        default=None,
-        description="Automated Details prompt snippet ID (schema v2).",
-    )
-    lighting_mode: str | None = Field(
-        default=None,
-        description="Lighting mode: 'manual' or 'automated' (schema v2).",
-    )
-    manual_lighting: str | None = Field(
-        default=None,
-        description="Free-text Lighting section value (schema v2).",
-    )
-    automated_lighting_prompt_id: str | None = Field(
-        default=None,
-        description="Automated Lighting prompt snippet ID (schema v2).",
-    )
-    atmosphere_mode: str | None = Field(
-        default=None,
-        description="Atmosphere mode: 'manual' or 'automated' (schema v2).",
-    )
-    manual_atmosphere: str | None = Field(
-        default=None,
-        description="Free-text Atmosphere section value (schema v2).",
-    )
-    automated_atmosphere_prompt_id: str | None = Field(
-        default=None,
-        description="Automated Atmosphere prompt snippet ID (schema v2).",
     )
     aspect_ratio_id: str = Field(
         ...,
