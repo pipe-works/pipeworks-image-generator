@@ -18,7 +18,6 @@ import { createRuntimeGpuController } from "./app/runtime-gpu-controller.mjs";
 import {
   COPY_FEEDBACK_MS,
   MAX_BATCH_SIZE,
-  PROMPT_SECTIONS,
   SECTION_COLLAPSE_STORAGE_PREFIX,
   State,
 } from "./app/state.mjs";
@@ -126,6 +125,7 @@ const runtimeGpuController = createRuntimeGpuController({
   updatePromptPreview: () => promptComposer?.updatePromptPreview(),
   updateTokenCounters: () => promptComposer?.updateTokenCounters(),
   setGpuSettingsStatus,
+  refreshComposerPolicyDropdowns: () => promptComposer?.refreshPolicyDropdowns(),
 });
 
 const galleryManager = createGalleryManager({
@@ -331,25 +331,6 @@ function wireEvents() {
   });
 
   $("#sel-aspect").addEventListener("change", runtimeGpuController.onAspectChange);
-
-  PROMPT_SECTIONS.forEach(section => {
-    $(`#btn-${section}-automated`).addEventListener("click", () => {
-      promptComposer.setSectionPromptMode(section, "automated");
-    });
-    $(`#btn-${section}-manual`).addEventListener("click", () => {
-      promptComposer.setSectionPromptMode(section, "manual");
-    });
-    $(`#btn-copy-${section}`).addEventListener("click", function () {
-      promptComposer.copyPromptSection(section, this);
-    });
-    $(`#txt-${section}`).addEventListener("input", () => {
-      promptComposer.updateTokenCounters();
-      promptComposer.schedulePromptPreview();
-    });
-    $(`#sel-${section}`).addEventListener("change", event => {
-      promptComposer.appendPolicySnippetToSection(section, event.target.value);
-    });
-  });
 
   $("#rng-steps").addEventListener("input", function () {
     $("#lbl-steps").textContent = this.value;

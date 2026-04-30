@@ -170,136 +170,38 @@
             </button>
             <div class="ctrl-section__body" id="prompt-section-body">
 
-            <div class="composer-flow-label">Subject → Setting → Details → Lighting → Atmosphere</div>
+            <div class="composer-flow-label">Ordered policy slots — drag to reorder, + to add.</div>
 
-            <div class="ctrl-section composer-subsection" data-collapse-key="composer-subject">
-              <button class="ctrl-section__heading ctrl-section__heading--toggle" data-section-toggle type="button" aria-expanded="true">
-                <span>Subject</span>
-                <span class="ctrl-section__chevron">▾</span>
-              </button>
-              <div class="ctrl-section__body">
-                <div class="control-label-row">
-                  <label class="control-label">Subject Prompt</label>
-                  <div class="control-actions">
-                    <button class="btn btn--secondary btn--sm" id="btn-copy-subject" type="button">Copy</button>
+            <div id="composer-slots" class="composer-slots"></div>
+
+            <template id="composer-slot-template">
+              <div class="ctrl-section composer-subsection composer-slot" data-slot-id="">
+                <div class="composer-slot__header">
+                  <button class="composer-slot__drag" type="button" title="Drag to reorder" aria-label="Drag to reorder slot">⋮⋮</button>
+                  <input class="composer-slot__label-input" type="text" value="Policy" aria-label="Slot label" />
+                  <div class="composer-slot__actions">
+                    <button class="btn btn--secondary btn--sm composer-slot__copy" type="button">Copy</button>
+                    <button class="btn btn--secondary btn--sm composer-slot__delete" type="button" title="Remove slot" aria-label="Remove slot">✕</button>
                   </div>
                 </div>
-                <div class="prompt-mode-toggle">
-                  <button class="btn btn--secondary btn--sm" id="btn-subject-automated" data-mode="automated">Automated</button>
-                  <button class="btn btn--secondary btn--sm is-active" id="btn-subject-manual" data-mode="manual">Manual</button>
-                </div>
-                <div id="subject-auto-wrap" style="display:none">
-                  <label class="control-label">Policy Snippets</label>
-                  <select class="select" id="sel-subject" style="width:100%"></select>
-                  <div class="composer-select-hint">Selecting an item appends it to the end of the section text.</div>
-                </div>
-                <textarea class="prompt-textarea" id="txt-subject" placeholder="Describe the subject (optional)… Use {red|blue|green} for random variants." rows="3"></textarea>
-                <div class="token-counter" id="subject-tokens">0 / -- tokens</div>
-              </div>
-            </div>
-
-            <div class="ctrl-section composer-subsection" data-collapse-key="composer-setting">
-              <button class="ctrl-section__heading ctrl-section__heading--toggle" data-section-toggle type="button" aria-expanded="true">
-                <span>Setting</span>
-                <span class="ctrl-section__chevron">▾</span>
-              </button>
-              <div class="ctrl-section__body">
-                <div class="control-label-row">
-                  <label class="control-label">Setting Prompt</label>
-                  <div class="control-actions">
-                    <button class="btn btn--secondary btn--sm" id="btn-copy-setting" type="button">Copy</button>
+                <div class="composer-slot__body">
+                  <div class="prompt-mode-toggle">
+                    <button class="btn btn--secondary btn--sm composer-slot__mode" data-mode="automated" type="button">Automated</button>
+                    <button class="btn btn--secondary btn--sm is-active composer-slot__mode" data-mode="manual" type="button">Manual</button>
                   </div>
-                </div>
-                <div class="prompt-mode-toggle">
-                  <button class="btn btn--secondary btn--sm" id="btn-setting-automated" data-mode="automated">Automated</button>
-                  <button class="btn btn--secondary btn--sm is-active" id="btn-setting-manual" data-mode="manual">Manual</button>
-                </div>
-                <div id="setting-auto-wrap" style="display:none">
-                  <label class="control-label">Policy Snippets</label>
-                  <select class="select" id="sel-setting" style="width:100%"></select>
-                  <div class="composer-select-hint">Selecting an item appends it to the end of the section text.</div>
-                </div>
-                <textarea class="prompt-textarea" id="txt-setting" placeholder="Describe the setting (optional)… Use {red|blue|green} for random variants." rows="3"></textarea>
-                <div class="token-counter" id="setting-tokens">0 / -- tokens</div>
-              </div>
-            </div>
-
-            <div class="ctrl-section composer-subsection" data-collapse-key="composer-details">
-              <button class="ctrl-section__heading ctrl-section__heading--toggle" data-section-toggle type="button" aria-expanded="true">
-                <span>Details</span>
-                <span class="ctrl-section__chevron">▾</span>
-              </button>
-              <div class="ctrl-section__body">
-                <div class="control-label-row">
-                  <label class="control-label">Details Prompt</label>
-                  <div class="control-actions">
-                    <button class="btn btn--secondary btn--sm" id="btn-copy-details" type="button">Copy</button>
+                  <div class="composer-slot__auto-wrap" style="display:none">
+                    <label class="control-label">Policy Snippets</label>
+                    <select class="select composer-slot__select" style="width:100%"></select>
+                    <div class="composer-select-hint">Selecting an item appends it to the end of the slot text.</div>
                   </div>
+                  <textarea class="prompt-textarea composer-slot__textarea" placeholder="Free-text content for this slot… Use {red|blue|green} for random variants." rows="3"></textarea>
+                  <div class="token-counter composer-slot__tokens">0 / -- tokens</div>
                 </div>
-                <div class="prompt-mode-toggle">
-                  <button class="btn btn--secondary btn--sm" id="btn-details-automated" data-mode="automated">Automated</button>
-                  <button class="btn btn--secondary btn--sm is-active" id="btn-details-manual" data-mode="manual">Manual</button>
-                </div>
-                <div id="details-auto-wrap" style="display:none">
-                  <label class="control-label">Policy Snippets</label>
-                  <select class="select" id="sel-details" style="width:100%"></select>
-                  <div class="composer-select-hint">Selecting an item appends it to the end of the section text.</div>
-                </div>
-                <textarea class="prompt-textarea" id="txt-details" placeholder="Describe key details (optional)… Use {red|blue|green} for random variants." rows="3"></textarea>
-                <div class="token-counter" id="details-tokens">0 / -- tokens</div>
               </div>
-            </div>
+            </template>
 
-            <div class="ctrl-section composer-subsection" data-collapse-key="composer-lighting">
-              <button class="ctrl-section__heading ctrl-section__heading--toggle" data-section-toggle type="button" aria-expanded="true">
-                <span>Lighting</span>
-                <span class="ctrl-section__chevron">▾</span>
-              </button>
-              <div class="ctrl-section__body">
-                <div class="control-label-row">
-                  <label class="control-label">Lighting Prompt</label>
-                  <div class="control-actions">
-                    <button class="btn btn--secondary btn--sm" id="btn-copy-lighting" type="button">Copy</button>
-                  </div>
-                </div>
-                <div class="prompt-mode-toggle">
-                  <button class="btn btn--secondary btn--sm" id="btn-lighting-automated" data-mode="automated">Automated</button>
-                  <button class="btn btn--secondary btn--sm is-active" id="btn-lighting-manual" data-mode="manual">Manual</button>
-                </div>
-                <div id="lighting-auto-wrap" style="display:none">
-                  <label class="control-label">Policy Snippets</label>
-                  <select class="select" id="sel-lighting" style="width:100%"></select>
-                  <div class="composer-select-hint">Selecting an item appends it to the end of the section text.</div>
-                </div>
-                <textarea class="prompt-textarea" id="txt-lighting" placeholder="Describe lighting (optional)… Use {red|blue|green} for random variants." rows="3"></textarea>
-                <div class="token-counter" id="lighting-tokens">0 / -- tokens</div>
-              </div>
-            </div>
-
-            <div class="ctrl-section composer-subsection" data-collapse-key="composer-atmosphere">
-              <button class="ctrl-section__heading ctrl-section__heading--toggle" data-section-toggle type="button" aria-expanded="true">
-                <span>Atmosphere</span>
-                <span class="ctrl-section__chevron">▾</span>
-              </button>
-              <div class="ctrl-section__body">
-                <div class="control-label-row">
-                  <label class="control-label">Atmosphere Prompt</label>
-                  <div class="control-actions">
-                    <button class="btn btn--secondary btn--sm" id="btn-copy-atmosphere" type="button">Copy</button>
-                  </div>
-                </div>
-                <div class="prompt-mode-toggle">
-                  <button class="btn btn--secondary btn--sm" id="btn-atmosphere-automated" data-mode="automated">Automated</button>
-                  <button class="btn btn--secondary btn--sm is-active" id="btn-atmosphere-manual" data-mode="manual">Manual</button>
-                </div>
-                <div id="atmosphere-auto-wrap" style="display:none">
-                  <label class="control-label">Policy Snippets</label>
-                  <select class="select" id="sel-atmosphere" style="width:100%"></select>
-                  <div class="composer-select-hint">Selecting an item appends it to the end of the section text.</div>
-                </div>
-                <textarea class="prompt-textarea" id="txt-atmosphere" placeholder="Describe atmosphere (optional)… Use {red|blue|green} for random variants." rows="3"></textarea>
-                <div class="token-counter" id="atmosphere-tokens">0 / -- tokens</div>
-              </div>
+            <div class="composer-add-row">
+              <button class="btn btn--secondary btn--sm" id="btn-add-slot" type="button">+ Add Slot</button>
             </div>
 
             <!-- Negative prompt (conditional) -->

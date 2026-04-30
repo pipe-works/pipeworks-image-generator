@@ -409,6 +409,90 @@ html, body {
 }
 
 
+/* ── Dynamic composer slots ──────────────────────────────────────────────── */
+
+.composer-slots {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.composer-slot {
+  cursor: grab;
+}
+
+.composer-slot.composer-slot--dragging {
+  opacity: 0.4;
+}
+
+.composer-slot.composer-slot--drop-target {
+  border-color: var(--col-accent);
+  box-shadow: 0 0 0 1px var(--col-accent) inset;
+}
+
+.composer-slot__header {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  margin-bottom: var(--sp-1);
+}
+
+.composer-slot__drag {
+  background: transparent;
+  border: 1px solid var(--col-border);
+  border-radius: var(--radius-sm);
+  color: var(--col-text-dim);
+  cursor: grab;
+  font-family: var(--font-mono);
+  padding: 2px 6px;
+  user-select: none;
+}
+
+.composer-slot__drag:active {
+  cursor: grabbing;
+}
+
+.composer-slot__label-input {
+  flex: 1;
+  background: var(--col-surface);
+  border: 1px solid var(--col-border);
+  border-radius: var(--radius-sm);
+  color: var(--col-text);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  padding: 4px 8px;
+}
+
+.composer-slot__label-input:focus {
+  border-color: var(--col-accent);
+  outline: none;
+}
+
+.composer-slot__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  flex-shrink: 0;
+}
+
+.composer-slot__delete[disabled] {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.composer-slot__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.composer-add-row {
+  margin-top: var(--sp-2);
+  display: flex;
+  justify-content: flex-start;
+}
+
+
 /* ── Token counters ──────────────────────────────────────────────────────── */
 
 .token-counter {

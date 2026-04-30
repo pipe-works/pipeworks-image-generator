@@ -1,4 +1,4 @@
-import { DEFAULT_MODEL_ID, PROMPT_SECTIONS } from "./state.mjs";
+import { DEFAULT_MODEL_ID } from "./state.mjs";
 
 export function createRuntimeGpuController({
   state,
@@ -11,6 +11,7 @@ export function createRuntimeGpuController({
   updatePromptPreview,
   updateTokenCounters,
   setGpuSettingsStatus,
+  refreshComposerPolicyDropdowns,
 }) {
   function syncGpuSettingsControls() {
     const useRemote = $("#chk-use-remote-gpu")?.checked || false;
@@ -55,51 +56,10 @@ export function createRuntimeGpuController({
     syncGpuSettingsControls();
   }
 
-  function populatePolicySelect(selectEl, options, groups) {
-    if (!selectEl) return;
-    selectEl.innerHTML = "";
-    selectEl.appendChild(el("option", { value: "" }, "— Add snippet from policies —"));
-
-    const grouped = new Map();
-    groups.forEach(group => {
-      if (group && !grouped.has(group)) grouped.set(group, []);
-    });
-    options.forEach(option => {
-      const group = option.group || "policies";
-      if (!grouped.has(group)) grouped.set(group, []);
-      grouped.get(group).push(option);
-    });
-
-    [...grouped.keys()].sort().forEach(group => {
-      const optGroup = document.createElement("optgroup");
-      optGroup.label = group;
-      const entries = grouped.get(group) || [];
-      if (entries.length === 0) {
-        optGroup.appendChild(
-          el(
-            "option",
-            { value: "", disabled: "disabled" },
-            "— No prompt snippets in this directory —",
-          ),
-        );
-      } else {
-        entries.forEach(option => {
-          const opt = el("option", { value: option.id }, option.label);
-          optGroup.appendChild(opt);
-        });
-      }
-      selectEl.appendChild(optGroup);
-    });
-
-    selectEl.value = "";
-  }
-
   function applyPolicyPromptDropdowns() {
-    const options = state.policyPromptOptions || [];
-    const groups = state.policyPromptGroups || [];
-    PROMPT_SECTIONS.forEach(section => {
-      populatePolicySelect($(`#sel-${section}`), options, groups);
-    });
+    if (typeof refreshComposerPolicyDropdowns === "function") {
+      refreshComposerPolicyDropdowns();
+    }
   }
 
   function runtimeModeLabel() {
