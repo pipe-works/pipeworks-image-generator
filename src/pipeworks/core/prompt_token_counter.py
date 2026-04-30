@@ -140,6 +140,46 @@ class PromptTokenCounter:
         counts["append"] = counts["atmosphere"]
         return counts
 
+    def count_dynamic_prompt_sections(
+        self,
+        *,
+        hf_id: str | None,
+        sections: list[dict[str, str]],
+        compiled_prompt: str,
+    ) -> dict[str, Any]:
+        """Return per-slot token counts for the v3 dynamic-section schema.
+
+        The returned dict mirrors the v2 shape's ``total`` and ``method``
+        fields and adds a ``sections`` list with one entry per submitted
+        slot in submitted order: ``{"label", "tokens"}``. Front-end token
+        counters render off the list rather than fixed section names.
+        """
+        tokenizer = self._get_tokenizer(hf_id)
+        if tokenizer is None:
+            return {
+                "sections": [
+                    {
+                        "label": section.get("label", "Policy"),
+                        "tokens": _estimate_tokens(section.get("text", "")),
+                    }
+                    for section in sections
+                ],
+                "total": _estimate_tokens(compiled_prompt),
+                "method": "heuristic",
+            }
+
+        return {
+            "sections": [
+                {
+                    "label": section.get("label", "Policy"),
+                    "tokens": self._count_text(tokenizer, section.get("text", "")),
+                }
+                for section in sections
+            ],
+            "total": self._count_text(tokenizer, compiled_prompt, apply_chat_template=True),
+            "method": "tokenizer",
+        }
+
     def _get_tokenizer(self, hf_id: str | None):
         if not hf_id:
             return None

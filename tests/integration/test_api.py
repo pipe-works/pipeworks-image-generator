@@ -723,8 +723,8 @@ class TestGenerate:
         assert resp.status_code == 200
         assert resp.json()["success"] is True
 
-    def test_generate_requires_prompt_schema_v2(self, test_client):
-        """Legacy v1 payload path should now be rejected."""
+    def test_generate_requires_supported_schema_version(self, test_client):
+        """Legacy v1 payload path (no schema version) should be rejected."""
         legacy_payload = {
             "model_id": "z-image-turbo",
             "prompt_mode": "manual",
@@ -738,7 +738,43 @@ class TestGenerate:
         }
         resp = test_client.post("/api/generate", json=legacy_payload)
         assert resp.status_code == 400
-        assert "prompt_schema_version=2" in resp.json()["detail"]
+        assert "prompt_schema_version" in resp.json()["detail"]
+
+    def test_generate_dynamic_v3_payload(self, test_client):
+        """A v3 dynamic-section generate payload should produce a successful batch."""
+        resp = test_client.post(
+            "/api/generate",
+            json={
+                "model_id": "z-image-turbo",
+                "prompt_schema_version": 3,
+                "sections": [
+                    {
+                        "label": "Subject",
+                        "mode": "manual",
+                        "manual_text": "A goblin workshop.",
+                    },
+                    {
+                        "label": "Tone",
+                        "mode": "manual",
+                        "manual_text": "Sepia.",
+                    },
+                ],
+                "aspect_ratio_id": "1:1",
+                "width": 1024,
+                "height": 1024,
+                "steps": 4,
+                "guidance": 0.0,
+                "batch_size": 1,
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["success"] is True
+        assert len(data["images"]) == 1
+        compiled = data["compiled_prompt"]
+        assert compiled.index("Subject:") < compiled.index("Tone:")
+        assert "A goblin workshop." in compiled
+        assert "Sepia." in compiled
 
     def test_generate_invalid_batch_size_zero(self, test_client):
         """batch_size of 0 should return 400."""
@@ -1239,8 +1275,8 @@ class TestPromptCompile:
         payload.update(overrides)
         return payload
 
-    def test_compile_requires_prompt_schema_v2(self, test_client):
-        """Legacy compile payloads should now be rejected."""
+    def test_compile_requires_supported_schema_version(self, test_client):
+        """Legacy v1 (no schema version) compile payloads should be rejected."""
         resp = test_client.post(
             "/api/prompt/compile",
             json={
@@ -1255,7 +1291,75 @@ class TestPromptCompile:
             },
         )
         assert resp.status_code == 400
-        assert "prompt_schema_version=2" in resp.json()["detail"]
+        assert "prompt_schema_version" in resp.json()["detail"]
+
+    def test_compile_dynamic_v3_emits_sections_in_submitted_order(self, test_client):
+        """v3 compile should emit dynamic section blocks in submitted order."""
+        resp = test_client.post(
+            "/api/prompt/compile",
+            json={
+                "model_id": "z-image-turbo",
+                "prompt_schema_version": 3,
+                "sections": [
+                    {
+                        "label": "Tone",
+                        "mode": "manual",
+                        "manual_text": "Sepia and grit.",
+                    },
+                    {
+                        "label": "Species",
+                        "mode": "manual",
+                        "manual_text": "A goblin inventor.",
+                    },
+                ],
+                "aspect_ratio_id": "1:1",
+                "width": 1024,
+                "height": 1024,
+                "steps": 4,
+                "guidance": 0.0,
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        compiled = data["compiled_prompt"]
+        assert compiled.index("Tone:") < compiled.index("Species:")
+        assert "Sepia and grit." in compiled
+        assert "A goblin inventor." in compiled
+        assert [s["label"] for s in data["token_counts"]["sections"]] == ["Tone", "Species"]
+        assert all(s["tokens"] > 0 for s in data["token_counts"]["sections"])
+
+    def test_compile_dynamic_v3_drops_empty_sections_from_compiled_text(self, test_client):
+        """v3 compile should silently omit sections with empty resolved text."""
+        resp = test_client.post(
+            "/api/prompt/compile",
+            json={
+                "model_id": "z-image-turbo",
+                "prompt_schema_version": 3,
+                "sections": [
+                    {
+                        "label": "Tone",
+                        "mode": "manual",
+                        "manual_text": "",
+                    },
+                    {
+                        "label": "Species",
+                        "mode": "manual",
+                        "manual_text": "A goblin inventor.",
+                    },
+                ],
+                "aspect_ratio_id": "1:1",
+                "width": 1024,
+                "height": 1024,
+                "steps": 4,
+                "guidance": 0.0,
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "Tone:" not in data["compiled_prompt"]
+        assert "Species:\nA goblin inventor." in data["compiled_prompt"]
+        labels = [s["label"] for s in data["token_counts"]["sections"]]
+        assert labels == ["Tone", "Species"]
 
     def test_compile_structured_sections_prompt(self, test_client):
         """Section-schema prompt compile should include all labeled sections."""

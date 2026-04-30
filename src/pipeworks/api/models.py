@@ -19,9 +19,37 @@ BulkDeleteRequest
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
+
+
+class PromptSection(BaseModel):
+    """One slot of the dynamic prompt composer (schema v3).
+
+    Each slot carries a curator-supplied label, an authoring mode, and one
+    of two text sources (manual free text or a referenced policy/prompt
+    snippet). The compiled prompt emits sections in submitted order, using
+    the label as a block header and skipping sections that resolve to an
+    empty string.
+    """
+
+    label: str = Field(
+        default="Policy",
+        description="Display label rendered as the section block header.",
+    )
+    mode: Literal["manual", "automated"] = Field(
+        default="manual",
+        description="'manual' uses manual_text; 'automated' uses automated_prompt_id.",
+    )
+    manual_text: str | None = Field(
+        default=None,
+        description="Free-text content (used when mode='manual').",
+    )
+    automated_prompt_id: str | None = Field(
+        default=None,
+        description="Identifier of a prompt or policy snippet (used when mode='automated').",
+    )
 
 
 class GenerateRequest(BaseModel):
@@ -110,7 +138,16 @@ class GenerateRequest(BaseModel):
     prompt_schema_version: int | None = Field(
         default=None,
         description=(
-            "Optional prompt schema version " "(2 = Subject/Setting/Details/Lighting/Atmosphere)."
+            "Prompt schema version. "
+            "2 = fixed Subject/Setting/Details/Lighting/Atmosphere sections. "
+            "3 = dynamic ordered list of sections (see `sections` field)."
+        ),
+    )
+    sections: list[PromptSection] | None = Field(
+        default=None,
+        description=(
+            "Ordered list of prompt sections (schema v3). Each section is "
+            "compiled in submitted order; empty sections are silently dropped."
         ),
     )
     subject_mode: str | None = Field(
