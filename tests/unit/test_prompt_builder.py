@@ -19,9 +19,11 @@ from pipeworks.api.prompt_builder import (
     _COLOUR_BOILERPLATE,
     _MOOD_BOILERPLATE,
     _STYLE_BOILERPLATE,
+    build_dynamic_prompt,
     build_prompt,
     build_structured_prompt,
     expand_prompt_placeholders,
+    resolve_dynamic_prompt_variants,
     resolve_prompt_variants,
     resolve_structured_prompt_variants,
 )
@@ -374,3 +376,88 @@ class TestStructuredPromptBuilder:
         assert resolved["details"] == "tool"
         assert resolved["lighting"] == "warm"
         assert resolved["atmosphere"] == "tense"
+
+
+class TestDynamicPromptBuilder:
+    """Tests for the v3 dynamic ordered-section prompt schema."""
+
+    def test_build_dynamic_prompt_emits_sections_in_submitted_order(self):
+        """Section blocks should appear in the submitted order with their labels."""
+        result = build_dynamic_prompt(
+            [
+                {"label": "Tone", "text": "Sepia and grit."},
+                {"label": "Species", "text": "A goblin inventor."},
+                {"label": "Lighting", "text": "Soft warm lamplight."},
+            ],
+            expand_placeholders=False,
+        )
+        assert result.index("Tone:") < result.index("Species:")
+        assert result.index("Species:") < result.index("Lighting:")
+        assert "A goblin inventor." in result
+        assert "Soft warm lamplight." in result
+
+    def test_build_dynamic_prompt_skips_empty_text(self):
+        """Sections with empty resolved text should be silently omitted."""
+        result = build_dynamic_prompt(
+            [
+                {"label": "Tone", "text": ""},
+                {"label": "Species", "text": "A goblin."},
+                {"label": "Setting", "text": "   "},
+            ],
+            expand_placeholders=False,
+        )
+        assert "Tone:" not in result
+        assert "Setting:" not in result
+        assert "Species:\nA goblin." in result
+
+    def test_build_dynamic_prompt_falls_back_to_default_label(self):
+        """Sections with empty/whitespace labels should render as 'Policy'."""
+        result = build_dynamic_prompt(
+            [
+                {"label": "  ", "text": "First line."},
+                {"label": "", "text": "Second line."},
+            ],
+            expand_placeholders=False,
+        )
+        # Both sections render with the fallback label.
+        assert result.count("Policy:") == 2
+        assert "First line." in result
+        assert "Second line." in result
+
+    def test_build_dynamic_prompt_supports_duplicate_labels(self):
+        """Labels are not required to be unique; both blocks should appear."""
+        result = build_dynamic_prompt(
+            [
+                {"label": "Policy", "text": "alpha"},
+                {"label": "Policy", "text": "beta"},
+            ],
+            expand_placeholders=False,
+        )
+        assert "alpha" in result
+        assert "beta" in result
+        # Distinct blocks separated by double-newline.
+        assert "alpha\n\nPolicy:\nbeta" in result
+
+    def test_build_dynamic_prompt_expands_placeholders(self):
+        """Placeholder groups in section text expand once per section."""
+        result = build_dynamic_prompt(
+            [
+                {"label": "Subject", "text": "A {goblin|human} inventor."},
+                {"label": "Tone", "text": "{warm|cold}."},
+            ],
+            rng=SequenceRandom(["human", "warm"]),
+        )
+        assert "A human inventor." in result
+        assert "warm." in result
+
+    def test_resolve_dynamic_prompt_variants(self):
+        """Per-section placeholder expansion should resolve each section once."""
+        resolved = resolve_dynamic_prompt_variants(
+            [
+                {"label": "Subject", "text": "{goblin|human}"},
+                {"label": "Setting", "text": "{city|coast}"},
+            ],
+            rng=SequenceRandom(["goblin", "coast"]),
+        )
+        assert resolved[0] == {"label": "Subject", "text": "goblin"}
+        assert resolved[1] == {"label": "Setting", "text": "coast"}

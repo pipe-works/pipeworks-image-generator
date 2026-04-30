@@ -182,6 +182,48 @@ def build_structured_prompt(
     return "\n\n".join(parts)
 
 
+def resolve_dynamic_prompt_variants(
+    sections: list[dict[str, str]],
+    *,
+    rng: random.Random | random.SystemRandom | None = None,
+) -> list[dict[str, str]]:
+    """Expand placeholders for the dynamic v3 prompt schema."""
+    return [
+        {
+            "label": section.get("label", "Policy"),
+            "text": expand_prompt_placeholders(section.get("text", ""), rng=rng),
+        }
+        for section in sections
+    ]
+
+
+def build_dynamic_prompt(
+    sections: list[dict[str, str]],
+    *,
+    expand_placeholders: bool = True,
+    rng: random.Random | random.SystemRandom | None = None,
+) -> str:
+    """Build a prompt from a curator-ordered list of labelled sections (v3).
+
+    Sections are emitted in submitted order as labelled blocks. Sections
+    whose resolved text is empty are silently skipped. Block headers use
+    the section's ``label`` verbatim, with a trailing colon.
+    """
+    resolved_sections = (
+        resolve_dynamic_prompt_variants(sections, rng=rng) if expand_placeholders else sections
+    )
+
+    parts: list[str] = []
+    for section in resolved_sections:
+        text = (section.get("text") or "").strip()
+        if not text:
+            continue
+        label = (section.get("label") or "Policy").strip() or "Policy"
+        parts.append(f"{label}:\n{text}")
+
+    return "\n\n".join(parts)
+
+
 def build_prompt(
     prepend_value: str,
     main_scene: str,

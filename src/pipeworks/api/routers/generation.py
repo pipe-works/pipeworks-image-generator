@@ -14,8 +14,10 @@ from starlette.concurrency import run_in_threadpool
 from pipeworks.api.gallery_store import load_gallery_entries, save_gallery_entries
 from pipeworks.api.models import CancelGenerationRequest, GenerateRequest
 from pipeworks.api.prompt_builder import (
+    build_dynamic_prompt,
     build_structured_prompt,
     expand_prompt_placeholders,
+    resolve_dynamic_prompt_variants,
     resolve_structured_prompt_variants,
 )
 from pipeworks.api.routers.gpu_worker import WORKER_CANCEL_PATH, WORKER_GENERATE_BATCH_PATH
@@ -23,7 +25,8 @@ from pipeworks.api.services.generation_runtime import GenerationJob, GenerationR
 from pipeworks.api.services.gpu_workers import GpuWorkerService
 from pipeworks.api.services.prompt_catalog import load_json, load_prompt_catalog
 from pipeworks.api.services.prompt_resolution import (
-    ensure_prompt_schema_v2,
+    ensure_prompt_schema,
+    resolve_dynamic_prompt_sections,
     resolve_structured_prompt_sections,
 )
 from pipeworks.api.services.runtime_policy import RuntimePolicyService
@@ -58,7 +61,7 @@ def create_generation_router(deps: GenerationRouterDependencies) -> APIRouter:
                 detail=f"batch_size must be between 1 and {deps.max_batch_size}",
             )
 
-        ensure_prompt_schema_v2(req)
+        schema_version = ensure_prompt_schema(req)
 
         target_worker = deps.gpu_worker_service.resolve_gpu_worker_or_400(req.gpu_worker_id)
         generation_id = req.generation_id
@@ -147,12 +150,22 @@ def create_generation_router(deps: GenerationRouterDependencies) -> APIRouter:
             explicit_session_id=None,
             normalize_base_url=deps.normalize_base_url,
         )
-        raw_sections = resolve_structured_prompt_sections(
-            req,
-            prompts,
-            policy_options=policy_prompt_options,
-            strict=True,
-        )
+        if schema_version == 3:
+            raw_dynamic_sections = resolve_dynamic_prompt_sections(
+                req,
+                prompts,
+                policy_options=policy_prompt_options,
+                strict=True,
+            )
+            raw_v2_sections: dict[str, str] = {}
+        else:
+            raw_dynamic_sections = []
+            raw_v2_sections = resolve_structured_prompt_sections(
+                req,
+                prompts,
+                policy_options=policy_prompt_options,
+                strict=True,
+            )
         raw_negative_prompt = (req.negative_prompt or "").strip()
 
         base_seed = req.seed if req.seed is not None else random.randint(0, 2**32 - 1)
@@ -160,11 +173,18 @@ def create_generation_router(deps: GenerationRouterDependencies) -> APIRouter:
         jobs: list[GenerationJob] = []
         for index in range(req.batch_size):
             image_seed = base_seed + index
-            section_values = resolve_structured_prompt_variants(raw_sections)
-            compiled_prompt = build_structured_prompt(
-                section_values,
-                expand_placeholders=False,
-            )
+            if schema_version == 3:
+                resolved_dynamic = resolve_dynamic_prompt_variants(raw_dynamic_sections)
+                compiled_prompt = build_dynamic_prompt(
+                    resolved_dynamic,
+                    expand_placeholders=False,
+                )
+            else:
+                section_values = resolve_structured_prompt_variants(raw_v2_sections)
+                compiled_prompt = build_structured_prompt(
+                    section_values,
+                    expand_placeholders=False,
+                )
             negative_prompt = (
                 expand_prompt_placeholders(raw_negative_prompt) if raw_negative_prompt else None
             )

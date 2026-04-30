@@ -403,6 +403,29 @@ def mock_prompt_token_counter() -> MagicMock:
         return counts
 
     counter.count_prompt_sections.side_effect = _count_prompt_sections
+
+    def _count_dynamic_prompt_sections(
+        *,
+        hf_id: str | None,
+        sections: list[dict],
+        compiled_prompt: str,
+    ) -> dict:
+        def _count_words(text: str) -> int:
+            return len(text.split()) if text.strip() else 0
+
+        return {
+            "sections": [
+                {
+                    "label": section.get("label", "Policy"),
+                    "tokens": _count_words(section.get("text", "")),
+                }
+                for section in sections
+            ],
+            "total": _count_words(compiled_prompt),
+            "method": "tokenizer" if hf_id else "heuristic",
+        }
+
+    counter.count_dynamic_prompt_sections.side_effect = _count_dynamic_prompt_sections
     return counter
 
 

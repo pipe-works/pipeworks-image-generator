@@ -10,12 +10,15 @@ from fastapi import APIRouter, Request
 
 from pipeworks.api.models import GenerateRequest
 from pipeworks.api.prompt_builder import (
+    build_dynamic_prompt,
     build_structured_prompt,
+    resolve_dynamic_prompt_variants,
     resolve_structured_prompt_variants,
 )
 from pipeworks.api.services.prompt_catalog import load_json, load_prompt_catalog
 from pipeworks.api.services.prompt_resolution import (
-    ensure_prompt_schema_v2,
+    ensure_prompt_schema,
+    resolve_dynamic_prompt_sections,
     resolve_structured_prompt_sections,
 )
 from pipeworks.api.services.runtime_policy import RuntimePolicyService
@@ -37,7 +40,7 @@ def create_prompt_router(deps: PromptRouterDependencies) -> APIRouter:
 
     @router.post("/api/prompt/compile")
     async def compile_prompt(req: GenerateRequest, request: Request) -> dict:
-        ensure_prompt_schema_v2(req)
+        schema_version = ensure_prompt_schema(req)
         data_dir = deps.data_dir()
         prompts = load_prompt_catalog(data_dir=data_dir)
         models_data = load_json(data_dir / "models.json", {"models": []})
@@ -47,30 +50,53 @@ def create_prompt_router(deps: PromptRouterDependencies) -> APIRouter:
             explicit_session_id=None,
             normalize_base_url=deps.normalize_base_url,
         )
-        raw_sections = resolve_structured_prompt_sections(
+        model_cfg = next(
+            (m for m in models_data.get("models", []) if m["id"] == req.model_id),
+            None,
+        )
+        hf_id = model_cfg.get("hf_id") if model_cfg else None
+        token_counter: PromptTokenCounter = request.app.state.prompt_token_counter
+
+        if schema_version == 3:
+            raw_dynamic = resolve_dynamic_prompt_sections(
+                req,
+                prompts,
+                policy_options=policy_prompt_options,
+                strict=False,
+            )
+            resolved_dynamic = resolve_dynamic_prompt_variants(raw_dynamic)
+            compiled = build_dynamic_prompt(
+                resolved_dynamic,
+                expand_placeholders=False,
+            )
+            token_counts = token_counter.count_dynamic_prompt_sections(
+                hf_id=hf_id,
+                sections=resolved_dynamic,
+                compiled_prompt=compiled,
+            )
+            return {
+                "compiled_prompt": compiled,
+                "token_counts": token_counts,
+            }
+
+        raw_v2 = resolve_structured_prompt_sections(
             req,
             prompts,
             policy_options=policy_prompt_options,
             strict=False,
         )
-        resolved_sections = resolve_structured_prompt_variants(raw_sections)
+        resolved_v2 = resolve_structured_prompt_variants(raw_v2)
         compiled = build_structured_prompt(
-            resolved_sections,
+            resolved_v2,
             expand_placeholders=False,
         )
-
-        model_cfg = next(
-            (m for m in models_data.get("models", []) if m["id"] == req.model_id),
-            None,
-        )
-        token_counter: PromptTokenCounter = request.app.state.prompt_token_counter
         token_counts = token_counter.count_prompt_sections(
-            hf_id=model_cfg.get("hf_id") if model_cfg else None,
-            subject_text=resolved_sections.get("subject", ""),
-            setting_text=resolved_sections.get("setting", ""),
-            details_text=resolved_sections.get("details", ""),
-            lighting_text=resolved_sections.get("lighting", ""),
-            atmosphere_text=resolved_sections.get("atmosphere", ""),
+            hf_id=hf_id,
+            subject_text=resolved_v2.get("subject", ""),
+            setting_text=resolved_v2.get("setting", ""),
+            details_text=resolved_v2.get("details", ""),
+            lighting_text=resolved_v2.get("lighting", ""),
+            atmosphere_text=resolved_v2.get("atmosphere", ""),
             compiled_prompt=compiled,
         )
         return {
