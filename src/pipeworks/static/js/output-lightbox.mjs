@@ -130,8 +130,6 @@ export const getOutputTransportState = getLightboxTransportState;
  * @param {object} options - Controller dependencies.
  * @param {(context: string | null) => Array<object>} options.getCollectionImages - Returns
  *     the current image collection for the supplied context.
- * @param {(image: object | null) => void} options.onImageChange - Sync callback for
- *     the host app's current lightbox image state.
  * @param {() => void} options.onClose - Called after the lightbox closes.
  * @param {(image: object) => void} options.onToggleFavourite - Favourite callback.
  * @param {(image: object) => void} options.onDeleteImage - Delete callback.
@@ -149,7 +147,6 @@ export const getOutputTransportState = getLightboxTransportState;
  */
 export function createOutputLightboxController({
   getCollectionImages,
-  onImageChange,
   onClose,
   onToggleFavourite,
   onDeleteImage,
@@ -336,7 +333,6 @@ export function createOutputLightboxController({
     dom.favouriteButton.textContent = image.is_favourite ? "★ Unfavourite" : "☆ Favourite";
     dom.favouriteButton.classList.toggle("is-active", Boolean(image.is_favourite));
 
-    onImageChange(image);
     updateTransportControls();
   }
 
@@ -465,7 +461,6 @@ export function createOutputLightboxController({
     state.currentImageId = null;
     state.staticImage = null;
 
-    onImageChange(null);
     onClose();
     updateTransportControls();
   }
