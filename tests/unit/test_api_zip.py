@@ -42,7 +42,6 @@ class TestZipEndpoint:
             metadata_bytes = zf.read(f"pipeworks_{id_short}_metadata.json")
             metadata = json.loads(metadata_bytes)
 
-        # Top-level keys.
         assert metadata["id"] == image["id"]
         assert "model" in metadata
         assert "prompt" in metadata
@@ -51,34 +50,18 @@ class TestZipEndpoint:
         assert "created_at" in metadata
         assert "is_favourite" in metadata
 
-        # Model section.
         assert metadata["model"]["id"] == image["model_id"]
-
-        # Prompt section — top-level compiled string.
         assert metadata["prompt"]["compiled"] == image["compiled_prompt"]
+        assert metadata["prompt"]["schema_version"] == image["prompt_schema_version"]
 
-        # Prompt section — prepend sub-object.
-        prepend = metadata["prompt"]["prepend"]
-        assert prepend["mode"] == image.get("prepend_mode", "template")
-        assert prepend["preset_id"] == image["prepend_prompt_id"]
-        assert "preset_label" in prepend
-        assert "text" in prepend
+        sections = metadata["prompt"]["sections"]
+        assert len(sections) == len(image["sections"])
+        for emitted, source in zip(sections, image["sections"], strict=True):
+            assert emitted["label"] == source["label"]
+            assert emitted["mode"] == source["mode"]
+            assert "text" in emitted
+            assert "preset_label" in emitted
 
-        # Prompt section — main sub-object (same shape as prepend/append).
-        main = metadata["prompt"]["main"]
-        assert main["mode"] == image["prompt_mode"]
-        assert main["preset_id"] == image.get("automated_prompt_id")
-        assert "preset_label" in main
-        assert "text" in main
-
-        # Prompt section — append sub-object.
-        append = metadata["prompt"]["append"]
-        assert append["mode"] == image.get("append_mode", "template")
-        assert append["preset_id"] == image["append_prompt_id"]
-        assert "preset_label" in append
-        assert "text" in append
-
-        # Generation section.
         assert metadata["generation"]["width"] == image["width"]
         assert metadata["generation"]["height"] == image["height"]
         assert metadata["generation"]["steps"] == image["steps"]
@@ -86,7 +69,6 @@ class TestZipEndpoint:
         assert metadata["generation"]["seed"] == image["seed"]
         assert metadata["generation"]["negative_prompt"] == image.get("negative_prompt")
 
-        # Batch section.
         assert metadata["batch"]["index"] == image["batch_index"]
         assert metadata["batch"]["size"] == image["batch_size"]
         assert metadata["batch"]["seed"] == image["batch_seed"]

@@ -11,7 +11,6 @@ from pipeworks.api.services.prompt_catalog import (
     load_json,
     load_prompt_catalog,
 )
-from pipeworks.api.services.prompt_resolution import PROMPT_SECTION_ORDER
 from pipeworks.api.services.runtime_policy import RuntimePolicyService
 
 
@@ -22,7 +21,12 @@ def build_zip_metadata_for_entry(
     runtime_policy_service: RuntimePolicyService,
     normalize_base_url,
 ) -> dict:
-    """Build structured metadata dictionary for a gallery entry zip."""
+    """Build structured metadata dictionary for a gallery entry zip.
+
+    Reads dynamic-section (schema v3) gallery entries. Older entries that
+    were written under the legacy v1/v2 schemas surface only as their
+    compiled prompt — section-level breakdown is unavailable for them.
+    """
     image_id = entry["id"]
 
     models_data = load_json(data_dir / "models.json", {"models": []})
@@ -45,45 +49,27 @@ def build_zip_metadata_for_entry(
     )
     prompt_lookup = build_prompt_lookup(prompts, policy_options)
 
-    prepend_mode = entry.get("prepend_mode", "template")
-    append_mode = entry.get("append_mode", "template")
-
-    prepend_id = entry.get("prepend_prompt_id")
-    prepend_preset = prompt_lookup.get(prepend_id, {}) if prepend_id else {}
-    if prepend_mode == "manual":
-        prepend_text = entry.get("manual_prepend", "")
-    else:
-        prepend_text = prepend_preset.get("value", "")
-
-    prompt_mode = entry.get("prompt_mode", "manual")
-    automated_id = entry.get("automated_prompt_id")
-    automated_preset = prompt_lookup.get(automated_id, {}) if automated_id else {}
-    if prompt_mode == "manual":
-        main_text = entry.get("manual_prompt", "") or ""
-    else:
-        main_text = automated_preset.get("value", "")
-
-    append_id = entry.get("append_prompt_id")
-    append_preset = prompt_lookup.get(append_id, {}) if append_id else {}
-    if append_mode == "manual":
-        append_text = entry.get("manual_append", "")
-    else:
-        append_text = append_preset.get("value", "")
-
-    sections_metadata: dict[str, dict] = {}
-    for section in PROMPT_SECTION_ORDER:
-        section_mode = entry.get(f"{section}_mode", "manual")
-        section_id = entry.get(f"automated_{section}_prompt_id")
-        section_preset = prompt_lookup.get(section_id, {}) if section_id else {}
-        section_text = (entry.get(f"manual_{section}") or "").strip()
-        if not section_text and section_mode == "automated":
-            section_text = (section_preset.get("value") or "").strip()
-        sections_metadata[section] = {
-            "mode": section_mode,
-            "preset_id": section_id,
-            "preset_label": section_preset.get("label"),
-            "text": section_text,
-        }
+    sections_metadata: list[dict] = []
+    for section in entry.get("sections") or []:
+        if not isinstance(section, dict):
+            continue
+        mode = section.get("mode", "manual")
+        preset_id = section.get("automated_prompt_id")
+        preset = prompt_lookup.get(preset_id, {}) if preset_id else {}
+        manual_text = (section.get("manual_text") or "").strip()
+        if not manual_text and mode == "automated":
+            text = (preset.get("value") or "").strip()
+        else:
+            text = manual_text
+        sections_metadata.append(
+            {
+                "label": section.get("label", "Policy"),
+                "mode": mode,
+                "preset_id": preset_id,
+                "preset_label": preset.get("label"),
+                "text": text,
+            }
+        )
 
     return {
         "id": image_id,
@@ -93,26 +79,8 @@ def build_zip_metadata_for_entry(
         },
         "prompt": {
             "compiled": entry.get("compiled_prompt", ""),
-            "schema_version": entry.get("prompt_schema_version", 1),
+            "schema_version": entry.get("prompt_schema_version", 3),
             "sections": sections_metadata,
-            "prepend": {
-                "mode": prepend_mode,
-                "preset_id": prepend_id,
-                "preset_label": prepend_preset.get("label"),
-                "text": prepend_text,
-            },
-            "main": {
-                "mode": prompt_mode,
-                "preset_id": automated_id,
-                "preset_label": automated_preset.get("label"),
-                "text": main_text,
-            },
-            "append": {
-                "mode": append_mode,
-                "preset_id": append_id,
-                "preset_label": append_preset.get("label"),
-                "text": append_text,
-            },
         },
         "generation": {
             "width": entry.get("width"),
