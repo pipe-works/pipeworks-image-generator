@@ -27,6 +27,14 @@ _SNIPPET_POLICY_TYPES = {
     "clothing_block",
     "descriptor_layer",
     "registry",
+    "tone_profile",
+}
+
+# Per-type override for the canonical content field that carries the
+# prompt-injectable string. Default is ``content.text``; tone_profile
+# uses ``content.prompt_block`` per mud-server validation.
+_SNIPPET_TEXT_FIELD_OVERRIDES = {
+    "tone_profile": "prompt_block",
 }
 
 _RUNTIME_SESSION_COOKIE_NAME = "pw_image_runtime_session"
@@ -351,7 +359,9 @@ class RuntimePolicyService:
         content = policy_item.get("content")
         if not isinstance(content, dict):
             return ""
-        text_value = content.get("text")
+        policy_type = str(policy_item.get("policy_type") or "").strip()
+        field_name = _SNIPPET_TEXT_FIELD_OVERRIDES.get(policy_type, "text")
+        text_value = content.get(field_name)
         if not isinstance(text_value, str):
             return ""
         return text_value.strip()
