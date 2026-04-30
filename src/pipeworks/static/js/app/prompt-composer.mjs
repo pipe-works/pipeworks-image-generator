@@ -36,7 +36,7 @@ export function createPromptComposer({
     textarea.value = existing ? `${existing}\n${snippet}` : snippet;
 
     const select = $(`#sel-${section}`);
-    if (select) select.value = "";
+    if (select) select.value = optionId;
     updateTokenCounters();
     schedulePromptPreview();
   }
