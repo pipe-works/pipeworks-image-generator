@@ -1,7 +1,9 @@
 import {
-  PROMPT_SECTIONS,
-  PROMPT_SECTION_LABELS,
+  DEFAULT_SLOT_LABEL,
+  PROMPT_SCHEMA_VERSION,
+  defaultSlot,
   emptyTokenCounts,
+  nextSlotId,
 } from "./state.mjs";
 
 export function createPromptComposer({
@@ -13,94 +15,299 @@ export function createPromptComposer({
   getSelectedGpuWorker,
 }) {
   let previewDebounce = null;
+  let dragSourceId = null;
 
-  function setSectionPromptMode(section, mode) {
-    state.sectionModes[section] = mode;
-    $(`#btn-${section}-automated`).classList.toggle("is-active", mode === "automated");
-    $(`#btn-${section}-manual`).classList.toggle("is-active", mode === "manual");
-    $(`#${section}-auto-wrap`).style.display = mode === "automated" ? "" : "none";
-    updateTokenCounters();
-    schedulePromptPreview();
+  const slotsContainer = $("#composer-slots");
+  const slotTemplate = $("#composer-slot-template");
+  const addSlotButton = $("#btn-add-slot");
+
+  function findSlot(slotId) {
+    return state.sections.find(s => s.id === slotId) || null;
   }
 
-  function appendPolicySnippetToSection(section, optionId) {
-    if (!optionId) return;
-    const option = (state.policyPromptOptions || []).find(item => item.id === optionId);
-    if (!option || !(option.value || "").trim()) return;
+  function findSlotIndex(slotId) {
+    return state.sections.findIndex(s => s.id === slotId);
+  }
 
-    const textarea = $(`#txt-${section}`);
-    if (!textarea) return;
+  function getSlotElement(slotId) {
+    return slotsContainer.querySelector(`[data-slot-id="${slotId}"]`);
+  }
 
-    const existing = textarea.value.trimEnd();
-    const snippet = option.value.trim();
-    textarea.value = existing ? `${existing}\n${snippet}` : snippet;
+  function ensureFloor() {
+    if (state.sections.length === 0) {
+      state.sections.push(defaultSlot());
+    }
+  }
 
-    const select = $(`#sel-${section}`);
-    if (select) select.value = optionId;
-    updateTokenCounters();
-    schedulePromptPreview();
+  function renderPolicyOptions(selectEl, currentValue) {
+    selectEl.innerHTML = "";
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "— Add snippet from policies —";
+    selectEl.appendChild(placeholder);
+
+    const options = state.policyPromptOptions || [];
+    const declaredGroups = state.policyPromptGroups || [];
+    const grouped = new Map();
+    declaredGroups.forEach(group => {
+      if (group && !grouped.has(group)) grouped.set(group, []);
+    });
+    options.forEach(option => {
+      const group = option.group || "policies";
+      if (!grouped.has(group)) grouped.set(group, []);
+      grouped.get(group).push(option);
+    });
+
+    [...grouped.keys()].sort().forEach(groupName => {
+      const optgroup = document.createElement("optgroup");
+      optgroup.label = groupName;
+      const entries = grouped.get(groupName) || [];
+      if (entries.length === 0) {
+        const placeholderOpt = document.createElement("option");
+        placeholderOpt.value = "";
+        placeholderOpt.disabled = true;
+        placeholderOpt.textContent = "— No prompt snippets in this directory —";
+        optgroup.appendChild(placeholderOpt);
+      } else {
+        entries.forEach(option => {
+          const opt = document.createElement("option");
+          opt.value = option.id;
+          opt.textContent = option.label || option.id;
+          optgroup.appendChild(opt);
+        });
+      }
+      selectEl.appendChild(optgroup);
+    });
+
+    selectEl.value = currentValue || "";
+  }
+
+  function applySlotMode(slotEl, mode) {
+    slotEl.querySelectorAll(".composer-slot__mode").forEach(btn => {
+      btn.classList.toggle("is-active", btn.dataset.mode === mode);
+    });
+    slotEl.querySelector(".composer-slot__auto-wrap").style.display =
+      mode === "automated" ? "" : "none";
+  }
+
+  function renderSlot(slot) {
+    const fragment = slotTemplate.content.cloneNode(true);
+    const slotEl = fragment.querySelector(".composer-slot");
+    slotEl.dataset.slotId = slot.id;
+    slotEl.draggable = true;
+
+    const labelInput = slotEl.querySelector(".composer-slot__label-input");
+    labelInput.value = slot.label;
+
+    const textarea = slotEl.querySelector(".composer-slot__textarea");
+    textarea.value = slot.manualText || "";
+
+    const select = slotEl.querySelector(".composer-slot__select");
+    renderPolicyOptions(select, slot.selectedPolicyId);
+
+    applySlotMode(slotEl, slot.mode);
+
+    bindSlotEvents(slotEl, slot);
+    return slotEl;
+  }
+
+  function rerenderSlots() {
+    slotsContainer.innerHTML = "";
+    state.sections.forEach(slot => {
+      slotsContainer.appendChild(renderSlot(slot));
+    });
+    updateDeleteButtons();
+  }
+
+  function updateDeleteButtons() {
+    const onlyOne = state.sections.length <= 1;
+    slotsContainer.querySelectorAll(".composer-slot__delete").forEach(btn => {
+      btn.disabled = onlyOne;
+      btn.title = onlyOne ? "At least one slot is required" : "Remove slot";
+    });
+  }
+
+  function bindSlotEvents(slotEl, slot) {
+    const labelInput = slotEl.querySelector(".composer-slot__label-input");
+    labelInput.addEventListener("input", () => {
+      slot.label = labelInput.value;
+      schedulePromptPreview();
+    });
+
+    slotEl.querySelectorAll(".composer-slot__mode").forEach(btn => {
+      btn.addEventListener("click", () => {
+        slot.mode = btn.dataset.mode;
+        applySlotMode(slotEl, slot.mode);
+        schedulePromptPreview();
+      });
+    });
+
+    const select = slotEl.querySelector(".composer-slot__select");
+    select.addEventListener("change", () => {
+      const optionId = select.value;
+      if (!optionId) {
+        slot.selectedPolicyId = null;
+        return;
+      }
+      slot.selectedPolicyId = optionId;
+      const option = (state.policyPromptOptions || []).find(item => item.id === optionId);
+      if (option) {
+        const snippet = (option.value || "").trim();
+        if (snippet) {
+          const textarea = slotEl.querySelector(".composer-slot__textarea");
+          const existing = textarea.value.trimEnd();
+          textarea.value = existing ? `${existing}\n${snippet}` : snippet;
+          slot.manualText = textarea.value;
+        }
+        const optionLabel = (option.label || "").trim();
+        if (optionLabel) {
+          slot.label = optionLabel;
+          slotEl.querySelector(".composer-slot__label-input").value = optionLabel;
+        }
+      }
+      schedulePromptPreview();
+    });
+
+    const textarea = slotEl.querySelector(".composer-slot__textarea");
+    textarea.addEventListener("input", () => {
+      slot.manualText = textarea.value;
+      schedulePromptPreview();
+    });
+
+    slotEl.querySelector(".composer-slot__copy").addEventListener("click", async event => {
+      const text = (slot.manualText || "").trim();
+      if (!text) {
+        toast(`No ${slot.label || DEFAULT_SLOT_LABEL} text to copy`, "info");
+        return;
+      }
+      if (!navigator.clipboard?.writeText) {
+        toast("Clipboard copy unavailable", "err");
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(text);
+        flashButtonLabel(event.currentTarget, "Copied", "Copy");
+      } catch (_) {
+        toast("Clipboard copy failed", "err");
+      }
+    });
+
+    slotEl.querySelector(".composer-slot__delete").addEventListener("click", () => {
+      if (state.sections.length <= 1) return;
+      const idx = findSlotIndex(slot.id);
+      if (idx >= 0) {
+        state.sections.splice(idx, 1);
+        rerenderSlots();
+        schedulePromptPreview();
+      }
+    });
+
+    slotEl.addEventListener("dragstart", event => {
+      dragSourceId = slot.id;
+      slotEl.classList.add("composer-slot--dragging");
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", slot.id);
+    });
+
+    slotEl.addEventListener("dragend", () => {
+      dragSourceId = null;
+      slotEl.classList.remove("composer-slot--dragging");
+      slotsContainer
+        .querySelectorAll(".composer-slot--drop-target")
+        .forEach(el => el.classList.remove("composer-slot--drop-target"));
+    });
+
+    slotEl.addEventListener("dragover", event => {
+      if (!dragSourceId || dragSourceId === slot.id) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
+      slotEl.classList.add("composer-slot--drop-target");
+    });
+
+    slotEl.addEventListener("dragleave", () => {
+      slotEl.classList.remove("composer-slot--drop-target");
+    });
+
+    slotEl.addEventListener("drop", event => {
+      event.preventDefault();
+      const sourceId = dragSourceId || event.dataTransfer.getData("text/plain");
+      slotEl.classList.remove("composer-slot--drop-target");
+      if (!sourceId || sourceId === slot.id) return;
+      const fromIdx = findSlotIndex(sourceId);
+      const toIdx = findSlotIndex(slot.id);
+      if (fromIdx < 0 || toIdx < 0) return;
+      const [moved] = state.sections.splice(fromIdx, 1);
+      state.sections.splice(toIdx, 0, moved);
+      rerenderSlots();
+      schedulePromptPreview();
+    });
+  }
+
+  function bindAddSlot() {
+    if (!addSlotButton) return;
+    addSlotButton.addEventListener("click", () => {
+      state.sections.push(defaultSlot());
+      rerenderSlots();
+      schedulePromptPreview();
+    });
+  }
+
+  function refreshPolicyDropdowns() {
+    state.sections.forEach(slot => {
+      const slotEl = getSlotElement(slot.id);
+      if (!slotEl) return;
+      const select = slotEl.querySelector(".composer-slot__select");
+      renderPolicyOptions(select, slot.selectedPolicyId);
+    });
   }
 
   function estimateTokens(text) {
-    const trimmed = text.trim();
+    const trimmed = (text || "").trim();
     if (!trimmed) return 0;
     return Math.ceil(trimmed.length / 4);
   }
 
-  function getPromptSectionText(section) {
-    const textarea = $(`#txt-${section}`);
-    return textarea ? textarea.value : "";
+  function applyTotalCounter(count, limit) {
+    const counter = $("#total-tokens");
+    if (!counter) return;
+    counter.textContent = `${count} / ${limit} tokens`;
+    counter.classList.remove("token-counter--warn", "token-counter--over");
+    if (count > limit) {
+      counter.classList.add("token-counter--over");
+    } else if (count > limit * 0.85) {
+      counter.classList.add("token-counter--warn");
+    }
   }
 
-  function getPromptSectionDisplayName(section) {
-    return PROMPT_SECTION_LABELS[section] || "prompt section";
-  }
-
-  async function copyPromptSection(section, button) {
-    const text = getPromptSectionText(section);
-    if (!text.trim()) {
-      toast(`No ${getPromptSectionDisplayName(section)} text to copy`, "info");
-      return;
-    }
-
-    if (!navigator.clipboard?.writeText) {
-      toast("Clipboard copy unavailable", "err");
-      return;
-    }
-
-    try {
-      await navigator.clipboard.writeText(text);
-      flashButtonLabel(button, "Copied", "Copy");
-    } catch (_) {
-      toast("Clipboard copy failed", "err");
+  function applySlotCounter(slotId, count, limit) {
+    const slotEl = getSlotElement(slotId);
+    if (!slotEl) return;
+    const counter = slotEl.querySelector(".composer-slot__tokens");
+    if (!counter) return;
+    counter.textContent = `${count} / ${limit} tokens`;
+    counter.classList.remove("token-counter--warn", "token-counter--over");
+    if (count > limit) {
+      counter.classList.add("token-counter--over");
+    } else if (count > limit * 0.85) {
+      counter.classList.add("token-counter--warn");
     }
   }
 
   function updateTokenCounters() {
     if (!state.config || !state.selectedModel) return;
-
     const model = state.config.models.find(m => m.id === state.selectedModel);
-    const maxTokens = model ? (model.max_prompt_tokens || 77) : 77;
-    const counts = state.tokenCounts || {};
+    const maxTokens = model ? model.max_prompt_tokens || 77 : 77;
+    const sectionCounts = (state.tokenCounts && state.tokenCounts.sections) || [];
 
-    function applyCounter(elId, count, limit) {
-      const counter = $(elId);
-      if (!counter) return;
-      counter.textContent = `${count} / ${limit} tokens`;
-      counter.classList.remove("token-counter--warn", "token-counter--over");
-      if (count > limit) {
-        counter.classList.add("token-counter--over");
-      } else if (count > limit * 0.85) {
-        counter.classList.add("token-counter--warn");
-      }
-    }
+    state.sections.forEach((slot, index) => {
+      const entry = sectionCounts[index];
+      const tokens = entry?.tokens ?? estimateTokens(slot.manualText);
+      slot.tokens = tokens;
+      applySlotCounter(slot.id, tokens, maxTokens);
+    });
 
-    applyCounter("#subject-tokens", counts.subject || 0, maxTokens);
-    applyCounter("#setting-tokens", counts.setting || 0, maxTokens);
-    applyCounter("#details-tokens", counts.details || 0, maxTokens);
-    applyCounter("#lighting-tokens", counts.lighting || 0, maxTokens);
-    applyCounter("#atmosphere-tokens", counts.atmosphere || 0, maxTokens);
-    applyCounter("#total-tokens", counts.total || 0, maxTokens);
+    const total = state.tokenCounts?.total ?? 0;
+    applyTotalCounter(total, maxTokens);
   }
 
   function schedulePromptPreview() {
@@ -110,24 +317,19 @@ export function createPromptComposer({
 
   async function updatePromptPreview() {
     if (!state.config) return;
-
     const payload = buildGeneratePayload();
     if (!payload) {
       state.tokenCounts = emptyTokenCounts();
       updateTokenCounters();
       return;
     }
-
     try {
       const data = await apiClient.compilePrompt(payload);
-      state.tokenCounts = data.token_counts || {
-        subject: estimateTokens(getPromptSectionText("subject")),
-        setting: estimateTokens(getPromptSectionText("setting")),
-        details: estimateTokens(getPromptSectionText("details")),
-        lighting: estimateTokens(getPromptSectionText("lighting")),
-        atmosphere: estimateTokens(getPromptSectionText("atmosphere")),
-        total: estimateTokens(data.compiled_prompt || ""),
-        method: "heuristic",
+      const counts = data.token_counts || {};
+      state.tokenCounts = {
+        sections: Array.isArray(counts.sections) ? counts.sections : [],
+        total: counts.total ?? estimateTokens(data.compiled_prompt || ""),
+        method: counts.method || "heuristic",
       };
       updateTokenCounters();
     } catch (_) {
@@ -148,10 +350,18 @@ export function createPromptComposer({
     const isRandom = $("#chk-random-seed").checked;
     const seedVal = isRandom ? null : parseInt($("#inp-seed").value, 10) || null;
 
+    const sections = state.sections.map(slot => ({
+      label: (slot.label || DEFAULT_SLOT_LABEL).trim() || DEFAULT_SLOT_LABEL,
+      mode: slot.mode || "manual",
+      manual_text: (slot.manualText || "").trim() || null,
+      automated_prompt_id:
+        slot.mode === "automated" && slot.selectedPolicyId ? slot.selectedPolicyId : null,
+    }));
+
     const payload = {
       model_id: state.selectedModel,
       gpu_worker_id: getSelectedGpuWorker()?.id || null,
-      prompt_schema_version: 2,
+      prompt_schema_version: PROMPT_SCHEMA_VERSION,
       aspect_ratio_id: aspectId,
       width: ar.width,
       height: ar.height,
@@ -159,21 +369,8 @@ export function createPromptComposer({
       guidance: parseFloat($("#rng-guidance").value),
       seed: seedVal,
       batch_size: state.batchSize,
+      sections,
     };
-
-    PROMPT_SECTIONS.forEach(section => {
-      const mode = state.sectionModes[section] || "manual";
-      const sectionText = (getPromptSectionText(section) || "").trim();
-      const selectedOptionId = $(`#sel-${section}`)?.value || null;
-
-      payload[`${section}_mode`] = mode;
-      payload[`manual_${section}`] = sectionText || null;
-      if (mode === "automated" && selectedOptionId) {
-        payload[`automated_${section}_prompt_id`] = selectedOptionId;
-      } else {
-        payload[`automated_${section}_prompt_id`] = null;
-      }
-    });
 
     if (model.supports_negative_prompt) {
       payload.negative_prompt = $("#txt-negative-prompt").value.trim() || null;
@@ -189,10 +386,21 @@ export function createPromptComposer({
     return payload;
   }
 
+  function init() {
+    ensureFloor();
+    rerenderSlots();
+    bindAddSlot();
+  }
+
+  init();
+
+  // Reset slot ids on next render so dynamically created slots don't collide
+  // when this module is re-initialised in tests.
+  void nextSlotId;
+
   return {
-    setSectionPromptMode,
-    appendPolicySnippetToSection,
-    copyPromptSection,
+    rerenderSlots,
+    refreshPolicyDropdowns,
     updateTokenCounters,
     schedulePromptPreview,
     updatePromptPreview,
