@@ -424,6 +424,92 @@ class TestLoraDatasetRunLifecycle:
             assert manifest["cancel_requested"] is True
 
 
+class TestLoraPlaceholderFreezing:
+    """Placeholder draws must be frozen at run creation, not per-tile."""
+
+    def test_placeholders_resolved_once_and_shared_across_all_slots(self, test_client):
+        """Pinned-section placeholders are drawn once and reused by every tile.
+
+        For LoRA datasets the consistency stack must be identical across
+        every tile — re-rolling ``{a|b|c}`` per tile would teach the model
+        "this character has all variants" rather than locking identity.
+        ``create_run`` is the single point at which the draw happens; the
+        per-tile loop reads the resolved text directly.
+        """
+        location_ids = [
+            "location:image.locations.environment:cozy_inn:v1",
+            "location:image.locations.environment:foggy_moor:v1",
+        ]
+        with (
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json_anonymous",
+                side_effect=_fake_login_fetch,
+            ),
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json",
+                side_effect=_make_authenticated_fetch(_LOCATIONS),
+            ),
+        ):
+            _login(test_client)
+            payload = _create_run_payload(location_ids=location_ids)
+            payload["pinned_sections"] = [
+                {
+                    "label": "Goblin",
+                    "mode": "manual",
+                    "manual_text": (
+                        "A goblin with {yellow|green|red|blue|crimson|silver|black} eyes."
+                    ),
+                    "automated_prompt_id": None,
+                },
+            ]
+            payload["negative_prompt"] = "{blurry|low quality} background"
+            resp = test_client.post("/api/lora-dataset/runs", json=payload)
+            assert resp.status_code == 200, resp.text
+            manifest = resp.json()
+
+            # The pinned section's placeholder is resolved on the manifest itself.
+            resolved_text = manifest["pinned_sections"][0]["manual_text"]
+            assert "{" not in resolved_text and "|" not in resolved_text
+            assert any(
+                eye in resolved_text
+                for eye in ("yellow", "green", "red", "blue", "crimson", "silver", "black")
+            )
+
+            # Every slot's compiled prompt embeds that same resolved text —
+            # not a fresh per-tile draw.
+            slot_texts = {key: slot["compiled_prompt"] for key, slot in manifest["slots"].items()}
+            for compiled in slot_texts.values():
+                assert resolved_text in compiled
+
+            # The negative prompt is also resolved exactly once.
+            resolved_negative = manifest["params"]["negative_prompt"]
+            assert "{" not in resolved_negative and "|" not in resolved_negative
+
+    def test_placeholders_resolved_when_no_brace_syntax_present(self, test_client):
+        """Sections without placeholders pass through unchanged."""
+        with (
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json_anonymous",
+                side_effect=_fake_login_fetch,
+            ),
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json",
+                side_effect=_make_authenticated_fetch(_LOCATIONS),
+            ),
+        ):
+            _login(test_client)
+            payload = _create_run_payload(
+                location_ids=["location:image.locations.environment:cozy_inn:v1"]
+            )
+            resp = test_client.post("/api/lora-dataset/runs", json=payload)
+            assert resp.status_code == 200, resp.text
+            manifest = resp.json()
+            assert (
+                manifest["pinned_sections"][0]["manual_text"]
+                == payload["pinned_sections"][0]["manual_text"]
+            )
+
+
 class TestLoraRunStoreReconciliation:
     """Reconciliation prunes references to disappeared tile files on read."""
 
