@@ -280,6 +280,13 @@ export function createLoraDatasetController({ apiClient, toast, buildGeneratePay
       body.appendChild(placeholder);
     }
 
+    // Surface the per-tile seed inline so the operator can correlate
+    // visible drift with seed bumps after a regen, and so a "bad" tile
+    // can be reproduced or rejected with seed-level evidence.
+    const seedLine = document.createElement("div");
+    seedLine.className = "lora-tile__seed";
+    seedLine.textContent = slot.seed != null ? `seed ${slot.seed}` : "seed —";
+
     const caption = document.createElement("div");
     caption.className = "lora-tile__caption";
     caption.textContent = slot.location_text;
@@ -305,6 +312,7 @@ export function createLoraDatasetController({ apiClient, toast, buildGeneratePay
 
     card.appendChild(header);
     card.appendChild(body);
+    card.appendChild(seedLine);
     card.appendChild(caption);
     card.appendChild(actions);
     return card;

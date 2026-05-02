@@ -48,7 +48,6 @@ from pipeworks.api.models_lora import (
 from pipeworks.api.prompt_builder import (
     build_dynamic_prompt,
     expand_prompt_placeholders,
-    resolve_dynamic_prompt_variants,
 )
 from pipeworks.api.services.generation_runtime import GenerationRuntimeService
 from pipeworks.api.services.lora_run_store import (
@@ -165,6 +164,34 @@ def create_lora_dataset_router(deps: LoraDatasetRouterDependencies) -> APIRouter
         # under the run dir alongside the manifest.
         run_id = new_run_id()
         now = time.time()
+
+        # Resolve `{a|b|c}` placeholders ONCE at run creation so every tile
+        # in the dataset shares the same draw. Placeholder expansion is
+        # appropriate for normal /api/generate batches (each image gets
+        # an independent draw — that's the whole point of the syntax) but
+        # actively harmful for LoRA training, where character identity
+        # must be stable across the dataset. Freezing the draw at run
+        # creation gives the operator a single deterministic stack that
+        # gets reused by every tile.
+        resolved_pinned: list[PromptSection] = []
+        for section in req.pinned_sections:
+            resolved_text = (
+                expand_prompt_placeholders(section.manual_text)
+                if section.manual_text
+                else section.manual_text
+            )
+            resolved_pinned.append(
+                PromptSection(
+                    label=section.label,
+                    mode=section.mode,
+                    manual_text=resolved_text,
+                    automated_prompt_id=section.automated_prompt_id,
+                )
+            )
+        resolved_negative_prompt = (
+            expand_prompt_placeholders(req.negative_prompt) if req.negative_prompt else None
+        )
+
         manifest = LoraRunManifest(
             run_id=run_id,
             created_at=now,
@@ -178,9 +205,9 @@ def create_lora_dataset_router(deps: LoraDatasetRouterDependencies) -> APIRouter
                 guidance=req.guidance,
                 scheduler=req.scheduler,
                 base_seed=base_seed,
-                negative_prompt=req.negative_prompt,
+                negative_prompt=resolved_negative_prompt,
             ),
-            pinned_sections=list(req.pinned_sections),
+            pinned_sections=resolved_pinned,
             location_section_label=req.location_section_label,
             slots=slots,
             slot_order=slot_order,
@@ -379,27 +406,20 @@ def _compile_slot_prompt(
 
     The slot's location text is appended as the final section so it
     sits at the end of the prompt block, where most diffusion models
-    weight environment cues most strongly. Placeholder expansion
-    (``{a|b|c}``) runs over the consistency stack so each tile can
-    surface independent random choices the way the existing composer
-    does.
+    weight environment cues most strongly. Placeholders are NOT
+    re-expanded here: ``create_run`` resolves ``{a|b|c}`` once at run
+    creation time and freezes the draw on ``manifest.pinned_sections``
+    so every tile in the dataset sees the same consistency stack.
     """
     sections: list[dict[str, str]] = []
     for pinned in pinned_sections:
-        if pinned.mode == "manual":
-            text = (pinned.manual_text or "").strip()
-        else:
-            # ``automated_prompt_id`` is a marker only; the manual_text
-            # field on the pinned section already carries the resolved
-            # canonical content (the frontend fills both at snapshot time).
-            text = (pinned.manual_text or "").strip()
+        text = (pinned.manual_text or "").strip()
         if not text:
             continue
         sections.append({"label": pinned.label, "text": text})
     sections.append({"label": location_section_label, "text": slot.location_text})
 
-    expanded = resolve_dynamic_prompt_variants(sections)
-    return build_dynamic_prompt(expanded, expand_placeholders=False)
+    return build_dynamic_prompt(sections, expand_placeholders=False)
 
 
 async def _execute_run(
@@ -513,9 +533,12 @@ async def _execute_run(
                 slot.seed if slot.seed is not None else manifest.params.base_seed + tile_index
             )
 
-            # Re-expand placeholders per tile so {a|b|c} options get
-            # independent draws across the dataset (unlike the earlier
-            # gallery batch which expands once per `/api/generate`).
+            # Placeholders were resolved once at run creation
+            # (``create_run`` freezes ``{a|b|c}`` draws on the manifest).
+            # The per-tile loop reads the already-resolved text directly
+            # so every tile in the dataset shares the same consistency
+            # stack — character identity stays stable across all 25
+            # locations, which is what LoRA training needs.
             sections_with_location: list[dict[str, str]] = []
             for pinned in manifest.pinned_sections:
                 text = (pinned.manual_text or "").strip()
@@ -524,12 +547,13 @@ async def _execute_run(
             sections_with_location.append(
                 {"label": manifest.location_section_label, "text": slot.location_text}
             )
-            resolved = resolve_dynamic_prompt_variants(sections_with_location)
-            compiled_prompt = build_dynamic_prompt(resolved, expand_placeholders=False)
+            compiled_prompt = build_dynamic_prompt(
+                sections_with_location, expand_placeholders=False
+            )
 
-            negative_prompt = None
-            if manifest.params.negative_prompt:
-                negative_prompt = expand_prompt_placeholders(manifest.params.negative_prompt)
+            # ``params.negative_prompt`` is also resolved at run creation,
+            # so it is used here as-is rather than re-expanded per tile.
+            negative_prompt = manifest.params.negative_prompt
 
             try:
                 # i2i-extension-seam: a future FLUX.2-klein i2i variant
