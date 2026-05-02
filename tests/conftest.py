@@ -697,6 +697,7 @@ def test_client(
         patch("pipeworks.api.main.GALLERY_DIR", test_config.gallery_dir),
         patch("pipeworks.api.main.TEMPLATES_DIR", test_config.templates_dir),
         patch("pipeworks.api.main.GALLERY_DB", test_config.gallery_db),
+        patch("pipeworks.api.main.OUTPUTS_DIR", test_config.outputs_dir),
         patch(
             "pipeworks.api.main.GPU_SETTINGS_DB",
             test_config.outputs_dir / "gpu_workers.runtime.json",

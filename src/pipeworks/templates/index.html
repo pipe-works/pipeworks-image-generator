@@ -112,6 +112,7 @@
     <button class="tab-nav__item is-active" data-tab="generation" role="tab">Generation</button>
     <button class="tab-nav__item" data-tab="gallery" role="tab">Gallery</button>
     <button class="tab-nav__item" data-tab="favourites" role="tab">Favourites</button>
+    <button class="tab-nav__item" data-tab="lora-dataset" role="tab">LoRA Dataset</button>
     <button class="tab-nav__item" data-tab="help" role="tab">Help</button>
   </nav>
 
@@ -442,6 +443,92 @@
         </div>
       </div>
     </div><!-- /tab-favourites -->
+
+
+    <!-- ── LORA DATASET TAB ──────────────────────────────────────────── -->
+    <div class="tab-content" id="tab-lora-dataset">
+      <div class="app-main lora-dataset" style="max-width:1100px;margin:0 auto">
+        <div class="panel" style="margin-bottom:var(--sp-3)">
+          <div class="panel__heading">LoRA Dataset Builder</div>
+          <p style="font-size:var(--text-sm);color:var(--col-text-muted);line-height:1.7;margin-bottom:var(--sp-2)">
+            Compose a character on the <strong>Generation</strong> tab as you normally
+            would — species, clothing, tone profile, etc. — then snapshot the
+            composer state here and pick canonical <code>location</code> policies to
+            vary across the dataset. One tile is generated per location with the
+            consistency stack pinned.
+          </p>
+          <p style="font-size:var(--text-xs);color:var(--col-text-muted);line-height:1.7;margin-bottom:var(--sp-2)">
+            Diversity comes from the locations; consistency comes from the
+            character axes. The exported <code>dataset/</code> folder is consumed
+            directly by ai-toolkit for training.
+          </p>
+        </div>
+
+        <div class="panel" style="margin-bottom:var(--sp-3)">
+          <div class="panel__heading">1 · Snapshot Consistency Stack</div>
+          <div class="ctrl-row" style="margin-bottom:var(--sp-2)">
+            <button class="btn btn--primary btn--sm" id="lora-btn-snapshot" type="button">
+              Snapshot from composer
+            </button>
+            <span class="status-bar__text" id="lora-snapshot-status" style="margin-left:var(--sp-2)">
+              No snapshot yet
+            </span>
+          </div>
+          <div id="lora-snapshot-summary" class="lora-snapshot-summary"></div>
+        </div>
+
+        <div class="panel" style="margin-bottom:var(--sp-3)">
+          <div class="panel__heading">2 · Choose Locations</div>
+          <div class="ctrl-row" style="margin-bottom:var(--sp-2)">
+            <button class="btn btn--secondary btn--sm" id="lora-btn-select-all" type="button">
+              Select all
+            </button>
+            <button class="btn btn--secondary btn--sm" id="lora-btn-select-none" type="button">
+              Clear selection
+            </button>
+            <span class="status-bar__text" id="lora-locations-status" style="margin-left:var(--sp-2)">
+              Loading…
+            </span>
+          </div>
+          <div id="lora-locations-list" class="lora-locations-list"></div>
+        </div>
+
+        <div class="panel" style="margin-bottom:var(--sp-3)">
+          <div class="panel__heading">3 · Create Run</div>
+          <div class="ctrl-row">
+            <button class="btn btn--primary btn--sm" id="lora-btn-create" type="button" disabled>
+              Create dataset run
+            </button>
+            <span class="status-bar__text" id="lora-create-status" style="margin-left:var(--sp-2)"></span>
+          </div>
+        </div>
+
+        <div class="panel" id="lora-active-run-panel" style="margin-bottom:var(--sp-3);display:none">
+          <div class="panel__heading">
+            Active Run · <span id="lora-active-run-id">—</span>
+            · <span id="lora-active-run-status">pending</span>
+          </div>
+          <div class="ctrl-row" style="margin-bottom:var(--sp-2)">
+            <button class="btn btn--primary btn--sm" id="lora-btn-generate" type="button">
+              Generate all
+            </button>
+            <button class="btn btn--secondary btn--sm" id="lora-btn-cancel" type="button" disabled>
+              Cancel
+            </button>
+            <button class="btn btn--secondary btn--sm" id="lora-btn-export" type="button">
+              Export dataset/
+            </button>
+            <span class="status-bar__text" id="lora-active-run-progress" style="margin-left:var(--sp-2)"></span>
+          </div>
+          <div id="lora-tile-grid" class="lora-tile-grid"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel__heading">Existing Runs</div>
+          <div id="lora-run-list" class="lora-run-list"></div>
+        </div>
+      </div>
+    </div><!-- /tab-lora-dataset -->
 
 
     <!-- ── HELP TAB ────────────────────────────────────────────────────── -->
