@@ -28,6 +28,7 @@ _SNIPPET_POLICY_TYPES = {
     "descriptor_layer",
     "registry",
     "tone_profile",
+    "location",
 }
 
 # Per-type override for the canonical content field that carries the

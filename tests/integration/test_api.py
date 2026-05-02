@@ -354,6 +354,79 @@ class TestGetConfig:
             # tone_profile without a prompt_block field is silently dropped.
             assert "tone_profile:image.tone_profiles:no_payload:v1" not in options_by_id
 
+    def test_location_snippet_uses_default_text_field(self, test_client):
+        """location snippets pull text from canonical ``content.text``.
+
+        Confirms the canonical ``location`` policy type flows through the
+        prompt-snippet pipeline using the default text-bearing field, with
+        no per-type override required, and that locations missing
+        ``content.text`` are silently dropped.
+        """
+
+        def _fake_login_fetch(*, base_url, method, path, body):
+            return {
+                "session_id": "session-admin-1",
+                "role": "admin",
+                "available_worlds": [{"id": "pipeworks_web", "name": "Pipeworks Web"}],
+            }
+
+        def _fake_authenticated_fetch(*, runtime, method, path, query_params, json_payload=None):
+            if path == "/api/policy-capabilities":
+                return {
+                    "allowed_policy_types": ["prompt", "location"],
+                    "allowed_statuses": ["draft", "active"],
+                }
+            if path == "/api/policies":
+                return {
+                    "items": [
+                        {
+                            "policy_id": "location:image.locations.environment:cozy_inn",
+                            "policy_type": "location",
+                            "namespace": "image.locations.environment",
+                            "policy_key": "cozy_inn",
+                            "variant": "v1",
+                            "content": {
+                                "text": ("A warm timber-beamed inn lit by hearth firelight."),
+                            },
+                        },
+                        {
+                            "policy_id": "location:image.locations.environment:no_payload",
+                            "policy_type": "location",
+                            "namespace": "image.locations.environment",
+                            "policy_key": "no_payload",
+                            "variant": "v1",
+                            "content": {"description": "missing canonical text field"},
+                        },
+                    ]
+                }
+            raise AssertionError(f"Unexpected path: {path}")
+
+        with (
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json_anonymous", side_effect=_fake_login_fetch
+            ),
+            patch("pipeworks.api.main._fetch_mud_api_json", side_effect=_fake_authenticated_fetch),
+        ):
+            login_resp = test_client.post(
+                "/api/runtime-login",
+                json={"username": "admin", "password": "pw"},
+            )
+            assert login_resp.status_code == 200
+
+            snippets_resp = test_client.get("/api/policy-prompts")
+            assert snippets_resp.status_code == 200
+            payload = snippets_resp.json()
+
+            options_by_id = {option["id"]: option for option in payload["policy_prompt_options"]}
+            location_id = "location:image.locations.environment:cozy_inn:v1"
+            assert location_id in options_by_id
+            assert (
+                options_by_id[location_id]["value"]
+                == "A warm timber-beamed inn lit by hearth firelight."
+            )
+            # location without a text field is silently dropped.
+            assert "location:image.locations.environment:no_payload:v1" not in options_by_id
+
     def test_disable_http_cache_adds_no_cache_headers(self, test_client):
         """No-cache headers should be emitted when local dev mode enables them."""
         from pipeworks.api import main as main_module
