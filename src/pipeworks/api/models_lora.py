@@ -119,9 +119,22 @@ class LoraRunParams(BaseModel):
     base_seed: int = Field(
         ...,
         description=(
-            "Base seed for the run. Per-tile seed = base_seed + slot_order. "
-            "Determinism is intentional so regenerated tiles can be made "
-            "different from their first attempt by varying the slot's seed."
+            "Base seed for the run. With ``share_seed_across_tiles`` true "
+            "(the default for LoRA runs) every tile uses ``base_seed`` "
+            "verbatim, so all 25 tiles initialise from identical noise — "
+            "the strongest character lock available without i2i. With it "
+            "false, per-tile seed is ``base_seed + slot_order_index`` for "
+            "more pose/angle variance at the cost of identity drift."
+        ),
+    )
+    share_seed_across_tiles: bool = Field(
+        default=True,
+        description=(
+            "When true, every pending slot uses ``base_seed`` for "
+            "generation; when false, each slot uses "
+            "``base_seed + slot_order_index``. Toggling this on a run "
+            "recomputes seeds for slots still in ``pending`` state but "
+            "leaves done/failed slots' historical seeds untouched."
         ),
     )
     negative_prompt: str | None = None
@@ -220,6 +233,33 @@ class LoraRunCreateRequest(BaseModel):
             "['location:image.locations.environment:cozy_inn:v1', ...]. "
             "Identifiers carry the variant suffix; the run snapshots "
             "the canonical text so subsequent edits do not affect this run."
+        ),
+    )
+    share_seed_across_tiles: bool = Field(
+        default=True,
+        description=(
+            "Default true: every tile in the run uses ``base_seed`` "
+            "verbatim, locking character identity across the dataset. "
+            "Set false to revert to ``base_seed + slot_order_index`` "
+            "per-tile seeds for more pose/angle variance."
+        ),
+    )
+
+
+class LoraRunPatch(BaseModel):
+    """Request body for ``PATCH /api/lora-dataset/runs/{id}``.
+
+    Currently only flips the seed-strategy flag, but is shaped as a
+    partial-update model so future run-level toggles can ride on the
+    same endpoint without a route proliferation.
+    """
+
+    share_seed_across_tiles: bool | None = Field(
+        default=None,
+        description=(
+            "If set, toggle the run's seed strategy. Only pending slots' "
+            "seeds are recomputed; done/failed slots keep their historical "
+            "seed value so curation history is not rewritten."
         ),
     )
 

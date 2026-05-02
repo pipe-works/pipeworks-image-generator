@@ -42,6 +42,7 @@ from pipeworks.api.models_lora import (
     LoraRunCreateRequest,
     LoraRunManifest,
     LoraRunParams,
+    LoraRunPatch,
     LoraRunSlot,
     LoraRunSlotPatch,
 )
@@ -205,6 +206,7 @@ def create_lora_dataset_router(deps: LoraDatasetRouterDependencies) -> APIRouter
                 guidance=req.guidance,
                 scheduler=req.scheduler,
                 base_seed=base_seed,
+                share_seed_across_tiles=req.share_seed_across_tiles,
                 negative_prompt=resolved_negative_prompt,
             ),
             pinned_sections=resolved_pinned,
@@ -213,7 +215,8 @@ def create_lora_dataset_router(deps: LoraDatasetRouterDependencies) -> APIRouter
             slot_order=slot_order,
         )
         # Compile each slot's prompt up-front so the manifest is
-        # self-describing even before any tile has run.
+        # self-describing even before any tile has run, and assign each
+        # slot its planned seed using the run's seed strategy.
         for index, key in enumerate(slot_order):
             slot = manifest.slots[key]
             slot.compiled_prompt = _compile_slot_prompt(
@@ -221,7 +224,11 @@ def create_lora_dataset_router(deps: LoraDatasetRouterDependencies) -> APIRouter
                 location_section_label=manifest.location_section_label,
                 slot=slot,
             )
-            slot.seed = base_seed + index
+            slot.seed = _planned_seed_for_slot(
+                base_seed=base_seed,
+                slot_order_index=index,
+                share_seed_across_tiles=req.share_seed_across_tiles,
+            )
 
         ensure_run_dir(deps.outputs_dir(), run_id)
         write_manifest(deps.outputs_dir(), manifest)
@@ -235,6 +242,48 @@ def create_lora_dataset_router(deps: LoraDatasetRouterDependencies) -> APIRouter
     @router.get("/api/lora-dataset/runs/{run_id}")
     async def get_run(run_id: str) -> dict:
         manifest = read_manifest(deps.outputs_dir(), run_id)
+        if manifest is None:
+            raise HTTPException(status_code=404, detail="run not found")
+        return manifest.model_dump(mode="json")
+
+    @router.patch("/api/lora-dataset/runs/{run_id}")
+    async def patch_run(run_id: str, patch: LoraRunPatch) -> dict:
+        """Toggle run-level flags (currently just the seed strategy).
+
+        Slots already in ``done`` or ``failed`` state keep their historical
+        ``seed`` value so the curation record is not rewritten — only
+        ``pending`` slots are updated to the new strategy.
+
+        The endpoint refuses to act on a ``running`` run; toggling mid-flight
+        would race the per-tile loop's seed reads.
+        """
+        existing = read_manifest(deps.outputs_dir(), run_id)
+        if existing is None:
+            raise HTTPException(status_code=404, detail="run not found")
+        if existing.status == "running":
+            raise HTTPException(
+                status_code=409,
+                detail="run is currently generating; cancel before changing seed strategy.",
+            )
+
+        if patch.share_seed_across_tiles is None:
+            return existing.model_dump(mode="json")
+
+        new_strategy = patch.share_seed_across_tiles
+
+        def _apply(manifest: LoraRunManifest) -> None:
+            manifest.params.share_seed_across_tiles = new_strategy
+            for index, key in enumerate(manifest.slot_order):
+                slot = manifest.slots.get(key)
+                if slot is None or slot.status in {"done", "failed"}:
+                    continue
+                slot.seed = _planned_seed_for_slot(
+                    base_seed=manifest.params.base_seed,
+                    slot_order_index=index,
+                    share_seed_across_tiles=new_strategy,
+                )
+
+        manifest = update_manifest(deps.outputs_dir(), run_id, _apply)
         if manifest is None:
             raise HTTPException(status_code=404, detail="run not found")
         return manifest.model_dump(mode="json")
@@ -315,8 +364,14 @@ def create_lora_dataset_router(deps: LoraDatasetRouterDependencies) -> APIRouter
 
         def _bump(manifest: LoraRunManifest) -> None:
             slot = manifest.slots[slot_key]
+            slot_index = (
+                manifest.slot_order.index(slot_key) if slot_key in manifest.slot_order else 0
+            )
+            # Stride bumps by slot count plus the slot's order index so two
+            # slots regenerated from the same starting seed (the shared-seed
+            # default state) end up with distinct seeds rather than colliding.
             previous_seed = slot.seed if slot.seed is not None else manifest.params.base_seed
-            slot.seed = previous_seed + len(manifest.slots)
+            slot.seed = previous_seed + len(manifest.slots) + slot_index
             slot.status = "pending"
             slot.error = None
             slot.excluded = False
@@ -394,6 +449,22 @@ def create_lora_dataset_router(deps: LoraDatasetRouterDependencies) -> APIRouter
         return result.model_dump(mode="json")
 
     return router
+
+
+def _planned_seed_for_slot(
+    *, base_seed: int, slot_order_index: int, share_seed_across_tiles: bool
+) -> int:
+    """Compute a slot's planned seed from the run's seed strategy.
+
+    Shared seed is the default for LoRA runs because identical noise
+    plus a frozen consistency stack gives the strongest character lock
+    available without i2i. The legacy per-tile-offset strategy is kept
+    behind a toggle for operators who want pose/angle variance even at
+    the cost of identity drift across the dataset.
+    """
+    if share_seed_across_tiles:
+        return base_seed
+    return base_seed + slot_order_index
 
 
 def _compile_slot_prompt(

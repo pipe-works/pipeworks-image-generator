@@ -236,6 +236,14 @@ export function createLoraDatasetController({ apiClient, toast, buildGeneratePay
     if (cancelBtn) cancelBtn.disabled = manifest.status !== "running";
     const generateBtn = $("#lora-btn-generate");
     if (generateBtn) generateBtn.disabled = manifest.status === "running";
+    // Reflect the manifest's seed strategy on the toggle and disable while
+    // the run is generating — toggling mid-flight would race the per-tile
+    // seed reads in the backend loop.
+    const seedToggle = $("#lora-chk-shared-seed");
+    if (seedToggle) {
+      seedToggle.checked = manifest.params?.share_seed_across_tiles !== false;
+      seedToggle.disabled = manifest.status === "running";
+    }
 
     const grid = $("#lora-tile-grid");
     if (!grid) return;
@@ -435,6 +443,18 @@ export function createLoraDatasetController({ apiClient, toast, buildGeneratePay
 
   /* ------------------------- bind ------------------------- */
 
+  async function onSharedSeedToggleChange(event) {
+    if (!activeRunId) return;
+    const desired = !!event.target.checked;
+    try {
+      await apiClient.patchLoraRun(activeRunId, { share_seed_across_tiles: desired });
+    } catch (err) {
+      toast(`Could not change seed strategy: ${err.message || err}`, "err");
+      return;
+    }
+    await refreshActiveRun();
+  }
+
   function bind() {
     $("#lora-btn-snapshot")?.addEventListener("click", takeSnapshot);
     $("#lora-btn-select-all")?.addEventListener("click", selectAllLocations);
@@ -443,6 +463,7 @@ export function createLoraDatasetController({ apiClient, toast, buildGeneratePay
     $("#lora-btn-generate")?.addEventListener("click", generateActiveRun);
     $("#lora-btn-cancel")?.addEventListener("click", cancelActiveRun);
     $("#lora-btn-export")?.addEventListener("click", exportActiveDataset);
+    $("#lora-chk-shared-seed")?.addEventListener("change", onSharedSeedToggleChange);
   }
 
   bind();

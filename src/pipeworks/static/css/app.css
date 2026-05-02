@@ -1409,3 +1409,17 @@ html, body {
   font-size: var(--text-xs);
   color: var(--col-text-muted);
 }
+
+.lora-seed-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font-size: var(--text-xs);
+  color: var(--col-text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.lora-seed-toggle input[type="checkbox"] {
+  margin: 0;
+}
