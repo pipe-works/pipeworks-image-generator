@@ -249,7 +249,8 @@ class TestLoraDatasetRunLifecycle:
             assert manifest["status"] == "complete"
             assert manifest["slots"]["cozy_inn"]["status"] == "done"
             assert manifest["slots"]["cozy_inn"]["image_filename"] == "00_cozy_inn.png"
-            assert manifest["slots"]["foggy_moor"]["seed"] == 12346
+            # Default seed strategy is shared: every slot uses base_seed.
+            assert manifest["slots"]["foggy_moor"]["seed"] == 12345
 
     def test_regenerate_slot_bumps_seed_and_clears_excluded(
         self, test_client, test_config, mock_model_manager
@@ -508,6 +509,187 @@ class TestLoraPlaceholderFreezing:
                 manifest["pinned_sections"][0]["manual_text"]
                 == payload["pinned_sections"][0]["manual_text"]
             )
+
+
+class TestLoraSeedStrategy:
+    """Seed strategy controls character lock vs pose variance."""
+
+    def test_default_seed_strategy_is_shared_across_all_tiles(self, test_client):
+        """Run creation defaults to identical seed across every slot.
+
+        Shared seed is the strongest character-lock available without i2i:
+        every tile starts from the same noise, so only the location section
+        varies. This is the default for LoRA runs.
+        """
+        with (
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json_anonymous",
+                side_effect=_fake_login_fetch,
+            ),
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json",
+                side_effect=_make_authenticated_fetch(_LOCATIONS),
+            ),
+        ):
+            _login(test_client)
+            payload = _create_run_payload(
+                location_ids=[
+                    "location:image.locations.environment:cozy_inn:v1",
+                    "location:image.locations.environment:foggy_moor:v1",
+                ]
+            )
+            resp = test_client.post("/api/lora-dataset/runs", json=payload)
+            assert resp.status_code == 200, resp.text
+            manifest = resp.json()
+            assert manifest["params"]["share_seed_across_tiles"] is True
+            assert manifest["params"]["base_seed"] == 12345
+            assert all(slot["seed"] == 12345 for slot in manifest["slots"].values())
+
+    def test_per_tile_offset_seed_strategy_when_share_disabled(self, test_client):
+        """Disabling shared seed at create time produces per-tile-offset seeds."""
+        with (
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json_anonymous",
+                side_effect=_fake_login_fetch,
+            ),
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json",
+                side_effect=_make_authenticated_fetch(_LOCATIONS),
+            ),
+        ):
+            _login(test_client)
+            payload = _create_run_payload(
+                location_ids=[
+                    "location:image.locations.environment:cozy_inn:v1",
+                    "location:image.locations.environment:foggy_moor:v1",
+                ]
+            )
+            payload["share_seed_across_tiles"] = False
+            resp = test_client.post("/api/lora-dataset/runs", json=payload)
+            assert resp.status_code == 200, resp.text
+            manifest = resp.json()
+            assert manifest["params"]["share_seed_across_tiles"] is False
+            assert manifest["slots"]["cozy_inn"]["seed"] == 12345
+            assert manifest["slots"]["foggy_moor"]["seed"] == 12346
+
+    def test_patch_run_toggles_strategy_and_recomputes_pending_seeds(self, test_client):
+        """Toggling the run-level flag must update pending slot seeds."""
+        with (
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json_anonymous",
+                side_effect=_fake_login_fetch,
+            ),
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json",
+                side_effect=_make_authenticated_fetch(_LOCATIONS),
+            ),
+        ):
+            _login(test_client)
+            payload = _create_run_payload(
+                location_ids=[
+                    "location:image.locations.environment:cozy_inn:v1",
+                    "location:image.locations.environment:foggy_moor:v1",
+                ]
+            )
+            run_id = test_client.post("/api/lora-dataset/runs", json=payload).json()["run_id"]
+            # Default state: shared seed, both slots at 12345.
+            manifest = test_client.get(f"/api/lora-dataset/runs/{run_id}").json()
+            assert manifest["slots"]["cozy_inn"]["seed"] == 12345
+            assert manifest["slots"]["foggy_moor"]["seed"] == 12345
+
+            patch_resp = test_client.patch(
+                f"/api/lora-dataset/runs/{run_id}",
+                json={"share_seed_across_tiles": False},
+            )
+            assert patch_resp.status_code == 200, patch_resp.text
+            patched = patch_resp.json()
+            assert patched["params"]["share_seed_across_tiles"] is False
+            # Pending slots get the per-tile-offset seeds.
+            assert patched["slots"]["cozy_inn"]["seed"] == 12345
+            assert patched["slots"]["foggy_moor"]["seed"] == 12346
+
+            # Flip back — both slots return to base_seed.
+            back = test_client.patch(
+                f"/api/lora-dataset/runs/{run_id}",
+                json={"share_seed_across_tiles": True},
+            ).json()
+            assert back["params"]["share_seed_across_tiles"] is True
+            assert all(slot["seed"] == 12345 for slot in back["slots"].values())
+
+    def test_patch_run_preserves_seed_on_done_slots(self, test_client, mock_model_manager):
+        """Toggling after generation must not rewrite historical seeds."""
+        with (
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json_anonymous",
+                side_effect=_fake_login_fetch,
+            ),
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json",
+                side_effect=_make_authenticated_fetch(_LOCATIONS),
+            ),
+            patch(
+                "pipeworks.api.main.get_model_runtime_support",
+                return_value=(True, None),
+            ),
+        ):
+            _login(test_client)
+            payload = _create_run_payload(
+                location_ids=[
+                    "location:image.locations.environment:cozy_inn:v1",
+                    "location:image.locations.environment:foggy_moor:v1",
+                ]
+            )
+            run_id = test_client.post("/api/lora-dataset/runs", json=payload).json()["run_id"]
+            test_client.post(f"/api/lora-dataset/runs/{run_id}/generate")
+            done_seed = test_client.get(f"/api/lora-dataset/runs/{run_id}").json()["slots"][
+                "cozy_inn"
+            ]["seed"]
+            assert done_seed == 12345
+
+            # Toggle to per-tile-offset; cozy_inn is done so its seed must
+            # stay at 12345 (historical fact). foggy_moor is also done, so
+            # it stays at 12345 too — neither slot is recomputed.
+            patched = test_client.patch(
+                f"/api/lora-dataset/runs/{run_id}",
+                json={"share_seed_across_tiles": False},
+            ).json()
+            assert patched["params"]["share_seed_across_tiles"] is False
+            assert patched["slots"]["cozy_inn"]["seed"] == 12345
+            assert patched["slots"]["foggy_moor"]["seed"] == 12345
+
+    def test_patch_run_rejects_strategy_change_while_running(self, test_client):
+        """The endpoint refuses to act on a run currently generating."""
+        # Construct the run, then forge the running status directly via the
+        # underlying store so we don't have to actually start a thread that
+        # would race the test. The router consults `status == "running"`.
+        with (
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json_anonymous",
+                side_effect=_fake_login_fetch,
+            ),
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json",
+                side_effect=_make_authenticated_fetch(_LOCATIONS),
+            ),
+        ):
+            _login(test_client)
+            payload = _create_run_payload(
+                location_ids=["location:image.locations.environment:cozy_inn:v1"]
+            )
+            run_id = test_client.post("/api/lora-dataset/runs", json=payload).json()["run_id"]
+        from pipeworks.api.main import OUTPUTS_DIR
+        from pipeworks.api.services.lora_run_store import update_manifest
+
+        def _set_running(manifest):
+            manifest.status = "running"
+
+        update_manifest(OUTPUTS_DIR, run_id, _set_running)
+        resp = test_client.patch(
+            f"/api/lora-dataset/runs/{run_id}",
+            json={"share_seed_across_tiles": False},
+        )
+        assert resp.status_code == 409
+        assert "currently generating" in resp.json()["detail"]
 
 
 class TestLoraRunStoreReconciliation:

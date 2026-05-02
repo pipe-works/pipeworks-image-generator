@@ -128,6 +128,13 @@ export function createApiClient({ fetchJson }) {
         body: JSON.stringify(payload),
       });
     },
+    patchLoraRun(runId, patch) {
+      return fetchJson(`/api/lora-dataset/runs/${encodeURIComponent(runId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+    },
     generateLoraRun(runId) {
       return fetchJson(`/api/lora-dataset/runs/${encodeURIComponent(runId)}/generate`, {
         method: "POST",
