@@ -194,14 +194,14 @@ export function createLoraDatasetController({ apiClient, toast, buildGeneratePay
     try {
       data = await apiClient.fetchLoraTilePacks();
     } catch (err) {
-      setText("#lora-character-sheet-status", "Failed to load tile-packs.");
+      setText("#lora-character-sheet-status", "Failed to load character views.");
       toast(`Could not load tile-packs: ${err.message || err}`, "err");
       return;
     }
 
     availableCharacterSheetTiles = data?.character_sheet || [];
     if (availableCharacterSheetTiles.length === 0) {
-      setText("#lora-character-sheet-status", "No character-sheet tiles available.");
+      setText("#lora-character-sheet-status", "No character-view tiles available.");
     } else {
       setText(
         "#lora-character-sheet-status",
