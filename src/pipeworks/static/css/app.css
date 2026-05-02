@@ -1423,3 +1423,8 @@ html, body {
 .lora-seed-toggle input[type="checkbox"] {
   margin: 0;
 }
+
+.lora-section-placeholder {
+  font-style: italic;
+  margin: 0;
+}

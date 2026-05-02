@@ -19,7 +19,9 @@ export function createLoraDatasetController({ apiClient, toast, buildGeneratePay
 
   let snapshotPayload = null;
   let availableLocations = [];
+  let availableCharacterSheetTiles = [];
   const selectedLocationIds = new Set();
+  const selectedCharacterSheetKeys = new Set();
   let activeRunId = null;
   let pollHandle = null;
   let pollGeneration = 0;
@@ -34,10 +36,14 @@ export function createLoraDatasetController({ apiClient, toast, buildGeneratePay
     if (panel) panel.style.display = visible ? "" : "none";
   }
 
+  function totalSelectedTiles() {
+    return selectedLocationIds.size + selectedCharacterSheetKeys.size;
+  }
+
   function refreshCreateButtonEnabled() {
     const btn = $("#lora-btn-create");
     if (!btn) return;
-    btn.disabled = !snapshotPayload || selectedLocationIds.size === 0;
+    btn.disabled = !snapshotPayload || totalSelectedTiles() === 0;
   }
 
   /* ------------------------- snapshot ------------------------- */
@@ -164,6 +170,70 @@ export function createLoraDatasetController({ apiClient, toast, buildGeneratePay
     refreshCreateButtonEnabled();
   }
 
+  /* ------------------------- tile-packs ------------------------- */
+
+  async function loadTilePacks() {
+    setText("#lora-character-sheet-status", "Loading…");
+    let data;
+    try {
+      data = await apiClient.fetchLoraTilePacks();
+    } catch (err) {
+      setText("#lora-character-sheet-status", "Failed to load tile-packs.");
+      toast(`Could not load tile-packs: ${err.message || err}`, "err");
+      return;
+    }
+
+    availableCharacterSheetTiles = data?.character_sheet || [];
+    if (availableCharacterSheetTiles.length === 0) {
+      setText("#lora-character-sheet-status", "No character-sheet tiles available.");
+    } else {
+      setText(
+        "#lora-character-sheet-status",
+        `${availableCharacterSheetTiles.length} tile(s) available`
+      );
+    }
+    selectedCharacterSheetKeys.clear();
+    renderCharacterSheetList();
+    refreshCreateButtonEnabled();
+  }
+
+  function renderCharacterSheetList() {
+    const root = $("#lora-character-sheet-list");
+    if (!root) return;
+    root.innerHTML = "";
+
+    availableCharacterSheetTiles.forEach(tile => {
+      const row = document.createElement("label");
+      row.className = "lora-location-row";
+
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.value = tile.key;
+      checkbox.checked = selectedCharacterSheetKeys.has(tile.key);
+      checkbox.addEventListener("change", () => {
+        if (checkbox.checked) selectedCharacterSheetKeys.add(tile.key);
+        else selectedCharacterSheetKeys.delete(tile.key);
+        refreshCreateButtonEnabled();
+      });
+
+      const label = document.createElement("span");
+      label.className = "lora-location-row__label";
+      label.textContent = tile.label || tile.key;
+
+      const preview = document.createElement("span");
+      preview.className = "lora-location-row__preview";
+      const hint = tile.aspect_ratio_hint
+        ? ` · best at ${tile.aspect_ratio_hint}`
+        : "";
+      preview.textContent = `${tile.text}${hint}`;
+
+      row.appendChild(checkbox);
+      row.appendChild(label);
+      row.appendChild(preview);
+      root.appendChild(row);
+    });
+  }
+
   /* ------------------------- runs ------------------------- */
 
   async function createRun() {
@@ -171,8 +241,8 @@ export function createLoraDatasetController({ apiClient, toast, buildGeneratePay
       toast("Snapshot the composer first.", "err");
       return;
     }
-    if (selectedLocationIds.size === 0) {
-      toast("Select at least one location.", "err");
+    if (totalSelectedTiles() === 0) {
+      toast("Select at least one tile (location or character sheet).", "err");
       return;
     }
 
@@ -187,8 +257,8 @@ export function createLoraDatasetController({ apiClient, toast, buildGeneratePay
       seed: snapshotPayload.seed ?? null,
       negative_prompt: snapshotPayload.negative_prompt || null,
       pinned_sections: snapshotPayload.sections || [],
-      location_section_label: "Location",
       location_policy_ids: Array.from(selectedLocationIds),
+      character_sheet_keys: Array.from(selectedCharacterSheetKeys),
     };
 
     setText("#lora-create-status", "Creating run…");
@@ -471,6 +541,7 @@ export function createLoraDatasetController({ apiClient, toast, buildGeneratePay
   return {
     onTabActivated() {
       loadLocations();
+      loadTilePacks();
       loadRunList();
     },
   };

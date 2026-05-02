@@ -115,6 +115,9 @@ export function createApiClient({ fetchJson }) {
     fetchPolicyPrompts() {
       return fetchJson("/api/policy-prompts");
     },
+    fetchLoraTilePacks() {
+      return fetchJson("/api/lora-dataset/tile-packs");
+    },
     listLoraRuns() {
       return fetchJson("/api/lora-dataset/runs");
     },

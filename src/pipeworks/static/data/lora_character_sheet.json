@@ -1,0 +1,11 @@
+{
+  "tiles": [
+    {
+      "key": "turnaround",
+      "label": "Full-body turnaround sheet",
+      "text": "Create a full body turnaround sheet of this exact character: four full-body poses on a pure white background — front view, left profile, back view, right profile — evenly spaced in a clean horizontal row, consistent lighting and style, no background noise, no shadows, same proportions and detailing across all views.",
+      "section_label": "Character Sheet",
+      "aspect_ratio_hint": "16:9"
+    }
+  ]
+}

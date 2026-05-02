@@ -1,15 +1,22 @@
 """LoRA Dataset tab API routes.
 
-Persistent, curated batches whose diversity axis is the canonical
-``location`` policy and whose consistency axis is everything else in
-the prompt-v3 composition. Each run is its own directory under
+Persistent, curated batches whose tiles come from two sources:
+
+- **Locations** — canonical mud-server policies, world content. The
+  diversity axis when training on character-in-environment tiles.
+- **Bundled tile-packs** — static JSON fixtures shipped with the
+  image-generator (character-sheet, facial expressions, body actions).
+  Render directives for ML training, not world content; they live in
+  the package rather than diluting the canonical policy surface.
+
+Each run is its own directory under
 ``outputs_dir/lora_runs/<run_id>/`` with an atomic JSON manifest, per-tile
 PNG and TXT files, and an optional ``dataset/`` export subdirectory.
 
 The router intentionally calls the underlying generation primitive
 (``ModelManager.generate``) directly rather than re-entering ``/api/generate``.
 That keeps the run flow free of gallery side-effects and policy-prompt
-re-resolution: location text is already snapshotted on the manifest at
+re-resolution: tile text is already snapshotted on the manifest at
 run-creation time, so no live mud-server calls are needed during the
 per-tile loop.
 """
@@ -45,6 +52,7 @@ from pipeworks.api.models_lora import (
     LoraRunPatch,
     LoraRunSlot,
     LoraRunSlotPatch,
+    LoraTilePacksResponse,
 )
 from pipeworks.api.prompt_builder import (
     build_dynamic_prompt,
@@ -61,6 +69,7 @@ from pipeworks.api.services.lora_run_store import (
     update_manifest,
     write_manifest,
 )
+from pipeworks.api.services.lora_tile_packs import find_tile_spec, load_all_tile_packs
 from pipeworks.api.services.prompt_catalog import load_json
 from pipeworks.api.services.runtime_policy import RuntimePolicyService
 from pipeworks.core.model_manager import ModelManager
@@ -84,79 +93,132 @@ def create_lora_dataset_router(deps: LoraDatasetRouterDependencies) -> APIRouter
     """Build APIRouter exposing the LoRA Dataset tab endpoints."""
     router = APIRouter()
 
+    @router.get("/api/lora-dataset/tile-packs")
+    async def list_tile_packs() -> dict:
+        """Return bundled tile-packs by kind for the LoRA tab pickers.
+
+        Locations are not included here — those come from the existing
+        ``/api/policy-prompts`` mud-server snippet pipeline. Tile-packs
+        cover the local-only kinds (character_sheet, facial_expression,
+        body_action). Empty packs are returned as empty lists so the
+        frontend can render placeholder UI without special-casing.
+        """
+        packs = load_all_tile_packs(data_dir=deps.data_dir())
+        response = LoraTilePacksResponse(
+            character_sheet=packs.get("character_sheet", []),
+            facial_expression=packs.get("facial_expression", []),
+            body_action=packs.get("body_action", []),
+        )
+        return response.model_dump(mode="json")
+
     @router.post("/api/lora-dataset/runs")
     async def create_run(req: LoraRunCreateRequest, request: Request) -> dict:
-        """Create a new LoRA dataset run and snapshot its consistency stack.
+        """Create a new LoRA dataset run and snapshot its tile sources.
 
         Locations are resolved against the live mud-server policy snippet
         catalog so the canonical text is captured on the manifest at
-        creation time. Once snapshotted, the run is independent of
-        upstream policy edits — reproducibility wins over freshness here.
+        creation time. Bundled tile-pack keys (character-sheet,
+        facial-expression, body-action) are resolved against the
+        package-local JSON fixtures. Once snapshotted, the run is
+        independent of upstream edits — reproducibility wins over
+        freshness here.
         """
-        if not req.location_policy_ids:
+        if not req.location_policy_ids and not req.character_sheet_keys:
             raise HTTPException(
-                status_code=400, detail="At least one location_policy_id is required."
+                status_code=400,
+                detail=(
+                    "At least one tile must be selected: location_policy_ids "
+                    "and/or character_sheet_keys."
+                ),
             )
 
-        policy_options, _, runtime_auth = (
-            deps.runtime_policy_service.load_policy_prompts_for_request(
-                request=request,
-                response=None,
-                explicit_session_id=None,
-                normalize_base_url=deps.normalize_base_url,
-            )
-        )
-        if not runtime_auth.access_granted:
-            raise HTTPException(
-                status_code=401,
-                detail="LoRA dataset runs require an authenticated mud-server session.",
-            )
-
-        options_by_id = {option["id"]: option for option in policy_options}
         slots: dict[str, LoraRunSlot] = {}
         slot_order: list[str] = []
-        for policy_id in req.location_policy_ids:
-            option = options_by_id.get(policy_id)
-            if option is None:
-                raise HTTPException(
-                    status_code=400,
-                    detail=(
-                        f"Unknown or inaccessible location policy id: {policy_id!r}. "
-                        "Make sure the location is published and the active session "
-                        "has admin/superuser role."
-                    ),
+
+        # --- Locations (canonical mud-server policies) ----------------
+        if req.location_policy_ids:
+            policy_options, _, runtime_auth = (
+                deps.runtime_policy_service.load_policy_prompts_for_request(
+                    request=request,
+                    response=None,
+                    explicit_session_id=None,
+                    normalize_base_url=deps.normalize_base_url,
                 )
-            # Option id format is "<policy_type>:<namespace>:<policy_key>:<variant>".
-            # The runtime_policy snippet pipeline does not surface the
-            # policy_type/key/variant fields on the option dict directly,
-            # so they're parsed out of the id. Anything that fails the
-            # 4-segment shape is rejected as malformed.
-            id_parts = policy_id.split(":")
-            if len(id_parts) != 4 or id_parts[0] != "location":
+            )
+            if not runtime_auth.access_granted:
                 raise HTTPException(
-                    status_code=400,
-                    detail=(
-                        f"Policy {policy_id!r} is not a canonical location "
-                        f"(expected id 'location:<namespace>:<policy_key>:<variant>')."
-                    ),
-                )
-            policy_type, namespace, location_key, variant = id_parts
-            if not location_key or location_key in slots:
-                # Duplicate location_key is rejected so each run has a
-                # stable 1:1 mapping of location_key -> tile filename.
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Duplicate or empty location_key for policy {policy_id!r}.",
+                    status_code=401,
+                    detail="LoRA dataset runs require an authenticated mud-server session.",
                 )
 
-            slots[location_key] = LoraRunSlot(
-                location_policy_id=f"{policy_type}:{namespace}:{location_key}",
-                location_variant=variant,
-                location_key=location_key,
-                location_label=str(option.get("label") or location_key),
-                location_text=str(option.get("value") or ""),
+            options_by_id = {option["id"]: option for option in policy_options}
+            for policy_id in req.location_policy_ids:
+                option = options_by_id.get(policy_id)
+                if option is None:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            f"Unknown or inaccessible location policy id: {policy_id!r}. "
+                            "Make sure the location is published and the active session "
+                            "has admin/superuser role."
+                        ),
+                    )
+                # Option id format is "<policy_type>:<namespace>:<policy_key>:<variant>".
+                id_parts = policy_id.split(":")
+                if len(id_parts) != 4 or id_parts[0] != "location":
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            f"Policy {policy_id!r} is not a canonical location "
+                            f"(expected id 'location:<namespace>:<policy_key>:<variant>')."
+                        ),
+                    )
+                _, _, location_key, _ = id_parts
+                if not location_key or location_key in slots:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Duplicate or empty tile_key for policy {policy_id!r}.",
+                    )
+
+                slots[location_key] = LoraRunSlot(
+                    tile_kind="location",
+                    tile_source_id=policy_id,
+                    tile_key=location_key,
+                    tile_label=str(option.get("label") or location_key),
+                    tile_text=str(option.get("value") or ""),
+                    section_label="Location",
+                )
+                slot_order.append(location_key)
+
+        # --- Character-sheet (bundled JSON tile-pack) -----------------
+        for sheet_key in req.character_sheet_keys:
+            tile = find_tile_spec(data_dir=deps.data_dir(), kind="character_sheet", key=sheet_key)
+            if tile is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Unknown character-sheet tile key: {sheet_key!r}. "
+                        "Check the bundled lora_character_sheet.json pack."
+                    ),
+                )
+            if tile.key in slots:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Tile key collision: {tile.key!r} is already in this run "
+                        "(likely as a location). Tile keys must be unique across kinds."
+                    ),
+                )
+
+            slots[tile.key] = LoraRunSlot(
+                tile_kind="character_sheet",
+                tile_source_id=f"character_sheet:{tile.key}",
+                tile_key=tile.key,
+                tile_label=tile.label,
+                tile_text=tile.text,
+                section_label=tile.section_label,
             )
-            slot_order.append(location_key)
+            slot_order.append(tile.key)
 
         base_seed = req.seed if req.seed is not None else random.randint(0, 2**32 - 1)
         # i2i-extension-seam: a future i2i variant would also stage a
@@ -210,7 +272,6 @@ def create_lora_dataset_router(deps: LoraDatasetRouterDependencies) -> APIRouter
                 negative_prompt=resolved_negative_prompt,
             ),
             pinned_sections=resolved_pinned,
-            location_section_label=req.location_section_label,
             slots=slots,
             slot_order=slot_order,
         )
@@ -221,7 +282,6 @@ def create_lora_dataset_router(deps: LoraDatasetRouterDependencies) -> APIRouter
             slot = manifest.slots[key]
             slot.compiled_prompt = _compile_slot_prompt(
                 pinned_sections=manifest.pinned_sections,
-                location_section_label=manifest.location_section_label,
                 slot=slot,
             )
             slot.seed = _planned_seed_for_slot(
@@ -470,17 +530,19 @@ def _planned_seed_for_slot(
 def _compile_slot_prompt(
     *,
     pinned_sections: list[PromptSection],
-    location_section_label: str,
     slot: LoraRunSlot,
 ) -> str:
     """Build the full prompt-v3 compilation for one tile.
 
-    The slot's location text is appended as the final section so it
-    sits at the end of the prompt block, where most diffusion models
-    weight environment cues most strongly. Placeholders are NOT
-    re-expanded here: ``create_run`` resolves ``{a|b|c}`` once at run
-    creation time and freezes the draw on ``manifest.pinned_sections``
-    so every tile in the dataset sees the same consistency stack.
+    The slot's tile text is appended as the final section using the
+    slot's ``section_label`` as the header — this is per-tile so a
+    single run can mix tile kinds (locations, character sheet,
+    expressions, actions) with appropriate prompt structure.
+
+    Placeholders are NOT re-expanded here: ``create_run`` resolves
+    ``{a|b|c}`` once at run creation time and freezes the draw on
+    ``manifest.pinned_sections`` so every tile in the dataset sees the
+    same consistency stack.
     """
     sections: list[dict[str, str]] = []
     for pinned in pinned_sections:
@@ -488,7 +550,7 @@ def _compile_slot_prompt(
         if not text:
             continue
         sections.append({"label": pinned.label, "text": text})
-    sections.append({"label": location_section_label, "text": slot.location_text})
+    sections.append({"label": slot.section_label, "text": slot.tile_text})
 
     return build_dynamic_prompt(sections, expand_placeholders=False)
 
@@ -594,8 +656,7 @@ async def _execute_run(
                 run_id,
                 phase="generating",
                 message=(
-                    f"Generating tile {tile_index + 1} of {len(slot_keys)} "
-                    f"({slot.location_label})…"
+                    f"Generating tile {tile_index + 1} of {len(slot_keys)} " f"({slot.tile_label})…"
                 ),
                 completed_count=completed,
             )
@@ -606,20 +667,11 @@ async def _execute_run(
 
             # Placeholders were resolved once at run creation
             # (``create_run`` freezes ``{a|b|c}`` draws on the manifest).
-            # The per-tile loop reads the already-resolved text directly
-            # so every tile in the dataset shares the same consistency
-            # stack — character identity stays stable across all 25
-            # locations, which is what LoRA training needs.
-            sections_with_location: list[dict[str, str]] = []
-            for pinned in manifest.pinned_sections:
-                text = (pinned.manual_text or "").strip()
-                if text:
-                    sections_with_location.append({"label": pinned.label, "text": text})
-            sections_with_location.append(
-                {"label": manifest.location_section_label, "text": slot.location_text}
-            )
-            compiled_prompt = build_dynamic_prompt(
-                sections_with_location, expand_placeholders=False
+            # Each slot's compiled prompt was also built at create time;
+            # rebuild here to pick up any post-creation slot edits.
+            compiled_prompt = _compile_slot_prompt(
+                pinned_sections=manifest.pinned_sections,
+                slot=slot,
             )
 
             # ``params.negative_prompt`` is also resolved at run creation,
@@ -663,7 +715,7 @@ async def _execute_run(
             png_filename = f"{tile_basename}.png"
             txt_filename = f"{tile_basename}.txt"
             image.save(run_dir / png_filename, format="PNG")
-            (run_dir / txt_filename).write_text(slot.location_text, encoding="utf-8")
+            (run_dir / txt_filename).write_text(slot.tile_text, encoding="utf-8")
 
             # i2i-extension-seam: this is also where an i2i variant
             # would record per-tile conditioning metadata (e.g. the
