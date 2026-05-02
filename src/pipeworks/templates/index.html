@@ -453,14 +453,17 @@
           <p style="font-size:var(--text-sm);color:var(--col-text-muted);line-height:1.7;margin-bottom:var(--sp-2)">
             Compose a character on the <strong>Generation</strong> tab as you normally
             would — species, clothing, tone profile, etc. — then snapshot the
-            composer state here and pick canonical <code>location</code> policies to
-            vary across the dataset. One tile is generated per location with the
-            consistency stack pinned.
+            composer state here and mix-and-match tile sources to feed an
+            ai-toolkit LoRA training run.
           </p>
           <p style="font-size:var(--text-xs);color:var(--col-text-muted);line-height:1.7;margin-bottom:var(--sp-2)">
-            Diversity comes from the locations; consistency comes from the
-            character axes. The exported <code>dataset/</code> folder is consumed
-            directly by ai-toolkit for training.
+            Tile sources are tiered: <strong>Character Sheet</strong> (multi-view
+            sheets on plain white) is the highest-signal-per-tile category;
+            <strong>Facial Expressions</strong> and <strong>Body Actions</strong>
+            isolate face/posture variance on plain white;
+            <strong>Locations</strong> place the character in canonical environments
+            sourced from mud-server. Diversity comes from these tiles;
+            consistency from the snapshotted character axes.
           </p>
         </div>
 
@@ -478,7 +481,38 @@
         </div>
 
         <div class="panel" style="margin-bottom:var(--sp-3)">
-          <div class="panel__heading">2 · Choose Locations</div>
+          <div class="panel__heading">2 · Character Sheet</div>
+          <p style="font-size:var(--text-xs);color:var(--col-text-muted);line-height:1.6;margin-bottom:var(--sp-2)">
+            Whole-character views on a plain white background. High signal-per-tile
+            for LoRA training because each image carries multiple character views.
+          </p>
+          <div class="ctrl-row" style="margin-bottom:var(--sp-2)">
+            <span class="status-bar__text" id="lora-character-sheet-status">Loading…</span>
+          </div>
+          <div id="lora-character-sheet-list" class="lora-locations-list"></div>
+        </div>
+
+        <div class="panel" style="margin-bottom:var(--sp-3)">
+          <div class="panel__heading">3 · Facial Expressions</div>
+          <p class="lora-section-placeholder" style="font-size:var(--text-xs);color:var(--col-text-muted);line-height:1.6">
+            Coming soon. Close-up tiles varying the character's expression
+            (neutral, smiling, laughing, angry, surprised) on a plain white
+            background. Will populate once the facial-expression tile-pack
+            JSON is authored.
+          </p>
+        </div>
+
+        <div class="panel" style="margin-bottom:var(--sp-3)">
+          <div class="panel__heading">4 · Body Actions</div>
+          <p class="lora-section-placeholder" style="font-size:var(--text-xs);color:var(--col-text-muted);line-height:1.6">
+            Coming soon. Full-body tiles varying the character's posture
+            (walking, running, sitting, leaning) on a plain white background.
+            Will populate once the body-action tile-pack JSON is authored.
+          </p>
+        </div>
+
+        <div class="panel" style="margin-bottom:var(--sp-3)">
+          <div class="panel__heading">5 · Choose Locations</div>
           <div class="ctrl-row" style="margin-bottom:var(--sp-2)">
             <button class="btn btn--secondary btn--sm" id="lora-btn-select-all" type="button">
               Select all
@@ -494,7 +528,7 @@
         </div>
 
         <div class="panel" style="margin-bottom:var(--sp-3)">
-          <div class="panel__heading">3 · Create Run</div>
+          <div class="panel__heading">6 · Create Run</div>
           <div class="ctrl-row">
             <button class="btn btn--primary btn--sm" id="lora-btn-create" type="button" disabled>
               Create dataset run

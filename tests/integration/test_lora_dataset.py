@@ -101,8 +101,8 @@ def _create_run_payload(*, location_ids: list[str]) -> dict:
                 "automated_prompt_id": "tone_profile:image.tone_profiles:ledger_engraving:v1",
             },
         ],
-        "location_section_label": "Location",
         "location_policy_ids": location_ids,
+        "character_sheet_keys": [],
     }
 
 
@@ -135,8 +135,10 @@ class TestLoraDatasetRunLifecycle:
             assert manifest["params"]["base_seed"] == 12345
             assert manifest["slot_order"] == ["cozy_inn", "foggy_moor"]
             cozy = manifest["slots"]["cozy_inn"]
-            assert cozy["location_text"].startswith("A warm timber-beamed inn")
-            assert cozy["location_label"]
+            assert cozy["tile_kind"] == "location"
+            assert cozy["tile_text"].startswith("A warm timber-beamed inn")
+            assert cozy["tile_label"]
+            assert cozy["section_label"] == "Location"
             assert cozy["seed"] == 12345
             assert "Goblin:" in cozy["compiled_prompt"]
             assert "Linocut style" in cozy["compiled_prompt"]
@@ -509,6 +511,165 @@ class TestLoraPlaceholderFreezing:
                 manifest["pinned_sections"][0]["manual_text"]
                 == payload["pinned_sections"][0]["manual_text"]
             )
+
+
+class TestLoraTilePacks:
+    """Bundled tile-packs feed the non-location LoRA tab categories."""
+
+    def test_tile_packs_endpoint_returns_character_sheet_turnaround(self, test_client):
+        """The bundled character-sheet pack ships with the turnaround entry."""
+        # The endpoint reads from the test config's data_dir, which is a
+        # tmp dir per test. The test_config fixture doesn't seed tile
+        # packs there, so we copy the bundled fixture across to validate
+        # end-to-end loading rather than mocking it out.
+        import shutil
+        from importlib.resources import files
+
+        from pipeworks.api.main import DATA_DIR
+
+        bundled = files("pipeworks") / "static" / "data" / "lora_character_sheet.json"
+        target = DATA_DIR / "lora_character_sheet.json"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(str(bundled), target)
+
+        resp = test_client.get("/api/lora-dataset/tile-packs")
+        assert resp.status_code == 200, resp.text
+        payload = resp.json()
+        assert isinstance(payload["facial_expression"], list)
+        assert isinstance(payload["body_action"], list)
+        keys = [tile["key"] for tile in payload["character_sheet"]]
+        assert "turnaround" in keys
+        turnaround = next(
+            tile for tile in payload["character_sheet"] if tile["key"] == "turnaround"
+        )
+        assert turnaround["section_label"] == "Character Sheet"
+        assert "turnaround sheet" in turnaround["text"].lower()
+
+    def test_create_run_with_character_sheet_tile_only(
+        self, test_client, test_config, mock_model_manager
+    ):
+        """A run can be created from a character-sheet tile alone (no locations)."""
+        import shutil
+        from importlib.resources import files
+
+        from pipeworks.api.main import DATA_DIR
+
+        bundled = files("pipeworks") / "static" / "data" / "lora_character_sheet.json"
+        target = DATA_DIR / "lora_character_sheet.json"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(str(bundled), target)
+
+        with (
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json_anonymous",
+                side_effect=_fake_login_fetch,
+            ),
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json",
+                side_effect=_make_authenticated_fetch(_LOCATIONS),
+            ),
+            patch(
+                "pipeworks.api.main.get_model_runtime_support",
+                return_value=(True, None),
+            ),
+        ):
+            _login(test_client)
+            payload = _create_run_payload(location_ids=[])
+            payload["character_sheet_keys"] = ["turnaround"]
+            resp = test_client.post("/api/lora-dataset/runs", json=payload)
+            assert resp.status_code == 200, resp.text
+            manifest = resp.json()
+            assert manifest["slot_order"] == ["turnaround"]
+            slot = manifest["slots"]["turnaround"]
+            assert slot["tile_kind"] == "character_sheet"
+            assert slot["section_label"] == "Character Sheet"
+            assert "turnaround sheet" in slot["tile_text"].lower()
+            # The compiled prompt must use the tile's section_label as the
+            # header, not the legacy "Location:" header.
+            assert "Character Sheet:" in slot["compiled_prompt"]
+            assert "Location:" not in slot["compiled_prompt"]
+
+            generate = test_client.post(f"/api/lora-dataset/runs/{manifest['run_id']}/generate")
+            assert generate.status_code == 200, generate.text
+            assert generate.json()["status"] == "complete"
+
+            run_dir = test_config.outputs_dir / "lora_runs" / manifest["run_id"]
+            assert (run_dir / "00_turnaround.png").exists()
+            assert (run_dir / "00_turnaround.txt").exists()
+
+    def test_create_run_mixed_sources_locations_plus_character_sheet(self, test_client):
+        """A run can mix locations and bundled tile-pack tiles in one batch."""
+        import shutil
+        from importlib.resources import files
+
+        from pipeworks.api.main import DATA_DIR
+
+        bundled = files("pipeworks") / "static" / "data" / "lora_character_sheet.json"
+        target = DATA_DIR / "lora_character_sheet.json"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(str(bundled), target)
+
+        with (
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json_anonymous",
+                side_effect=_fake_login_fetch,
+            ),
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json",
+                side_effect=_make_authenticated_fetch(_LOCATIONS),
+            ),
+        ):
+            _login(test_client)
+            payload = _create_run_payload(
+                location_ids=["location:image.locations.environment:cozy_inn:v1"]
+            )
+            payload["character_sheet_keys"] = ["turnaround"]
+            resp = test_client.post("/api/lora-dataset/runs", json=payload)
+            assert resp.status_code == 200, resp.text
+            manifest = resp.json()
+            assert manifest["slot_order"] == ["cozy_inn", "turnaround"]
+            assert manifest["slots"]["cozy_inn"]["tile_kind"] == "location"
+            assert manifest["slots"]["turnaround"]["tile_kind"] == "character_sheet"
+            assert manifest["slots"]["cozy_inn"]["section_label"] == "Location"
+            assert manifest["slots"]["turnaround"]["section_label"] == "Character Sheet"
+
+    def test_create_run_rejects_unknown_character_sheet_key(self, test_client):
+        """Unknown character-sheet keys are rejected with a 400."""
+        with (
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json_anonymous",
+                side_effect=_fake_login_fetch,
+            ),
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json",
+                side_effect=_make_authenticated_fetch(_LOCATIONS),
+            ),
+        ):
+            _login(test_client)
+            payload = _create_run_payload(location_ids=[])
+            payload["character_sheet_keys"] = ["nonexistent_pose"]
+            resp = test_client.post("/api/lora-dataset/runs", json=payload)
+            assert resp.status_code == 400
+            assert "character-sheet" in resp.json()["detail"].lower()
+
+    def test_create_run_rejects_no_tiles_at_all(self, test_client):
+        """A run with neither locations nor character-sheet keys is rejected."""
+        with (
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json_anonymous",
+                side_effect=_fake_login_fetch,
+            ),
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json",
+                side_effect=_make_authenticated_fetch(_LOCATIONS),
+            ),
+        ):
+            _login(test_client)
+            payload = _create_run_payload(location_ids=[])
+            payload["character_sheet_keys"] = []
+            resp = test_client.post("/api/lora-dataset/runs", json=payload)
+            assert resp.status_code == 400
+            assert "at least one tile" in resp.json()["detail"].lower()
 
 
 class TestLoraSeedStrategy:
