@@ -12,6 +12,8 @@
  * we'll iterate after real use shows what's actually annoying.
  */
 
+import { createLoraTileLightboxController } from "./lora-tile-lightbox.mjs";
+
 const POLL_INTERVAL_MS = 1500;
 
 export function createLoraDatasetController({ apiClient, toast, buildGeneratePayload }) {
@@ -23,8 +25,22 @@ export function createLoraDatasetController({ apiClient, toast, buildGeneratePay
   const selectedLocationIds = new Set();
   const selectedCharacterSheetKeys = new Set();
   let activeRunId = null;
+  let activeRunManifest = null;
   let pollHandle = null;
   let pollGeneration = 0;
+
+  // Tile lightbox: shares Regen/Exclude callbacks with the inline tile
+  // grid so the two surfaces stay coherent — clicking Regen in the
+  // lightbox triggers exactly the same flow as clicking it on the card.
+  const tileLightbox = createLoraTileLightboxController({
+    toast,
+    onRegen: async (_runId, slotKey) => {
+      await regenerateTile(slotKey);
+    },
+    onToggleExcluded: async (_runId, slotKey, excluded) => {
+      await togglePropExcluded(slotKey, excluded);
+    },
+  });
 
   function setText(sel, value) {
     const node = $(sel);
@@ -203,8 +219,11 @@ export function createLoraDatasetController({ apiClient, toast, buildGeneratePay
     root.innerHTML = "";
 
     availableCharacterSheetTiles.forEach(tile => {
+      // Character-sheet preview text is multi-sentence render directives,
+      // not the short location blurbs locations carry — let the preview
+      // wrap to multiple lines via the `--wrap` modifier.
       const row = document.createElement("label");
-      row.className = "lora-location-row";
+      row.className = "lora-location-row lora-location-row--wrap";
 
       const checkbox = document.createElement("input");
       checkbox.type = "checkbox";
@@ -222,9 +241,7 @@ export function createLoraDatasetController({ apiClient, toast, buildGeneratePay
 
       const preview = document.createElement("span");
       preview.className = "lora-location-row__preview";
-      const hint = tile.aspect_ratio_hint
-        ? ` · best at ${tile.aspect_ratio_hint}`
-        : "";
+      const hint = tile.aspect_ratio_hint ? ` · best at ${tile.aspect_ratio_hint}` : "";
       preview.textContent = `${tile.text}${hint}`;
 
       row.appendChild(checkbox);
@@ -291,7 +308,11 @@ export function createLoraDatasetController({ apiClient, toast, buildGeneratePay
       toast(`Could not load run: ${err.message || err}`, "err");
       return;
     }
+    activeRunManifest = manifest;
     renderActiveRun(manifest);
+    // Keep the open lightbox in sync with the run state — slot status,
+    // seed, image URL all need to refresh after a regen completes.
+    tileLightbox.refresh(manifest);
   }
 
   function renderActiveRun(manifest) {
@@ -325,6 +346,10 @@ export function createLoraDatasetController({ apiClient, toast, buildGeneratePay
     });
   }
 
+  function onTileClick(manifest, slotKey) {
+    tileLightbox.open(manifest, slotKey);
+  }
+
   function renderTile(manifest, index, key, slot) {
     const card = document.createElement("div");
     card.className = "lora-tile";
@@ -334,17 +359,22 @@ export function createLoraDatasetController({ apiClient, toast, buildGeneratePay
 
     const header = document.createElement("div");
     header.className = "lora-tile__header";
-    header.innerHTML = `<strong>${String(index + 1).padStart(2, "0")} · ${slot.location_label}</strong>
+    header.innerHTML = `<strong>${String(index + 1).padStart(2, "0")} · ${slot.tile_label}</strong>
       <span class="lora-tile__status">${slot.status}</span>`;
 
     const body = document.createElement("div");
     body.className = "lora-tile__body";
     if (slot.image_filename && slot.status === "done") {
       const img = document.createElement("img");
-      img.alt = slot.location_label;
+      img.alt = slot.tile_label;
       img.src = `/api/lora-dataset/runs/${manifest.run_id}/files/${encodeURIComponent(
         slot.image_filename
       )}`;
+      // Clicking the image opens the LoRA tile lightbox so the operator
+      // can see the full-resolution render at the run's actual aspect
+      // ratio (the grid thumbnail is square-cropped for layout density).
+      img.style.cursor = "zoom-in";
+      img.addEventListener("click", () => onTileClick(manifest, key));
       body.appendChild(img);
     } else if (slot.error) {
       const err = document.createElement("div");
@@ -367,7 +397,7 @@ export function createLoraDatasetController({ apiClient, toast, buildGeneratePay
 
     const caption = document.createElement("div");
     caption.className = "lora-tile__caption";
-    caption.textContent = slot.location_text;
+    caption.textContent = slot.tile_text;
 
     const actions = document.createElement("div");
     actions.className = "lora-tile__actions";
@@ -543,6 +573,12 @@ export function createLoraDatasetController({ apiClient, toast, buildGeneratePay
       loadLocations();
       loadTilePacks();
       loadRunList();
+    },
+    handleKeydown(event) {
+      // Bubble keydowns to the tile lightbox so H/J/K/L navigation and
+      // Escape-to-close work without needing a separate keyboard binding
+      // surface in app.js.
+      return tileLightbox.handleKeydown(event);
     },
   };
 }

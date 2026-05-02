@@ -1290,6 +1290,16 @@ html, body {
   white-space: nowrap;
 }
 
+.lora-location-row--wrap {
+  align-items: flex-start;
+}
+
+.lora-location-row--wrap .lora-location-row__preview {
+  white-space: normal;
+  text-overflow: clip;
+  line-height: 1.5;
+}
+
 .lora-tile-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
