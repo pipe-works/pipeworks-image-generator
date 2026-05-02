@@ -1265,6 +1265,15 @@ html, body {
   border-radius: 4px;
 }
 
+/* Single full-width column instead of the multi-column grid. Used by the
+   Character Sheet picker where rows carry long render-directive text and
+   the multi-column packed layout would force the preview to wrap into a
+   ~280px column. Locations keep the multi-column layout because they
+   benefit from packing density. */
+.lora-locations-list--wide {
+  grid-template-columns: 1fr;
+}
+
 .lora-location-row {
   display: grid;
   grid-template-columns: auto minmax(100px, max-content) 1fr;
@@ -1288,6 +1297,16 @@ html, body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.lora-location-row--wrap {
+  align-items: flex-start;
+}
+
+.lora-location-row--wrap .lora-location-row__preview {
+  white-space: normal;
+  text-overflow: clip;
+  line-height: 1.5;
 }
 
 .lora-tile-grid {

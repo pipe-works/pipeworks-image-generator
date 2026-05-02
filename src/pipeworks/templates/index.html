@@ -489,7 +489,7 @@
           <div class="ctrl-row" style="margin-bottom:var(--sp-2)">
             <span class="status-bar__text" id="lora-character-sheet-status">Loading…</span>
           </div>
-          <div id="lora-character-sheet-list" class="lora-locations-list"></div>
+          <div id="lora-character-sheet-list" class="lora-locations-list lora-locations-list--wide"></div>
         </div>
 
         <div class="panel" style="margin-bottom:var(--sp-3)">
@@ -732,6 +732,72 @@ Atmosphere:
         <a class="btn btn--secondary btn--sm" id="lb-btn-download" href="#" download>↓ Download</a>
         <a class="btn btn--secondary btn--sm" id="lb-btn-zip" href="#" download>⬇ Save Zip</a>
         <button class="btn btn--ghost btn--sm" id="lb-btn-delete" style="color:var(--col-err)">✕ Delete</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ── LoRA Tile Lightbox Modal ───────────────────────────────────────────── -->
+<div class="lightbox" id="lora-lightbox" role="dialog" aria-modal="true" aria-label="LoRA tile detail">
+  <div class="lightbox__backdrop" id="lora-lightbox-backdrop"></div>
+  <div class="lightbox__card">
+    <div class="lightbox__image-area">
+      <button class="btn btn--icon lightbox__close" id="lora-lightbox-close" aria-label="Close">✕</button>
+      <img class="lightbox__image" id="lora-lb-img" src="" alt="LoRA tile image" />
+    </div>
+    <div class="lightbox__info">
+      <div class="lightbox__transport" id="lora-lb-transport">
+        <div class="lightbox__transport-controls">
+          <button class="btn btn--icon lightbox__transport-btn" id="lora-lb-btn-prev" aria-label="Previous tile" title="Previous tile (H or K)">&lt;&lt;</button>
+          <button class="btn btn--icon lightbox__transport-btn" id="lora-lb-btn-play" aria-label="Play slideshow" title="Play tile slideshow">&gt;</button>
+          <button class="btn btn--icon lightbox__transport-btn" id="lora-lb-btn-pause" aria-label="Pause slideshow" title="Pause tile slideshow">||</button>
+          <button class="btn btn--icon lightbox__transport-btn" id="lora-lb-btn-stop" aria-label="Stop slideshow" title="Stop tile slideshow">[]</button>
+          <button class="btn btn--icon lightbox__transport-btn" id="lora-lb-btn-next" aria-label="Next tile" title="Next tile (J or L)">&gt;&gt;</button>
+        </div>
+        <div class="lightbox__transport-meta">
+          <span class="badge badge--muted" id="lora-lb-nav-status">Tile navigation unavailable</span>
+          <span class="lightbox__transport-hint" id="lora-lb-nav-hint">Open a tile from a LoRA run to use H/J/K/L navigation.</span>
+        </div>
+      </div>
+      <div class="lightbox__meta-row">
+        <div class="lightbox__meta-label">Tile</div>
+        <div class="lightbox__meta-value" id="lora-lb-tile">—</div>
+      </div>
+      <div class="lightbox__meta-row">
+        <div class="lightbox__meta-label">Run</div>
+        <div class="lightbox__meta-value" id="lora-lb-run">—</div>
+      </div>
+      <div class="lightbox__meta-row">
+        <div class="lightbox__meta-label">Resolution</div>
+        <div class="lightbox__meta-value" id="lora-lb-resolution">—</div>
+      </div>
+      <div class="lightbox__meta-row">
+        <div class="lightbox__meta-label">Seed</div>
+        <div class="lightbox__meta-value" id="lora-lb-seed">—</div>
+      </div>
+      <div class="lightbox__meta-row">
+        <div class="lightbox__meta-label">Steps / CFG</div>
+        <div class="lightbox__meta-value" id="lora-lb-steps-cfg">—</div>
+      </div>
+      <div class="lightbox__meta-row">
+        <div class="lightbox__meta-header">
+          <div class="lightbox__meta-label">Tile Source Text</div>
+          <button class="btn btn--secondary btn--sm" id="lora-lb-btn-copy-tile-text" type="button">Copy</button>
+        </div>
+        <div class="lightbox__prompt-text" id="lora-lb-tile-text">—</div>
+      </div>
+      <div class="lightbox__meta-row">
+        <div class="lightbox__meta-header">
+          <div class="lightbox__meta-label">Compiled Prompt</div>
+          <button class="btn btn--secondary btn--sm" id="lora-lb-btn-copy-prompt" type="button">Copy</button>
+        </div>
+        <div class="lightbox__prompt-text" id="lora-lb-prompt">—</div>
+      </div>
+      <div class="lightbox__actions">
+        <button class="btn btn--secondary btn--sm" id="lora-lb-btn-regen">↻ Regen</button>
+        <button class="btn btn--secondary btn--sm" id="lora-lb-btn-exclude">⊘ Exclude</button>
+        <a class="btn btn--secondary btn--sm" id="lora-lb-btn-download" href="#" download>↓ Download</a>
       </div>
     </div>
   </div>

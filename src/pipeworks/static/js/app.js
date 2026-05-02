@@ -421,6 +421,13 @@ function wireEvents() {
       return;
     }
 
+    // The LoRA tile lightbox shares H/J/K/L navigation semantics. Route
+    // keydowns to it before falling through to gallery pagination so the
+    // same vim-style bindings work in either lightbox surface.
+    if (loraDatasetController.handleKeydown(event)) {
+      return;
+    }
+
     if (!event.altKey && !event.ctrlKey && !event.metaKey && !galleryManager.isTypingTargetActive()) {
       const galleryDirection = resolveGalleryPaginationDirection(event.key);
       const activeTabId = galleryManager.getActiveTabId();
