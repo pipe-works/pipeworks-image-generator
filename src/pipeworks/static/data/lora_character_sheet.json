@@ -1,11 +1,32 @@
 {
   "tiles": [
     {
-      "key": "turnaround",
-      "label": "Full-body turnaround sheet",
-      "text": "Create a full body turnaround sheet of this exact character: four full-body poses on a pure white background — front view, left profile, back view, right profile — evenly spaced in a clean horizontal row, consistent lighting and style, no background noise, no shadows, same proportions and detailing across all views.",
-      "section_label": "Character Sheet",
-      "aspect_ratio_hint": "16:9"
+      "key": "front_view",
+      "label": "Front view",
+      "text": "Create a full-body front view reference of this exact character on a pure white background. Preserve the same squat goblin proportions seen in the location images: slightly hunched posture, bent knees, low center of gravity, broad stance, and short sturdy limbs. Show the full figure from head to toes, centered, with consistent lighting and no props, shadows, or background details.",
+      "section_label": "Character View",
+      "aspect_ratio_hint": "3:4"
+    },
+    {
+      "key": "left_profile",
+      "label": "Left profile view",
+      "text": "Create a full-body left profile reference of this exact character on a pure white background. Preserve the same squat goblin proportions seen in the location images: slightly hunched posture, bent knees, low center of gravity, broad stance, and short sturdy limbs. Show the full figure from head to toes, centered, with consistent lighting and no props, shadows, or background details.",
+      "section_label": "Character View",
+      "aspect_ratio_hint": "3:4"
+    },
+    {
+      "key": "back_view",
+      "label": "Back view",
+      "text": "Create a full-body back view reference of this exact character on a pure white background. Preserve the same squat goblin proportions seen in the location images: slightly hunched posture, bent knees, low center of gravity, broad stance, and short sturdy limbs. Show the full figure from head to toes, centered, with consistent lighting and no props, shadows, or background details.",
+      "section_label": "Character View",
+      "aspect_ratio_hint": "3:4"
+    },
+    {
+      "key": "right_profile",
+      "label": "Right profile view",
+      "text": "Create a full-body right profile reference of this exact character on a pure white background. Preserve the same squat goblin proportions seen in the location images: slightly hunched posture, bent knees, low center of gravity, broad stance, and short sturdy limbs. Show the full figure from head to toes, centered, with consistent lighting and no props, shadows, or background details.",
+      "section_label": "Character View",
+      "aspect_ratio_hint": "3:4"
     }
   ]
 }

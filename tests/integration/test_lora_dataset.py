@@ -516,8 +516,8 @@ class TestLoraPlaceholderFreezing:
 class TestLoraTilePacks:
     """Bundled tile-packs feed the non-location LoRA tab categories."""
 
-    def test_tile_packs_endpoint_returns_character_sheet_turnaround(self, test_client):
-        """The bundled character-sheet pack ships with the turnaround entry."""
+    def test_tile_packs_endpoint_returns_directional_character_views(self, test_client):
+        """The bundled character-sheet pack ships with four directional view entries."""
         # The endpoint reads from the test config's data_dir, which is a
         # tmp dir per test. The test_config fixture doesn't seed tile
         # packs there, so we copy the bundled fixture across to validate
@@ -538,12 +538,14 @@ class TestLoraTilePacks:
         assert isinstance(payload["facial_expression"], list)
         assert isinstance(payload["body_action"], list)
         keys = [tile["key"] for tile in payload["character_sheet"]]
-        assert "turnaround" in keys
-        turnaround = next(
-            tile for tile in payload["character_sheet"] if tile["key"] == "turnaround"
+        assert keys == ["front_view", "left_profile", "back_view", "right_profile"]
+        front_view = next(
+            tile for tile in payload["character_sheet"] if tile["key"] == "front_view"
         )
-        assert turnaround["section_label"] == "Character Sheet"
-        assert "turnaround sheet" in turnaround["text"].lower()
+        assert front_view["section_label"] == "Character View"
+        assert front_view["aspect_ratio_hint"] == "3:4"
+        assert "front view reference" in front_view["text"].lower()
+        assert "slightly hunched posture" in front_view["text"].lower()
 
     def test_create_run_with_character_sheet_tile_only(
         self, test_client, test_config, mock_model_manager
@@ -575,18 +577,28 @@ class TestLoraTilePacks:
         ):
             _login(test_client)
             payload = _create_run_payload(location_ids=[])
-            payload["character_sheet_keys"] = ["turnaround"]
+            payload["character_sheet_keys"] = [
+                "front_view",
+                "left_profile",
+                "back_view",
+                "right_profile",
+            ]
             resp = test_client.post("/api/lora-dataset/runs", json=payload)
             assert resp.status_code == 200, resp.text
             manifest = resp.json()
-            assert manifest["slot_order"] == ["turnaround"]
-            slot = manifest["slots"]["turnaround"]
+            assert manifest["slot_order"] == [
+                "front_view",
+                "left_profile",
+                "back_view",
+                "right_profile",
+            ]
+            slot = manifest["slots"]["front_view"]
             assert slot["tile_kind"] == "character_sheet"
-            assert slot["section_label"] == "Character Sheet"
-            assert "turnaround sheet" in slot["tile_text"].lower()
+            assert slot["section_label"] == "Character View"
+            assert "front view reference" in slot["tile_text"].lower()
             # The compiled prompt must use the tile's section_label as the
             # header, not the legacy "Location:" header.
-            assert "Character Sheet:" in slot["compiled_prompt"]
+            assert "Character View:" in slot["compiled_prompt"]
             assert "Location:" not in slot["compiled_prompt"]
 
             generate = test_client.post(f"/api/lora-dataset/runs/{manifest['run_id']}/generate")
@@ -594,8 +606,14 @@ class TestLoraTilePacks:
             assert generate.json()["status"] == "complete"
 
             run_dir = test_config.outputs_dir / "lora_runs" / manifest["run_id"]
-            assert (run_dir / "00_turnaround.png").exists()
-            assert (run_dir / "00_turnaround.txt").exists()
+            assert (run_dir / "00_front_view.png").exists()
+            assert (run_dir / "00_front_view.txt").exists()
+            assert (run_dir / "01_left_profile.png").exists()
+            assert (run_dir / "01_left_profile.txt").exists()
+            assert (run_dir / "02_back_view.png").exists()
+            assert (run_dir / "02_back_view.txt").exists()
+            assert (run_dir / "03_right_profile.png").exists()
+            assert (run_dir / "03_right_profile.txt").exists()
 
     def test_create_run_mixed_sources_locations_plus_character_sheet(self, test_client):
         """A run can mix locations and bundled tile-pack tiles in one batch."""
@@ -623,15 +641,15 @@ class TestLoraTilePacks:
             payload = _create_run_payload(
                 location_ids=["location:image.locations.environment:cozy_inn:v1"]
             )
-            payload["character_sheet_keys"] = ["turnaround"]
+            payload["character_sheet_keys"] = ["front_view", "back_view"]
             resp = test_client.post("/api/lora-dataset/runs", json=payload)
             assert resp.status_code == 200, resp.text
             manifest = resp.json()
-            assert manifest["slot_order"] == ["cozy_inn", "turnaround"]
+            assert manifest["slot_order"] == ["cozy_inn", "front_view", "back_view"]
             assert manifest["slots"]["cozy_inn"]["tile_kind"] == "location"
-            assert manifest["slots"]["turnaround"]["tile_kind"] == "character_sheet"
+            assert manifest["slots"]["front_view"]["tile_kind"] == "character_sheet"
             assert manifest["slots"]["cozy_inn"]["section_label"] == "Location"
-            assert manifest["slots"]["turnaround"]["section_label"] == "Character Sheet"
+            assert manifest["slots"]["front_view"]["section_label"] == "Character View"
 
     def test_create_run_rejects_unknown_character_sheet_key(self, test_client):
         """Unknown character-sheet keys are rejected with a 400."""

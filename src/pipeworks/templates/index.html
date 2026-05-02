@@ -457,8 +457,8 @@
             ai-toolkit LoRA training run.
           </p>
           <p style="font-size:var(--text-xs);color:var(--col-text-muted);line-height:1.7;margin-bottom:var(--sp-2)">
-            Tile sources are tiered: <strong>Character Sheet</strong> (multi-view
-            sheets on plain white) is the highest-signal-per-tile category;
+            Tile sources are tiered: <strong>Character Views</strong> (single-view
+            reference images on plain white) are the highest-signal-per-tile category;
             <strong>Facial Expressions</strong> and <strong>Body Actions</strong>
             isolate face/posture variance on plain white;
             <strong>Locations</strong> place the character in canonical environments
@@ -481,10 +481,11 @@
         </div>
 
         <div class="panel" style="margin-bottom:var(--sp-3)">
-          <div class="panel__heading">2 · Character Sheet</div>
+          <div class="panel__heading">2 · Character Views</div>
           <p style="font-size:var(--text-xs);color:var(--col-text-muted);line-height:1.6;margin-bottom:var(--sp-2)">
-            Whole-character views on a plain white background. High signal-per-tile
-            for LoRA training because each image carries multiple character views.
+            Single-view whole-character references on a plain white background.
+            These isolate anatomy, silhouette, clothing, and posture without
+            forcing a multi-view sheet layout or a fixed 16:9 aspect ratio.
           </p>
           <div class="ctrl-row" style="margin-bottom:var(--sp-2)">
             <span class="status-bar__text" id="lora-character-sheet-status">Loading…</span>

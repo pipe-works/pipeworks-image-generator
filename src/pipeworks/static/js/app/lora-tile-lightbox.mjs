@@ -137,7 +137,7 @@ export function createLoraTileLightboxController({
 
     const kindLabel =
       slot.tile_kind === "character_sheet"
-        ? "Character Sheet"
+        ? "Character View"
         : slot.tile_kind === "facial_expression"
           ? "Facial Expression"
           : slot.tile_kind === "body_action"
