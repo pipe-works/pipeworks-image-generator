@@ -13,6 +13,7 @@ import { createApiClient } from "./app/api-client.mjs";
 import { $, $$, el, fetchJson } from "./app/dom-utils.mjs";
 import { createGenerationFlow } from "./app/generation-flow.mjs";
 import { createGalleryManager } from "./app/gallery-manager.mjs";
+import { createLoraDatasetController } from "./app/lora-dataset.mjs";
 import { createPromptComposer } from "./app/prompt-composer.mjs";
 import { createRuntimeGpuController } from "./app/runtime-gpu-controller.mjs";
 import {
@@ -161,12 +162,19 @@ const generationFlow = createGenerationFlow({
   updateOutputCount: galleryManager.updateOutputCount,
 });
 
+const loraDatasetController = createLoraDatasetController({
+  apiClient,
+  toast,
+  buildGeneratePayload: promptComposer.buildGeneratePayload,
+});
+
 function activateTab(tabId) {
   $$(".tab-nav__item").forEach(button => button.classList.toggle("is-active", button.dataset.tab === tabId));
   $$(".tab-content").forEach(content => content.classList.toggle("is-active", content.id === `tab-${tabId}`));
 
   if (tabId === "gallery") galleryManager.loadGallery();
   if (tabId === "favourites") galleryManager.loadFavourites();
+  if (tabId === "lora-dataset") loraDatasetController.onTabActivated();
 }
 
 function onRandomSeedChange() {

@@ -23,6 +23,10 @@ from pipeworks.api.mud_api_client import (
 from pipeworks.api.routers.gallery import GalleryRouterDependencies, create_gallery_router
 from pipeworks.api.routers.generation import GenerationRouterDependencies, create_generation_router
 from pipeworks.api.routers.gpu_worker import GpuWorkerRouterDependencies, create_gpu_worker_router
+from pipeworks.api.routers.lora_dataset import (
+    LoraDatasetRouterDependencies,
+    create_lora_dataset_router,
+)
 from pipeworks.api.routers.prompt import PromptRouterDependencies, create_prompt_router
 from pipeworks.api.routers.runtime import RuntimeRouterDependencies, create_runtime_router
 from pipeworks.api.services.generation_runtime import GenerationRuntimeService
@@ -47,6 +51,7 @@ DATA_DIR: Path = config.data_dir
 GALLERY_DIR: Path = config.gallery_dir
 TEMPLATES_DIR: Path = config.templates_dir
 GALLERY_DB: Path = config.gallery_db
+OUTPUTS_DIR: Path = config.outputs_dir
 GPU_SETTINGS_DB: Path = config.outputs_dir / "gpu_workers.runtime.json"
 
 GALLERY_DIR.mkdir(parents=True, exist_ok=True)
@@ -244,11 +249,21 @@ _PROMPT_DEPS = PromptRouterDependencies(
     normalize_base_url=normalize_base_url,
 )
 
+_LORA_DATASET_DEPS = LoraDatasetRouterDependencies(
+    data_dir=lambda: DATA_DIR,
+    outputs_dir=lambda: OUTPUTS_DIR,
+    runtime_policy_service=_RUNTIME_DEPS.runtime_policy_service,
+    generation_runtime_service=_GPU_DEPS.generation_runtime_service,
+    normalize_base_url=normalize_base_url,
+    get_model_runtime_support=lambda hf_id: get_model_runtime_support(hf_id),
+)
+
 app.include_router(create_runtime_router(_RUNTIME_DEPS))
 app.include_router(create_gpu_worker_router(_GPU_DEPS))
 app.include_router(create_generation_router(_GENERATION_DEPS))
 app.include_router(create_gallery_router(_GALLERY_DEPS))
 app.include_router(create_prompt_router(_PROMPT_DEPS))
+app.include_router(create_lora_dataset_router(_LORA_DATASET_DEPS))
 
 
 def main() -> None:

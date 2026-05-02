@@ -112,5 +112,54 @@ export function createApiClient({ fetchJson }) {
       }
       return response.blob();
     },
+    fetchPolicyPrompts() {
+      return fetchJson("/api/policy-prompts");
+    },
+    listLoraRuns() {
+      return fetchJson("/api/lora-dataset/runs");
+    },
+    getLoraRun(runId) {
+      return fetchJson(`/api/lora-dataset/runs/${encodeURIComponent(runId)}`);
+    },
+    createLoraRun(payload) {
+      return fetchJson("/api/lora-dataset/runs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    },
+    generateLoraRun(runId) {
+      return fetchJson(`/api/lora-dataset/runs/${encodeURIComponent(runId)}/generate`, {
+        method: "POST",
+      });
+    },
+    cancelLoraRun(runId) {
+      return fetchJson(`/api/lora-dataset/runs/${encodeURIComponent(runId)}/cancel`, {
+        method: "POST",
+      });
+    },
+    regenerateLoraSlot(runId, slotKey) {
+      return fetchJson(
+        `/api/lora-dataset/runs/${encodeURIComponent(runId)}/slots/${encodeURIComponent(
+          slotKey
+        )}/regenerate`,
+        { method: "POST" }
+      );
+    },
+    patchLoraSlot(runId, slotKey, patch) {
+      return fetchJson(
+        `/api/lora-dataset/runs/${encodeURIComponent(runId)}/slots/${encodeURIComponent(slotKey)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(patch),
+        }
+      );
+    },
+    exportLoraDataset(runId) {
+      return fetchJson(`/api/lora-dataset/runs/${encodeURIComponent(runId)}/dataset`, {
+        method: "POST",
+      });
+    },
   };
 }
