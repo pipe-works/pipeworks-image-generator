@@ -45,6 +45,7 @@ from starlette.concurrency import run_in_threadpool
 
 from pipeworks.api.models import PromptSection
 from pipeworks.api.models_lora import (
+    LoraCharacterViewProfile,
     LoraDatasetExportResult,
     LoraRunCreateRequest,
     LoraRunManifest,
@@ -69,8 +70,13 @@ from pipeworks.api.services.lora_run_store import (
     update_manifest,
     write_manifest,
 )
-from pipeworks.api.services.lora_tile_packs import find_tile_spec, load_all_tile_packs
-from pipeworks.api.services.prompt_catalog import load_json
+from pipeworks.api.services.lora_tile_packs import (
+    find_character_view_profile,
+    find_tile_spec,
+    load_all_tile_packs,
+    load_character_view_profiles,
+)
+from pipeworks.api.services.prompt_catalog import load_json, load_prompt_catalog
 from pipeworks.api.services.runtime_policy import RuntimePolicyService
 from pipeworks.core.model_manager import ModelManager
 
@@ -104,7 +110,9 @@ def create_lora_dataset_router(deps: LoraDatasetRouterDependencies) -> APIRouter
         frontend can render placeholder UI without special-casing.
         """
         packs = load_all_tile_packs(data_dir=deps.data_dir())
+        character_view_profiles = load_character_view_profiles(data_dir=deps.data_dir())
         response = LoraTilePacksResponse(
+            character_view_profiles=character_view_profiles,
             character_sheet=packs.get("character_sheet", []),
             facial_expression=packs.get("facial_expression", []),
             body_action=packs.get("body_action", []),
@@ -140,17 +148,35 @@ def create_lora_dataset_router(deps: LoraDatasetRouterDependencies) -> APIRouter
 
         slots: dict[str, LoraRunSlot] = {}
         slot_order: list[str] = []
+        needs_policy_lookup = bool(req.location_policy_ids) or any(
+            section.mode == "automated" and section.automated_prompt_id
+            for section in req.pinned_sections
+        )
+        policy_prompt_lookup: dict[str, dict] = {}
+        policy_options: list[dict] = []
+        runtime_auth = None
 
-        # --- Locations (canonical mud-server policies) ----------------
-        if req.location_policy_ids:
-            policy_options, _, runtime_auth = (
-                deps.runtime_policy_service.load_policy_prompts_for_request(
+        if needs_policy_lookup:
+            prompts = load_prompt_catalog(data_dir=deps.data_dir())
+            policy_prompt_lookup, policy_options, runtime_auth = (
+                deps.runtime_policy_service.load_policy_prompt_lookup(
+                    prompts=prompts,
                     request=request,
-                    response=None,
-                    explicit_session_id=None,
                     normalize_base_url=deps.normalize_base_url,
                 )
             )
+        character_view_profile = (
+            _resolve_character_view_profile(
+                data_dir=deps.data_dir(),
+                requested_key=req.character_view_anatomy_profile,
+                pinned_sections=req.pinned_sections,
+            )
+            if req.character_sheet_keys
+            else None
+        )
+
+        # --- Locations (canonical mud-server policies) ----------------
+        if req.location_policy_ids:
             if not runtime_auth.access_granted:
                 raise HTTPException(
                     status_code=401,
@@ -221,7 +247,14 @@ def create_lora_dataset_router(deps: LoraDatasetRouterDependencies) -> APIRouter
                 tile_source_id=f"character_sheet:{tile.key}",
                 tile_key=tile.key,
                 tile_label=tile.label,
-                tile_text=tile.text,
+                tile_text=_compose_character_view_text(
+                    base_text=tile.text,
+                    profile_suffix=(
+                        character_view_profile.prompt_suffix
+                        if character_view_profile is not None
+                        else ""
+                    ),
+                ),
                 section_label=tile.section_label,
             )
             slot_order.append(tile.key)
@@ -315,10 +348,12 @@ def create_lora_dataset_router(deps: LoraDatasetRouterDependencies) -> APIRouter
         # gets reused by every tile.
         resolved_pinned: list[PromptSection] = []
         for section in req.pinned_sections:
+            canonical_text = _resolve_lora_pinned_section_text(
+                section=section,
+                prompt_lookup=policy_prompt_lookup,
+            )
             resolved_text = (
-                expand_prompt_placeholders(section.manual_text)
-                if section.manual_text
-                else section.manual_text
+                expand_prompt_placeholders(canonical_text) if canonical_text else canonical_text
             )
             resolved_pinned.append(
                 PromptSection(
@@ -555,7 +590,7 @@ def create_lora_dataset_router(deps: LoraDatasetRouterDependencies) -> APIRouter
         pairs_copied = 0
         excluded = 0
         skipped = 0
-        for index, key in enumerate(manifest.slot_order):
+        for key in manifest.slot_order:
             slot = manifest.slots.get(key)
             if slot is None or slot.status != "done":
                 skipped += 1
@@ -571,7 +606,10 @@ def create_lora_dataset_router(deps: LoraDatasetRouterDependencies) -> APIRouter
             if not png_src.exists() or not txt_src.exists():
                 skipped += 1
                 continue
-            base = f"{index:02d}_{key}"
+            # Export numbering is dense over the curated subset so
+            # excluded or missing tiles do not leave gaps in the
+            # training folder handed off to downstream tools.
+            base = f"{pairs_copied:02d}_{key}"
             shutil.copyfile(png_src, dataset_dir / f"{base}.png")
             shutil.copyfile(txt_src, dataset_dir / f"{base}.txt")
             pairs_copied += 1
@@ -586,6 +624,84 @@ def create_lora_dataset_router(deps: LoraDatasetRouterDependencies) -> APIRouter
         return result.model_dump(mode="json")
 
     return router
+
+
+def _infer_character_view_profile_key(*, pinned_sections: list[PromptSection]) -> str | None:
+    """Infer Section-2 anatomy profile from the snapshotted species block."""
+    for section in pinned_sections:
+        prompt_id = (section.automated_prompt_id or "").strip()
+        if not prompt_id.startswith("species_block:image.blocks.species:"):
+            continue
+        parts = prompt_id.split(":")
+        if len(parts) < 3:
+            continue
+        species_key = parts[2].strip().lower()
+        if species_key:
+            return species_key
+    return None
+
+
+def _resolve_lora_pinned_section_text(
+    *,
+    section: PromptSection,
+    prompt_lookup: dict[str, dict],
+) -> str | None:
+    """Resolve one pinned section to canonical text for LoRA snapshotting."""
+    prompt_id = (section.automated_prompt_id or "").strip()
+    if section.mode == "automated" and prompt_id and prompt_id != "none":
+        prompt = prompt_lookup.get(prompt_id)
+        if prompt is None:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Unknown automated prompt for LoRA snapshot: {prompt_id!r}. "
+                    "Refresh the composer snippets and snapshot again."
+                ),
+            )
+        return str(prompt.get("value") or "").strip() or None
+    return (section.manual_text or "").strip() or None
+
+
+def _resolve_character_view_profile(
+    *,
+    data_dir: Path,
+    requested_key: str,
+    pinned_sections: list[PromptSection],
+) -> LoraCharacterViewProfile | None:
+    """Resolve the Section-2 anatomy profile, honoring ``auto`` inference."""
+    profile_key = (requested_key or "auto").strip().lower()
+    if profile_key == "auto":
+        inferred = _infer_character_view_profile_key(pinned_sections=pinned_sections)
+        if not inferred:
+            return None
+        profile_key = inferred
+
+    profile = find_character_view_profile(data_dir=data_dir, key=profile_key)
+    if profile is None:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Unknown character-view anatomy profile: {profile_key!r}. "
+                "Check the bundled lora_character_view_profiles.json registry."
+            ),
+        )
+    if not profile.available:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Character-view anatomy profile {profile_key!r} is a placeholder and "
+                "is not implemented yet."
+            ),
+        )
+    return profile
+
+
+def _compose_character_view_text(*, base_text: str, profile_suffix: str) -> str:
+    """Append species-specific anatomy guidance to a generic view tile."""
+    suffix = profile_suffix.strip()
+    if not suffix:
+        return base_text
+    return f"{base_text.rstrip()} {suffix}"
 
 
 def _planned_seed_for_slot(

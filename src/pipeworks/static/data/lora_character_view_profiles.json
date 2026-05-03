@@ -1,0 +1,46 @@
+{
+  "profiles": [
+    {
+      "key": "auto",
+      "label": "Auto",
+      "description": "Infer the species from the snapshotted species block when possible; otherwise keep neutral anatomy guidance.",
+      "prompt_suffix": "",
+      "available": true
+    },
+    {
+      "key": "human",
+      "label": "Human",
+      "description": "Use grounded human proportions and upright posture for Section 2 views.",
+      "prompt_suffix": "Preserve grounded human anatomy seen in the other dataset tiles: upright posture, human limb proportions, balanced shoulders and hips, and no exaggerated fantasy morphology or squat goblin stance.",
+      "available": true
+    },
+    {
+      "key": "goblin",
+      "label": "Goblin",
+      "description": "Use squat goblin proportions with a low center of gravity for Section 2 views.",
+      "prompt_suffix": "Preserve the same squat goblin proportions seen in the other dataset tiles: slightly hunched posture, bent knees, low center of gravity, broad stance, and short sturdy limbs.",
+      "available": true
+    },
+    {
+      "key": "orc",
+      "label": "Orc (placeholder)",
+      "description": "Reserved for a future orc anatomy profile.",
+      "prompt_suffix": "",
+      "available": false
+    },
+    {
+      "key": "elf",
+      "label": "Elf (placeholder)",
+      "description": "Reserved for a future elf anatomy profile.",
+      "prompt_suffix": "",
+      "available": false
+    },
+    {
+      "key": "sphinx",
+      "label": "Sphinx (placeholder)",
+      "description": "Reserved for a future sphinx anatomy profile.",
+      "prompt_suffix": "",
+      "available": false
+    }
+  ]
+}

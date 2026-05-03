@@ -261,6 +261,14 @@ class LoraRunCreateRequest(BaseModel):
             "``lora_character_sheet.json`` tile-pack at run creation."
         ),
     )
+    character_view_anatomy_profile: str = Field(
+        default="auto",
+        description=(
+            "Section-2 anatomy profile applied to character-view tiles. "
+            "'auto' infers from the snapshotted species block when possible; "
+            "implemented explicit overrides currently include 'human' and 'goblin'."
+        ),
+    )
     facial_expression_keys: list[str] = Field(
         default_factory=list,
         description=(
@@ -345,9 +353,29 @@ class LoraTileSpec(BaseModel):
     )
 
 
+class LoraCharacterViewProfile(BaseModel):
+    """One anatomy profile option for Section 2 character-view tiles."""
+
+    key: str = Field(..., description="Stable profile key, e.g. 'human' or 'goblin'.")
+    label: str = Field(..., description="Display label for the profile selector.")
+    description: str = Field(..., description="Short UI help text for this profile.")
+    prompt_suffix: str = Field(
+        default="",
+        description=(
+            "Species-specific anatomy guidance appended to character-view "
+            "tiles at run creation. Empty for auto/placeholder entries."
+        ),
+    )
+    available: bool = Field(
+        default=True,
+        description="Whether this profile is currently implemented/selectable.",
+    )
+
+
 class LoraTilePacksResponse(BaseModel):
     """Response body for ``GET /api/lora-dataset/tile-packs``."""
 
+    character_view_profiles: list[LoraCharacterViewProfile] = Field(default_factory=list)
     character_sheet: list[LoraTileSpec] = Field(default_factory=list)
     facial_expression: list[LoraTileSpec] = Field(default_factory=list)
     body_action: list[LoraTileSpec] = Field(default_factory=list)

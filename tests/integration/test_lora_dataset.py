@@ -31,6 +31,47 @@ def _fake_login_fetch(*, base_url, method, path, body):
 def _make_authenticated_fetch(items):
     """Build an authenticated mud-server fetch stub with a fixed policy listing."""
 
+    combined_items = [
+        *items,
+        {
+            "policy_id": "species_block:image.blocks.species:goblin",
+            "policy_type": "species_block",
+            "namespace": "image.blocks.species",
+            "policy_key": "goblin",
+            "variant": "v1",
+            "content": {
+                "text": (
+                    "A goblin. Small humanoid proportions, upright posture.\n"
+                    "Large pointed ears set high on the skull.\n"
+                    "Wide-set forward-facing crimson eyes."
+                )
+            },
+        },
+        {
+            "policy_id": "species_block:image.blocks.species:human",
+            "policy_type": "species_block",
+            "namespace": "image.blocks.species",
+            "policy_key": "human",
+            "variant": "v1",
+            "content": {
+                "text": (
+                    "A human of pipe-works canon with grounded proportions,\n"
+                    "practical bearing, and no exaggerated fantasy morphology."
+                )
+            },
+        },
+        {
+            "policy_id": "tone_profile:image.tone_profiles:ledger_engraving",
+            "policy_type": "tone_profile",
+            "namespace": "image.tone_profiles",
+            "policy_key": "ledger_engraving",
+            "variant": "v1",
+            "content": {
+                "prompt_block": "Linocut style with muted sepia palette and archival paper texture."
+            },
+        },
+    ]
+
     def _fetch(*, runtime, method, path, query_params, json_payload=None):
         if path == "/api/policy-capabilities":
             return {
@@ -38,7 +79,7 @@ def _make_authenticated_fetch(items):
                 "allowed_statuses": ["draft", "active"],
             }
         if path == "/api/policies":
-            return {"items": items}
+            return {"items": combined_items}
         raise AssertionError(f"Unexpected path: {path}")
 
     return _fetch
@@ -104,6 +145,7 @@ def _create_run_payload(*, location_ids: list[str]) -> dict:
         ],
         "location_policy_ids": location_ids,
         "character_sheet_keys": [],
+        "character_view_anatomy_profile": "auto",
         "facial_expression_keys": [],
         "body_action_keys": [],
     }
@@ -210,6 +252,40 @@ class TestLoraDatasetRunLifecycle:
             resp = test_client.post("/api/lora-dataset/runs", json=payload)
             assert resp.status_code == 400
             assert "not a canonical location" in resp.json()["detail"]
+
+    def test_create_run_resolves_automated_sections_from_prompt_lookup(self, test_client):
+        """LoRA snapshots must ignore stale textarea text for automated sections."""
+        with (
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json_anonymous",
+                side_effect=_fake_login_fetch,
+            ),
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json",
+                side_effect=_make_authenticated_fetch(_LOCATIONS),
+            ),
+        ):
+            _login(test_client)
+            payload = _create_run_payload(
+                location_ids=["location:image.locations.environment:cozy_inn:v1"]
+            )
+            payload["pinned_sections"][0]["manual_text"] = (
+                "A human of pipe-works canon with grounded proportions.\n"
+                "A goblin. Polluted stale textarea content."
+            )
+            payload["pinned_sections"][1]["manual_text"] = "Stale tone textarea content."
+            resp = test_client.post("/api/lora-dataset/runs", json=payload)
+            assert resp.status_code == 200, resp.text
+            manifest = resp.json()
+            assert manifest["pinned_sections"][0]["manual_text"].startswith("A goblin.")
+            assert (
+                "polluted stale textarea content"
+                not in manifest["pinned_sections"][0]["manual_text"].lower()
+            )
+            assert (
+                manifest["pinned_sections"][1]["manual_text"]
+                == "Linocut style with muted sepia palette and archival paper texture."
+            )
 
     def test_generate_run_writes_per_tile_files_and_marks_done(
         self, test_client, test_config, mock_model_manager
@@ -360,6 +436,48 @@ class TestLoraDatasetRunLifecycle:
             assert (dataset_dir / "00_cozy_inn.png").exists()
             assert (dataset_dir / "00_cozy_inn.txt").exists()
             # The excluded foggy_moor pair is intentionally absent.
+            assert not (dataset_dir / "01_foggy_moor.png").exists()
+            assert not (dataset_dir / "01_foggy_moor.txt").exists()
+
+    def test_export_dataset_renumbers_curated_subset_densely(
+        self, test_client, test_config, mock_model_manager
+    ):
+        """Export numbering should not leave holes after excluded earlier slots."""
+        with (
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json_anonymous",
+                side_effect=_fake_login_fetch,
+            ),
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json",
+                side_effect=_make_authenticated_fetch(_LOCATIONS),
+            ),
+            patch(
+                "pipeworks.api.main.get_model_runtime_support",
+                return_value=(True, None),
+            ),
+        ):
+            _login(test_client)
+            payload = _create_run_payload(
+                location_ids=[
+                    "location:image.locations.environment:cozy_inn:v1",
+                    "location:image.locations.environment:foggy_moor:v1",
+                ]
+            )
+            run_id = test_client.post("/api/lora-dataset/runs", json=payload).json()["run_id"]
+            test_client.post(f"/api/lora-dataset/runs/{run_id}/generate")
+
+            test_client.patch(
+                f"/api/lora-dataset/runs/{run_id}/slots/cozy_inn",
+                json={"excluded": True},
+            )
+
+            export = test_client.post(f"/api/lora-dataset/runs/{run_id}/dataset")
+            assert export.status_code == 200, export.text
+
+            dataset_dir = test_config.outputs_dir / "lora_runs" / run_id / "dataset"
+            assert (dataset_dir / "00_foggy_moor.png").exists()
+            assert (dataset_dir / "00_foggy_moor.txt").exists()
             assert not (dataset_dir / "01_foggy_moor.png").exists()
             assert not (dataset_dir / "01_foggy_moor.txt").exists()
 
@@ -536,14 +654,25 @@ class TestLoraTilePacks:
         # tmp dir per test. Seed the bundled fixture there so the route
         # is exercised end-to-end rather than mocked out.
         _seed_tile_pack("lora_character_sheet.json")
+        _seed_tile_pack("lora_character_view_profiles.json")
         _seed_tile_pack("lora_facial_expressions.json")
         _seed_tile_pack("lora_body_actions.json")
 
         resp = test_client.get("/api/lora-dataset/tile-packs")
         assert resp.status_code == 200, resp.text
         payload = resp.json()
+        assert len(payload["character_view_profiles"]) == 6
         assert len(payload["facial_expression"]) == 5
         assert len(payload["body_action"]) == 5
+        human_profile = next(
+            profile for profile in payload["character_view_profiles"] if profile["key"] == "human"
+        )
+        orc_profile = next(
+            profile for profile in payload["character_view_profiles"] if profile["key"] == "orc"
+        )
+        assert human_profile["available"] is True
+        assert "upright posture" in human_profile["prompt_suffix"].lower()
+        assert orc_profile["available"] is False
         keys = [tile["key"] for tile in payload["character_sheet"]]
         assert keys == ["front_view", "left_profile", "back_view", "right_profile"]
         front_view = next(
@@ -552,7 +681,7 @@ class TestLoraTilePacks:
         assert front_view["section_label"] == "Character View"
         assert front_view["aspect_ratio_hint"] == "3:4"
         assert "front view reference" in front_view["text"].lower()
-        assert "slightly hunched posture" in front_view["text"].lower()
+        assert "slightly hunched posture" not in front_view["text"].lower()
         neutral = next(
             tile for tile in payload["facial_expression"] if tile["key"] == "neutral_closeup"
         )
@@ -569,6 +698,7 @@ class TestLoraTilePacks:
     ):
         """A run can be created from a character-sheet tile alone (no locations)."""
         _seed_tile_pack("lora_character_sheet.json")
+        _seed_tile_pack("lora_character_view_profiles.json")
 
         with (
             patch(
@@ -605,6 +735,7 @@ class TestLoraTilePacks:
             assert slot["tile_kind"] == "character_sheet"
             assert slot["section_label"] == "Character View"
             assert "front view reference" in slot["tile_text"].lower()
+            assert "slightly hunched posture" in slot["tile_text"].lower()
             # The compiled prompt must use the tile's section_label as the
             # header, not the legacy "Location:" header.
             assert "Character View:" in slot["compiled_prompt"]
@@ -627,6 +758,7 @@ class TestLoraTilePacks:
     def test_create_run_mixed_sources_locations_plus_character_sheet(self, test_client):
         """A run can mix locations and bundled tile-pack tiles in one batch."""
         _seed_tile_pack("lora_character_sheet.json")
+        _seed_tile_pack("lora_character_view_profiles.json")
 
         with (
             patch(
@@ -652,6 +784,64 @@ class TestLoraTilePacks:
             assert manifest["slots"]["cozy_inn"]["section_label"] == "Location"
             assert manifest["slots"]["front_view"]["section_label"] == "Character View"
 
+    def test_create_run_character_view_human_override_uses_human_anatomy(self, test_client):
+        """Manual Section-2 profile override beats auto-inferred goblin anatomy."""
+        _seed_tile_pack("lora_character_sheet.json")
+        _seed_tile_pack("lora_character_view_profiles.json")
+
+        with (
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json_anonymous",
+                side_effect=_fake_login_fetch,
+            ),
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json",
+                side_effect=_make_authenticated_fetch(_LOCATIONS),
+            ),
+        ):
+            _login(test_client)
+            payload = _create_run_payload(location_ids=[])
+            payload["character_sheet_keys"] = ["front_view"]
+            payload["character_view_anatomy_profile"] = "human"
+            resp = test_client.post("/api/lora-dataset/runs", json=payload)
+            assert resp.status_code == 200, resp.text
+            manifest = resp.json()
+            slot = manifest["slots"]["front_view"]
+            assert "upright posture" in slot["tile_text"].lower()
+            assert "slightly hunched posture" not in slot["tile_text"].lower()
+
+    def test_create_run_character_view_auto_detects_human_species(self, test_client):
+        """Auto profile inference picks the human anatomy suffix from species block."""
+        _seed_tile_pack("lora_character_sheet.json")
+        _seed_tile_pack("lora_character_view_profiles.json")
+
+        with (
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json_anonymous",
+                side_effect=_fake_login_fetch,
+            ),
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json",
+                side_effect=_make_authenticated_fetch(_LOCATIONS),
+            ),
+        ):
+            _login(test_client)
+            payload = _create_run_payload(location_ids=[])
+            payload["character_sheet_keys"] = ["front_view"]
+            payload["pinned_sections"][0]["label"] = "Human"
+            payload["pinned_sections"][0][
+                "manual_text"
+            ] = "A human. Grounded human proportions and upright posture."
+            payload["pinned_sections"][0][
+                "automated_prompt_id"
+            ] = "species_block:image.blocks.species:human:v1"
+            resp = test_client.post("/api/lora-dataset/runs", json=payload)
+            assert resp.status_code == 200, resp.text
+            manifest = resp.json()
+            slot = manifest["slots"]["front_view"]
+            assert "upright posture" in slot["tile_text"].lower()
+            assert "slightly hunched posture" not in slot["tile_text"].lower()
+
     def test_create_run_rejects_unknown_character_sheet_key(self, test_client):
         """Unknown character-sheet keys are rejected with a 400."""
         with (
@@ -670,6 +860,52 @@ class TestLoraTilePacks:
             resp = test_client.post("/api/lora-dataset/runs", json=payload)
             assert resp.status_code == 400
             assert "character-sheet" in resp.json()["detail"].lower()
+
+    def test_create_run_rejects_unknown_character_view_profile(self, test_client):
+        """Unknown Section-2 anatomy profiles are rejected with a 400."""
+        _seed_tile_pack("lora_character_sheet.json")
+        _seed_tile_pack("lora_character_view_profiles.json")
+
+        with (
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json_anonymous",
+                side_effect=_fake_login_fetch,
+            ),
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json",
+                side_effect=_make_authenticated_fetch(_LOCATIONS),
+            ),
+        ):
+            _login(test_client)
+            payload = _create_run_payload(location_ids=[])
+            payload["character_sheet_keys"] = ["front_view"]
+            payload["character_view_anatomy_profile"] = "dwarf"
+            resp = test_client.post("/api/lora-dataset/runs", json=payload)
+            assert resp.status_code == 400
+            assert "anatomy profile" in resp.json()["detail"].lower()
+
+    def test_create_run_rejects_placeholder_character_view_profile(self, test_client):
+        """Placeholder Section-2 anatomy profiles are visible but not usable yet."""
+        _seed_tile_pack("lora_character_sheet.json")
+        _seed_tile_pack("lora_character_view_profiles.json")
+
+        with (
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json_anonymous",
+                side_effect=_fake_login_fetch,
+            ),
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json",
+                side_effect=_make_authenticated_fetch(_LOCATIONS),
+            ),
+        ):
+            _login(test_client)
+            payload = _create_run_payload(location_ids=[])
+            payload["character_sheet_keys"] = ["front_view"]
+            payload["character_view_anatomy_profile"] = "orc"
+            resp = test_client.post("/api/lora-dataset/runs", json=payload)
+            assert resp.status_code == 400
+            assert "placeholder" in resp.json()["detail"].lower()
 
     def test_create_run_with_facial_expression_tiles_only(
         self, test_client, test_config, mock_model_manager
@@ -727,6 +963,7 @@ class TestLoraTilePacks:
     def test_create_run_mixed_locations_character_sheet_and_facial_expression(self, test_client):
         """A run can mix canonical locations with multiple bundled tile-pack kinds."""
         _seed_tile_pack("lora_character_sheet.json")
+        _seed_tile_pack("lora_character_view_profiles.json")
         _seed_tile_pack("lora_facial_expressions.json")
 
         with (
@@ -836,6 +1073,7 @@ class TestLoraTilePacks:
     def test_create_run_mixed_locations_views_expressions_and_actions(self, test_client):
         """A run can mix canonical locations with all bundled tile-pack kinds."""
         _seed_tile_pack("lora_character_sheet.json")
+        _seed_tile_pack("lora_character_view_profiles.json")
         _seed_tile_pack("lora_facial_expressions.json")
         _seed_tile_pack("lora_body_actions.json")
 

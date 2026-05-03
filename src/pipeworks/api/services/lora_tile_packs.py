@@ -23,7 +23,7 @@ import json
 import logging
 from pathlib import Path
 
-from pipeworks.api.models_lora import LoraTileSpec
+from pipeworks.api.models_lora import LoraCharacterViewProfile, LoraTileSpec
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +32,7 @@ _PACK_FILES: dict[str, str] = {
     "facial_expression": "lora_facial_expressions.json",
     "body_action": "lora_body_actions.json",
 }
+_CHARACTER_VIEW_PROFILES_FILE = "lora_character_view_profiles.json"
 
 
 def load_tile_pack(*, data_dir: Path, kind: str) -> list[LoraTileSpec]:
@@ -87,4 +88,41 @@ def find_tile_spec(*, data_dir: Path, kind: str, key: str) -> LoraTileSpec | Non
     for tile in load_tile_pack(data_dir=data_dir, kind=kind):
         if tile.key == key:
             return tile
+    return None
+
+
+def load_character_view_profiles(*, data_dir: Path) -> list[LoraCharacterViewProfile]:
+    """Load the Section-2 anatomy profile registry from disk."""
+    path = data_dir / _CHARACTER_VIEW_PROFILES_FILE
+    if not path.exists():
+        return []
+
+    try:
+        with open(path, encoding="utf-8") as handle:
+            payload = json.load(handle)
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.warning("Failed to load character-view profiles %s: %s", path, exc)
+        return []
+
+    raw_profiles = payload.get("profiles") if isinstance(payload, dict) else None
+    if not isinstance(raw_profiles, list):
+        return []
+
+    profiles: list[LoraCharacterViewProfile] = []
+    for raw in raw_profiles:
+        if not isinstance(raw, dict):
+            continue
+        try:
+            profiles.append(LoraCharacterViewProfile.model_validate(raw))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Skipping malformed character-view profile in %s: %s", path, exc)
+            continue
+    return profiles
+
+
+def find_character_view_profile(*, data_dir: Path, key: str) -> LoraCharacterViewProfile | None:
+    """Look up one Section-2 anatomy profile by key."""
+    for profile in load_character_view_profiles(data_dir=data_dir):
+        if profile.key == key:
+            return profile
     return None
