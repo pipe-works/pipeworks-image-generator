@@ -1,3 +1,39 @@
 {
-  "tiles": []
+  "tiles": [
+    {
+      "key": "walking_stride",
+      "label": "Walking stride",
+      "text": "Create a full-body action reference of this exact character on a pure white background in a natural walking stride. Preserve the same facial structure, body proportions, clothing logic, and rendering style seen in the other dataset tiles. Show the full figure from head to toes with one foot forward, arms swinging naturally, even lighting, and no props, cast shadows, or background details.",
+      "section_label": "Body Action",
+      "aspect_ratio_hint": "3:4"
+    },
+    {
+      "key": "running_stride",
+      "label": "Running stride",
+      "text": "Create a full-body action reference of this exact character on a pure white background in a running stride. Preserve the same facial structure, body proportions, clothing logic, and rendering style seen in the other dataset tiles. Show the full figure from head to toes with a clear sense of forward motion, balanced limb extension, even lighting, and no props, cast shadows, or background details.",
+      "section_label": "Body Action",
+      "aspect_ratio_hint": "3:4"
+    },
+    {
+      "key": "seated_rest",
+      "label": "Seated rest",
+      "text": "Create a full-body action reference of this exact character on a pure white background in a simple seated resting pose. Preserve the same facial structure, body proportions, clothing logic, and rendering style seen in the other dataset tiles. Show the full figure from head to toes with bent legs and relaxed posture, even lighting, and no props, cast shadows, or background details.",
+      "section_label": "Body Action",
+      "aspect_ratio_hint": "3:4"
+    },
+    {
+      "key": "leaning_stance",
+      "label": "Leaning stance",
+      "text": "Create a full-body action reference of this exact character on a pure white background in a casual leaning stance, with the body's weight shifted clearly to one side. Preserve the same facial structure, body proportions, clothing logic, and rendering style seen in the other dataset tiles. Show the full figure from head to toes, evenly lit, with no props, cast shadows, or background details.",
+      "section_label": "Body Action",
+      "aspect_ratio_hint": "3:4"
+    },
+    {
+      "key": "crouched_balance",
+      "label": "Crouched balance",
+      "text": "Create a full-body action reference of this exact character on a pure white background in a low crouched balancing pose. Preserve the same facial structure, body proportions, clothing logic, and rendering style seen in the other dataset tiles. Show the full figure from head to toes with bent knees, lowered center of gravity, even lighting, and no props, cast shadows, or background details.",
+      "section_label": "Body Action",
+      "aspect_ratio_hint": "3:4"
+    }
+  ]
 }
