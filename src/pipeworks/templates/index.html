@@ -470,8 +470,29 @@
         <div class="panel" style="margin-bottom:var(--sp-3)">
           <div class="panel__heading">1 · Snapshot Consistency Stack</div>
           <div class="ctrl-row" style="margin-bottom:var(--sp-2)">
-            <button class="btn btn--primary btn--sm" id="lora-btn-snapshot" type="button">
+            <button
+              class="btn btn--primary btn--sm"
+              id="lora-btn-snapshot"
+              type="button"
+              title="Capture the current composer sections and freeze them as the consistency stack for a new dataset run."
+            >
               Snapshot from composer
+            </button>
+            <button
+              class="btn btn--secondary btn--sm"
+              id="lora-btn-clear-snapshot"
+              type="button"
+              title="Remove the current LoRA snapshot so you can capture a fresh consistency stack without clearing your tile selections."
+            >
+              Clear snapshot
+            </button>
+            <button
+              class="btn btn--secondary btn--sm"
+              id="lora-btn-reset-builder"
+              type="button"
+              title="Reset the dataset builder to a clean state: clear the snapshot, clear all tile selections, restore Anatomy Profile to Auto, and close the active run panel."
+            >
+              Reset dataset builder
             </button>
             <span class="status-bar__text" id="lora-snapshot-status" style="margin-left:var(--sp-2)">
               No snapshot yet
@@ -487,6 +508,15 @@
             These isolate anatomy, silhouette, clothing, and posture without
             forcing a multi-view sheet layout or a fixed 16:9 aspect ratio.
           </p>
+          <div class="ctrl-row" style="margin-bottom:var(--sp-2)">
+            <label class="control-label" for="lora-character-view-profile">Anatomy profile</label>
+            <select
+              class="select select--sm"
+              id="lora-character-view-profile"
+              style="max-width:240px"
+            ></select>
+            <span class="status-bar__text" id="lora-character-view-profile-status">Loading…</span>
+          </div>
           <div class="ctrl-row" style="margin-bottom:var(--sp-2)">
             <span class="status-bar__text" id="lora-character-sheet-status">Loading…</span>
           </div>

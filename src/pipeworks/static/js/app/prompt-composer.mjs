@@ -153,12 +153,9 @@ export function createPromptComposer({
       const option = (state.policyPromptOptions || []).find(item => item.id === optionId);
       if (option) {
         const snippet = (option.value || "").trim();
-        if (snippet) {
-          const textarea = slotEl.querySelector(".composer-slot__textarea");
-          const existing = textarea.value.trimEnd();
-          textarea.value = existing ? `${existing}\n${snippet}` : snippet;
-          slot.manualText = textarea.value;
-        }
+        const textarea = slotEl.querySelector(".composer-slot__textarea");
+        textarea.value = snippet;
+        slot.manualText = snippet;
         const optionLabel = (option.label || "").trim();
         if (optionLabel) {
           slot.label = optionLabel;

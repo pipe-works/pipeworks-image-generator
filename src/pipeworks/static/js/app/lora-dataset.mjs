@@ -21,6 +21,7 @@ export function createLoraDatasetController({ apiClient, toast, buildGeneratePay
 
   let snapshotPayload = null;
   let availableLocations = [];
+  let availableCharacterViewProfiles = [];
   let availableCharacterSheetTiles = [];
   let availableFacialExpressionTiles = [];
   let availableBodyActionTiles = [];
@@ -28,6 +29,7 @@ export function createLoraDatasetController({ apiClient, toast, buildGeneratePay
   const selectedCharacterSheetKeys = new Set();
   const selectedFacialExpressionKeys = new Set();
   const selectedBodyActionKeys = new Set();
+  let selectedCharacterViewProfileKey = "auto";
   let activeRunId = null;
   let activeRunManifest = null;
   let pollHandle = null;
@@ -82,7 +84,42 @@ export function createLoraDatasetController({ apiClient, toast, buildGeneratePay
     snapshotPayload = payload;
     setText("#lora-snapshot-status", `${(payload.sections || []).length} section(s) snapshotted`);
     renderSnapshotSummary();
+    refreshCharacterViewProfileStatus();
     refreshCreateButtonEnabled();
+  }
+
+  function clearSnapshot({ notify = true } = {}) {
+    snapshotPayload = null;
+    setText("#lora-snapshot-status", "No snapshot yet");
+    setText("#lora-create-status", "");
+    renderSnapshotSummary();
+    refreshCharacterViewProfileStatus();
+    refreshCreateButtonEnabled();
+    if (notify) toast("Snapshot cleared.", "info");
+  }
+
+  function resetDatasetBuilder() {
+    clearSnapshot({ notify: false });
+    selectedLocationIds.clear();
+    selectedCharacterSheetKeys.clear();
+    selectedFacialExpressionKeys.clear();
+    selectedBodyActionKeys.clear();
+    selectedCharacterViewProfileKey = "auto";
+    renderCharacterViewProfileSelector();
+    renderLocationsList();
+    renderCharacterSheetList();
+    renderFacialExpressionList();
+    renderBodyActionList();
+    refreshCharacterViewProfileStatus();
+    setText("#lora-create-status", "");
+    activeRunId = null;
+    activeRunManifest = null;
+    stopPolling();
+    showActiveRunPanel(false);
+    setText("#lora-active-run-id", "—");
+    setText("#lora-active-run-status", "pending");
+    setText("#lora-active-run-progress", "");
+    toast("Dataset builder reset.", "info");
   }
 
   function renderSnapshotSummary() {
@@ -198,6 +235,7 @@ export function createLoraDatasetController({ apiClient, toast, buildGeneratePay
   /* ------------------------- tile-packs ------------------------- */
 
   async function loadTilePacks() {
+    setText("#lora-character-view-profile-status", "Loading…");
     setText("#lora-character-sheet-status", "Loading…");
     setText("#lora-facial-expression-status", "Loading…");
     setText("#lora-body-action-status", "Loading…");
@@ -205,6 +243,7 @@ export function createLoraDatasetController({ apiClient, toast, buildGeneratePay
     try {
       data = await apiClient.fetchLoraTilePacks();
     } catch (err) {
+      setText("#lora-character-view-profile-status", "Failed to load anatomy profiles.");
       setText("#lora-character-sheet-status", "Failed to load character views.");
       setText("#lora-facial-expression-status", "Failed to load facial expressions.");
       setText("#lora-body-action-status", "Failed to load body actions.");
@@ -212,9 +251,12 @@ export function createLoraDatasetController({ apiClient, toast, buildGeneratePay
       return;
     }
 
+    availableCharacterViewProfiles = data?.character_view_profiles || [];
     availableCharacterSheetTiles = data?.character_sheet || [];
     availableFacialExpressionTiles = data?.facial_expression || [];
     availableBodyActionTiles = data?.body_action || [];
+    renderCharacterViewProfileSelector();
+    refreshCharacterViewProfileStatus();
     if (availableCharacterSheetTiles.length === 0) {
       setText("#lora-character-sheet-status", "No character-view tiles available.");
     } else {
@@ -243,6 +285,81 @@ export function createLoraDatasetController({ apiClient, toast, buildGeneratePay
     renderFacialExpressionList();
     renderBodyActionList();
     refreshCreateButtonEnabled();
+  }
+
+  function renderCharacterViewProfileSelector() {
+    const select = $("#lora-character-view-profile");
+    if (!select) return;
+    select.innerHTML = "";
+
+    availableCharacterViewProfiles.forEach(profile => {
+      const option = document.createElement("option");
+      option.value = profile.key;
+      option.textContent = profile.label || profile.key;
+      option.disabled = profile.available === false;
+      option.selected = profile.key === selectedCharacterViewProfileKey;
+      select.appendChild(option);
+    });
+
+    if (!availableCharacterViewProfiles.some(profile => profile.key === selectedCharacterViewProfileKey)) {
+      selectedCharacterViewProfileKey = "auto";
+      select.value = "auto";
+    }
+  }
+
+  function findCharacterViewProfile(key) {
+    return availableCharacterViewProfiles.find(profile => profile.key === key) || null;
+  }
+
+  function inferCharacterViewProfileKeyFromSnapshot() {
+    const sections = snapshotPayload?.sections || [];
+    for (const section of sections) {
+      const promptId = (section.automated_prompt_id || "").trim();
+      if (!promptId.startsWith("species_block:image.blocks.species:")) continue;
+      const parts = promptId.split(":");
+      const speciesKey = (parts[2] || "").trim().toLowerCase();
+      if (speciesKey) return speciesKey;
+    }
+    return null;
+  }
+
+  function refreshCharacterViewProfileStatus() {
+    const statusSel = "#lora-character-view-profile-status";
+    if (availableCharacterViewProfiles.length === 0) {
+      setText(statusSel, "No character-view anatomy profiles available.");
+      return;
+    }
+
+    if (selectedCharacterViewProfileKey !== "auto") {
+      const profile = findCharacterViewProfile(selectedCharacterViewProfileKey);
+      setText(
+        statusSel,
+        profile ? `Manual override: ${profile.description}` : "Manual override selected."
+      );
+      return;
+    }
+
+    const inferredKey = inferCharacterViewProfileKeyFromSnapshot();
+    if (!inferredKey) {
+      setText(
+        statusSel,
+        "Auto: no supported species block detected; using neutral anatomy guidance."
+      );
+      return;
+    }
+
+    const inferredProfile = findCharacterViewProfile(inferredKey);
+    if (!inferredProfile || inferredProfile.available === false) {
+      setText(
+        statusSel,
+        `Auto: ${inferredKey} is not implemented yet; using neutral anatomy guidance.`
+      );
+      return;
+    }
+    setText(
+      statusSel,
+      `Auto → ${inferredProfile.label}: ${inferredProfile.description}`
+    );
   }
 
   function renderTilePackList({ rootSelector, tiles, selectedKeys }) {
@@ -332,6 +449,7 @@ export function createLoraDatasetController({ apiClient, toast, buildGeneratePay
       pinned_sections: snapshotPayload.sections || [],
       location_policy_ids: Array.from(selectedLocationIds),
       character_sheet_keys: Array.from(selectedCharacterSheetKeys),
+      character_view_anatomy_profile: selectedCharacterViewProfileKey,
       facial_expression_keys: Array.from(selectedFacialExpressionKeys),
       body_action_keys: Array.from(selectedBodyActionKeys),
     };
@@ -615,6 +733,12 @@ export function createLoraDatasetController({ apiClient, toast, buildGeneratePay
 
   function bind() {
     $("#lora-btn-snapshot")?.addEventListener("click", takeSnapshot);
+    $("#lora-btn-clear-snapshot")?.addEventListener("click", () => clearSnapshot());
+    $("#lora-btn-reset-builder")?.addEventListener("click", resetDatasetBuilder);
+    $("#lora-character-view-profile")?.addEventListener("change", event => {
+      selectedCharacterViewProfileKey = event.target.value || "auto";
+      refreshCharacterViewProfileStatus();
+    });
     $("#lora-btn-select-all")?.addEventListener("click", selectAllLocations);
     $("#lora-btn-select-none")?.addEventListener("click", clearLocationSelection);
     $("#lora-btn-create")?.addEventListener("click", createRun);
