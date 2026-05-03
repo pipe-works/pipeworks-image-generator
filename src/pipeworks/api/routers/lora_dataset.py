@@ -123,12 +123,17 @@ def create_lora_dataset_router(deps: LoraDatasetRouterDependencies) -> APIRouter
         independent of upstream edits — reproducibility wins over
         freshness here.
         """
-        if not req.location_policy_ids and not req.character_sheet_keys:
+        if (
+            not req.location_policy_ids
+            and not req.character_sheet_keys
+            and not req.facial_expression_keys
+        ):
             raise HTTPException(
                 status_code=400,
                 detail=(
                     "At least one tile must be selected: location_policy_ids "
-                    "and/or character_sheet_keys."
+                    "and/or character_sheet_keys and/or "
+                    "facial_expression_keys."
                 ),
             )
 
@@ -213,6 +218,41 @@ def create_lora_dataset_router(deps: LoraDatasetRouterDependencies) -> APIRouter
             slots[tile.key] = LoraRunSlot(
                 tile_kind="character_sheet",
                 tile_source_id=f"character_sheet:{tile.key}",
+                tile_key=tile.key,
+                tile_label=tile.label,
+                tile_text=tile.text,
+                section_label=tile.section_label,
+            )
+            slot_order.append(tile.key)
+
+        # --- Facial-expression (bundled JSON tile-pack) ---------------
+        for expression_key in req.facial_expression_keys:
+            tile = find_tile_spec(
+                data_dir=deps.data_dir(),
+                kind="facial_expression",
+                key=expression_key,
+            )
+            if tile is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Unknown facial-expression tile key: {expression_key!r}. "
+                        "Check the bundled lora_facial_expressions.json pack."
+                    ),
+                )
+            if tile.key in slots:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Tile key collision: {tile.key!r} is already in this run "
+                        "(likely as a location or character-sheet tile). "
+                        "Tile keys must be unique across kinds."
+                    ),
+                )
+
+            slots[tile.key] = LoraRunSlot(
+                tile_kind="facial_expression",
+                tile_source_id=f"facial_expression:{tile.key}",
                 tile_key=tile.key,
                 tile_label=tile.label,
                 tile_text=tile.text,

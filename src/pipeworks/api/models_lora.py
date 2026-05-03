@@ -261,6 +261,15 @@ class LoraRunCreateRequest(BaseModel):
             "``lora_character_sheet.json`` tile-pack at run creation."
         ),
     )
+    facial_expression_keys: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Bundled facial-expression tile keys selected for this run, "
+            "e.g. ['neutral_closeup', 'smiling_closeup']. Resolved "
+            "against the bundled ``lora_facial_expressions.json`` "
+            "tile-pack at run creation."
+        ),
+    )
     share_seed_across_tiles: bool = Field(
         default=True,
         description=(

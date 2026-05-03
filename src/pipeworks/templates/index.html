@@ -495,12 +495,18 @@
 
         <div class="panel" style="margin-bottom:var(--sp-3)">
           <div class="panel__heading">3 · Facial Expressions</div>
-          <p class="lora-section-placeholder" style="font-size:var(--text-xs);color:var(--col-text-muted);line-height:1.6">
-            Coming soon. Close-up tiles varying the character's expression
-            (neutral, smiling, laughing, angry, surprised) on a plain white
-            background. Will populate once the facial-expression tile-pack
-            JSON is authored.
+          <p style="font-size:var(--text-xs);color:var(--col-text-muted);line-height:1.6;margin-bottom:var(--sp-2)">
+            Head-and-shoulders reference tiles on a plain white background.
+            These isolate facial expression and eye/mouth shape without
+            introducing location clutter or full-body pose variance.
           </p>
+          <div class="ctrl-row" style="margin-bottom:var(--sp-2)">
+            <span class="status-bar__text" id="lora-facial-expression-status">Loading…</span>
+          </div>
+          <div
+            id="lora-facial-expression-list"
+            class="lora-locations-list lora-locations-list--wide"
+          ></div>
         </div>
 
         <div class="panel" style="margin-bottom:var(--sp-3)">
