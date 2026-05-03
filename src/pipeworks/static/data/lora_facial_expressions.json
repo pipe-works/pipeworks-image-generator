@@ -1,3 +1,39 @@
 {
-  "tiles": []
+  "tiles": [
+    {
+      "key": "neutral_closeup",
+      "label": "Neutral close-up",
+      "text": "Create a head-and-shoulders facial reference of this exact character on a pure white background with a neutral resting expression. Preserve the same facial structure, skin tone, nose shape, eye spacing, ear silhouette, hairline, and rendering style seen in the other dataset tiles. Keep the face centered, looking directly toward camera, with even lighting and no props, hands, shadows, or background details.",
+      "section_label": "Facial Expression",
+      "aspect_ratio_hint": "1:1"
+    },
+    {
+      "key": "smiling_closeup",
+      "label": "Smiling close-up",
+      "text": "Create a head-and-shoulders facial reference of this exact character on a pure white background with a warm smiling expression. Preserve the same facial structure, skin tone, nose shape, eye spacing, ear silhouette, hairline, and rendering style seen in the other dataset tiles. Keep the face centered, looking directly toward camera, with even lighting and no props, hands, shadows, or background details.",
+      "section_label": "Facial Expression",
+      "aspect_ratio_hint": "1:1"
+    },
+    {
+      "key": "laughing_closeup",
+      "label": "Laughing close-up",
+      "text": "Create a head-and-shoulders facial reference of this exact character on a pure white background with a broad laughing expression. Preserve the same facial structure, skin tone, nose shape, eye spacing, ear silhouette, hairline, and rendering style seen in the other dataset tiles. Keep the face centered, looking directly toward camera, with even lighting and no props, hands, shadows, or background details.",
+      "section_label": "Facial Expression",
+      "aspect_ratio_hint": "1:1"
+    },
+    {
+      "key": "angry_closeup",
+      "label": "Angry close-up",
+      "text": "Create a head-and-shoulders facial reference of this exact character on a pure white background with an angry expression: tightened mouth, furrowed brow, and focused eyes. Preserve the same facial structure, skin tone, nose shape, eye spacing, ear silhouette, hairline, and rendering style seen in the other dataset tiles. Keep the face centered, looking directly toward camera, with even lighting and no props, hands, shadows, or background details.",
+      "section_label": "Facial Expression",
+      "aspect_ratio_hint": "1:1"
+    },
+    {
+      "key": "surprised_closeup",
+      "label": "Surprised close-up",
+      "text": "Create a head-and-shoulders facial reference of this exact character on a pure white background with a surprised expression: widened eyes, raised brows, and parted mouth. Preserve the same facial structure, skin tone, nose shape, eye spacing, ear silhouette, hairline, and rendering style seen in the other dataset tiles. Keep the face centered, looking directly toward camera, with even lighting and no props, hands, shadows, or background details.",
+      "section_label": "Facial Expression",
+      "aspect_ratio_hint": "1:1"
+    }
+  ]
 }

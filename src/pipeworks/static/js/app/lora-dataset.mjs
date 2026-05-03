@@ -22,8 +22,10 @@ export function createLoraDatasetController({ apiClient, toast, buildGeneratePay
   let snapshotPayload = null;
   let availableLocations = [];
   let availableCharacterSheetTiles = [];
+  let availableFacialExpressionTiles = [];
   const selectedLocationIds = new Set();
   const selectedCharacterSheetKeys = new Set();
+  const selectedFacialExpressionKeys = new Set();
   let activeRunId = null;
   let activeRunManifest = null;
   let pollHandle = null;
@@ -53,7 +55,11 @@ export function createLoraDatasetController({ apiClient, toast, buildGeneratePay
   }
 
   function totalSelectedTiles() {
-    return selectedLocationIds.size + selectedCharacterSheetKeys.size;
+    return (
+      selectedLocationIds.size +
+      selectedCharacterSheetKeys.size +
+      selectedFacialExpressionKeys.size
+    );
   }
 
   function refreshCreateButtonEnabled() {
@@ -190,16 +196,19 @@ export function createLoraDatasetController({ apiClient, toast, buildGeneratePay
 
   async function loadTilePacks() {
     setText("#lora-character-sheet-status", "Loading…");
+    setText("#lora-facial-expression-status", "Loading…");
     let data;
     try {
       data = await apiClient.fetchLoraTilePacks();
     } catch (err) {
       setText("#lora-character-sheet-status", "Failed to load character views.");
+      setText("#lora-facial-expression-status", "Failed to load facial expressions.");
       toast(`Could not load tile-packs: ${err.message || err}`, "err");
       return;
     }
 
     availableCharacterSheetTiles = data?.character_sheet || [];
+    availableFacialExpressionTiles = data?.facial_expression || [];
     if (availableCharacterSheetTiles.length === 0) {
       setText("#lora-character-sheet-status", "No character-view tiles available.");
     } else {
@@ -208,19 +217,29 @@ export function createLoraDatasetController({ apiClient, toast, buildGeneratePay
         `${availableCharacterSheetTiles.length} tile(s) available`
       );
     }
+    if (availableFacialExpressionTiles.length === 0) {
+      setText("#lora-facial-expression-status", "No facial-expression tiles available.");
+    } else {
+      setText(
+        "#lora-facial-expression-status",
+        `${availableFacialExpressionTiles.length} tile(s) available`
+      );
+    }
     selectedCharacterSheetKeys.clear();
+    selectedFacialExpressionKeys.clear();
     renderCharacterSheetList();
+    renderFacialExpressionList();
     refreshCreateButtonEnabled();
   }
 
-  function renderCharacterSheetList() {
-    const root = $("#lora-character-sheet-list");
+  function renderTilePackList({ rootSelector, tiles, selectedKeys }) {
+    const root = $(rootSelector);
     if (!root) return;
     root.innerHTML = "";
 
-    availableCharacterSheetTiles.forEach(tile => {
-      // Character-sheet preview text is multi-sentence render directives,
-      // not the short location blurbs locations carry — let the preview
+    tiles.forEach(tile => {
+      // Tile-pack preview text is multi-sentence render guidance rather
+      // than the short location blurbs locations carry, so let the preview
       // wrap to multiple lines via the `--wrap` modifier.
       const row = document.createElement("label");
       row.className = "lora-location-row lora-location-row--wrap";
@@ -228,10 +247,10 @@ export function createLoraDatasetController({ apiClient, toast, buildGeneratePay
       const checkbox = document.createElement("input");
       checkbox.type = "checkbox";
       checkbox.value = tile.key;
-      checkbox.checked = selectedCharacterSheetKeys.has(tile.key);
+      checkbox.checked = selectedKeys.has(tile.key);
       checkbox.addEventListener("change", () => {
-        if (checkbox.checked) selectedCharacterSheetKeys.add(tile.key);
-        else selectedCharacterSheetKeys.delete(tile.key);
+        if (checkbox.checked) selectedKeys.add(tile.key);
+        else selectedKeys.delete(tile.key);
         refreshCreateButtonEnabled();
       });
 
@@ -251,6 +270,22 @@ export function createLoraDatasetController({ apiClient, toast, buildGeneratePay
     });
   }
 
+  function renderCharacterSheetList() {
+    renderTilePackList({
+      rootSelector: "#lora-character-sheet-list",
+      tiles: availableCharacterSheetTiles,
+      selectedKeys: selectedCharacterSheetKeys,
+    });
+  }
+
+  function renderFacialExpressionList() {
+    renderTilePackList({
+      rootSelector: "#lora-facial-expression-list",
+      tiles: availableFacialExpressionTiles,
+      selectedKeys: selectedFacialExpressionKeys,
+    });
+  }
+
   /* ------------------------- runs ------------------------- */
 
   async function createRun() {
@@ -259,7 +294,7 @@ export function createLoraDatasetController({ apiClient, toast, buildGeneratePay
       return;
     }
     if (totalSelectedTiles() === 0) {
-      toast("Select at least one tile (location or character sheet).", "err");
+      toast("Select at least one tile source before creating a run.", "err");
       return;
     }
 
@@ -276,6 +311,7 @@ export function createLoraDatasetController({ apiClient, toast, buildGeneratePay
       pinned_sections: snapshotPayload.sections || [],
       location_policy_ids: Array.from(selectedLocationIds),
       character_sheet_keys: Array.from(selectedCharacterSheetKeys),
+      facial_expression_keys: Array.from(selectedFacialExpressionKeys),
     };
 
     setText("#lora-create-status", "Creating run…");

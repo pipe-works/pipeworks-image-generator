@@ -14,6 +14,7 @@ and a mocked ModelManager:
 from __future__ import annotations
 
 import json
+from importlib.resources import files
 from pathlib import Path
 from unittest.mock import patch
 
@@ -103,7 +104,19 @@ def _create_run_payload(*, location_ids: list[str]) -> dict:
         ],
         "location_policy_ids": location_ids,
         "character_sheet_keys": [],
+        "facial_expression_keys": [],
     }
+
+
+def _seed_tile_pack(filename: str) -> None:
+    import shutil
+
+    from pipeworks.api.main import DATA_DIR
+
+    bundled = files("pipeworks") / "static" / "data" / filename
+    target = DATA_DIR / filename
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(str(bundled), target)
 
 
 class TestLoraDatasetRunLifecycle:
@@ -519,23 +532,15 @@ class TestLoraTilePacks:
     def test_tile_packs_endpoint_returns_directional_character_views(self, test_client):
         """The bundled character-sheet pack ships with four directional view entries."""
         # The endpoint reads from the test config's data_dir, which is a
-        # tmp dir per test. The test_config fixture doesn't seed tile
-        # packs there, so we copy the bundled fixture across to validate
-        # end-to-end loading rather than mocking it out.
-        import shutil
-        from importlib.resources import files
-
-        from pipeworks.api.main import DATA_DIR
-
-        bundled = files("pipeworks") / "static" / "data" / "lora_character_sheet.json"
-        target = DATA_DIR / "lora_character_sheet.json"
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(str(bundled), target)
+        # tmp dir per test. Seed the bundled fixture there so the route
+        # is exercised end-to-end rather than mocked out.
+        _seed_tile_pack("lora_character_sheet.json")
+        _seed_tile_pack("lora_facial_expressions.json")
 
         resp = test_client.get("/api/lora-dataset/tile-packs")
         assert resp.status_code == 200, resp.text
         payload = resp.json()
-        assert isinstance(payload["facial_expression"], list)
+        assert len(payload["facial_expression"]) == 5
         assert isinstance(payload["body_action"], list)
         keys = [tile["key"] for tile in payload["character_sheet"]]
         assert keys == ["front_view", "left_profile", "back_view", "right_profile"]
@@ -546,20 +551,18 @@ class TestLoraTilePacks:
         assert front_view["aspect_ratio_hint"] == "3:4"
         assert "front view reference" in front_view["text"].lower()
         assert "slightly hunched posture" in front_view["text"].lower()
+        neutral = next(
+            tile for tile in payload["facial_expression"] if tile["key"] == "neutral_closeup"
+        )
+        assert neutral["section_label"] == "Facial Expression"
+        assert neutral["aspect_ratio_hint"] == "1:1"
+        assert "neutral resting expression" in neutral["text"].lower()
 
     def test_create_run_with_character_sheet_tile_only(
         self, test_client, test_config, mock_model_manager
     ):
         """A run can be created from a character-sheet tile alone (no locations)."""
-        import shutil
-        from importlib.resources import files
-
-        from pipeworks.api.main import DATA_DIR
-
-        bundled = files("pipeworks") / "static" / "data" / "lora_character_sheet.json"
-        target = DATA_DIR / "lora_character_sheet.json"
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(str(bundled), target)
+        _seed_tile_pack("lora_character_sheet.json")
 
         with (
             patch(
@@ -617,15 +620,7 @@ class TestLoraTilePacks:
 
     def test_create_run_mixed_sources_locations_plus_character_sheet(self, test_client):
         """A run can mix locations and bundled tile-pack tiles in one batch."""
-        import shutil
-        from importlib.resources import files
-
-        from pipeworks.api.main import DATA_DIR
-
-        bundled = files("pipeworks") / "static" / "data" / "lora_character_sheet.json"
-        target = DATA_DIR / "lora_character_sheet.json"
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(str(bundled), target)
+        _seed_tile_pack("lora_character_sheet.json")
 
         with (
             patch(
@@ -670,6 +665,115 @@ class TestLoraTilePacks:
             assert resp.status_code == 400
             assert "character-sheet" in resp.json()["detail"].lower()
 
+    def test_create_run_with_facial_expression_tiles_only(
+        self, test_client, test_config, mock_model_manager
+    ):
+        """A run can be created from facial-expression tiles alone."""
+        _seed_tile_pack("lora_facial_expressions.json")
+
+        with (
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json_anonymous",
+                side_effect=_fake_login_fetch,
+            ),
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json",
+                side_effect=_make_authenticated_fetch(_LOCATIONS),
+            ),
+            patch(
+                "pipeworks.api.main.get_model_runtime_support",
+                return_value=(True, None),
+            ),
+        ):
+            _login(test_client)
+            payload = _create_run_payload(location_ids=[])
+            payload["facial_expression_keys"] = [
+                "neutral_closeup",
+                "smiling_closeup",
+                "angry_closeup",
+            ]
+            resp = test_client.post("/api/lora-dataset/runs", json=payload)
+            assert resp.status_code == 200, resp.text
+            manifest = resp.json()
+            assert manifest["slot_order"] == [
+                "neutral_closeup",
+                "smiling_closeup",
+                "angry_closeup",
+            ]
+            slot = manifest["slots"]["neutral_closeup"]
+            assert slot["tile_kind"] == "facial_expression"
+            assert slot["section_label"] == "Facial Expression"
+            assert "neutral resting expression" in slot["tile_text"].lower()
+            assert "Facial Expression:" in slot["compiled_prompt"]
+
+            generate = test_client.post(f"/api/lora-dataset/runs/{manifest['run_id']}/generate")
+            assert generate.status_code == 200, generate.text
+            assert generate.json()["status"] == "complete"
+
+            run_dir = test_config.outputs_dir / "lora_runs" / manifest["run_id"]
+            assert (run_dir / "00_neutral_closeup.png").exists()
+            assert (run_dir / "00_neutral_closeup.txt").exists()
+            assert (run_dir / "01_smiling_closeup.png").exists()
+            assert (run_dir / "01_smiling_closeup.txt").exists()
+            assert (run_dir / "02_angry_closeup.png").exists()
+            assert (run_dir / "02_angry_closeup.txt").exists()
+
+    def test_create_run_mixed_locations_character_sheet_and_facial_expression(self, test_client):
+        """A run can mix canonical locations with multiple bundled tile-pack kinds."""
+        _seed_tile_pack("lora_character_sheet.json")
+        _seed_tile_pack("lora_facial_expressions.json")
+
+        with (
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json_anonymous",
+                side_effect=_fake_login_fetch,
+            ),
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json",
+                side_effect=_make_authenticated_fetch(_LOCATIONS),
+            ),
+        ):
+            _login(test_client)
+            payload = _create_run_payload(
+                location_ids=["location:image.locations.environment:cozy_inn:v1"]
+            )
+            payload["character_sheet_keys"] = ["front_view"]
+            payload["facial_expression_keys"] = ["smiling_closeup", "surprised_closeup"]
+            resp = test_client.post("/api/lora-dataset/runs", json=payload)
+            assert resp.status_code == 200, resp.text
+            manifest = resp.json()
+            assert manifest["slot_order"] == [
+                "cozy_inn",
+                "front_view",
+                "smiling_closeup",
+                "surprised_closeup",
+            ]
+            assert manifest["slots"]["cozy_inn"]["tile_kind"] == "location"
+            assert manifest["slots"]["front_view"]["tile_kind"] == "character_sheet"
+            assert manifest["slots"]["smiling_closeup"]["tile_kind"] == "facial_expression"
+            assert manifest["slots"]["smiling_closeup"]["section_label"] == "Facial Expression"
+
+    def test_create_run_rejects_unknown_facial_expression_key(self, test_client):
+        """Unknown facial-expression keys are rejected with a 400."""
+        _seed_tile_pack("lora_facial_expressions.json")
+
+        with (
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json_anonymous",
+                side_effect=_fake_login_fetch,
+            ),
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json",
+                side_effect=_make_authenticated_fetch(_LOCATIONS),
+            ),
+        ):
+            _login(test_client)
+            payload = _create_run_payload(location_ids=[])
+            payload["facial_expression_keys"] = ["grimacing_closeup"]
+            resp = test_client.post("/api/lora-dataset/runs", json=payload)
+            assert resp.status_code == 400
+            assert "facial-expression" in resp.json()["detail"].lower()
+
     def test_create_run_rejects_no_tiles_at_all(self, test_client):
         """A run with neither locations nor character-sheet keys is rejected."""
         with (
@@ -685,6 +789,7 @@ class TestLoraTilePacks:
             _login(test_client)
             payload = _create_run_payload(location_ids=[])
             payload["character_sheet_keys"] = []
+            payload["facial_expression_keys"] = []
             resp = test_client.post("/api/lora-dataset/runs", json=payload)
             assert resp.status_code == 400
             assert "at least one tile" in resp.json()["detail"].lower()
