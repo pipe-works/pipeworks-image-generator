@@ -162,6 +162,8 @@ A typical layout is:
 - gallery images under `/srv/work/pipeworks/runtime/image-generator/gallery`
 - gallery metadata under
   `/srv/work/pipeworks/runtime/image-generator/gallery.json`
+- optional read-only host share under `/srv/share/image-generator/gallery`
+  bind-mounted from `/srv/work/pipeworks/runtime/image-generator/outputs`
 - workspace-managed env/config under `/srv/work/pipeworks/config/image-generator/`
 
 ### Prepare Environment
