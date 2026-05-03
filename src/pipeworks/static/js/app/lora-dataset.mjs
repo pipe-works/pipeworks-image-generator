@@ -23,9 +23,11 @@ export function createLoraDatasetController({ apiClient, toast, buildGeneratePay
   let availableLocations = [];
   let availableCharacterSheetTiles = [];
   let availableFacialExpressionTiles = [];
+  let availableBodyActionTiles = [];
   const selectedLocationIds = new Set();
   const selectedCharacterSheetKeys = new Set();
   const selectedFacialExpressionKeys = new Set();
+  const selectedBodyActionKeys = new Set();
   let activeRunId = null;
   let activeRunManifest = null;
   let pollHandle = null;
@@ -58,7 +60,8 @@ export function createLoraDatasetController({ apiClient, toast, buildGeneratePay
     return (
       selectedLocationIds.size +
       selectedCharacterSheetKeys.size +
-      selectedFacialExpressionKeys.size
+      selectedFacialExpressionKeys.size +
+      selectedBodyActionKeys.size
     );
   }
 
@@ -197,18 +200,21 @@ export function createLoraDatasetController({ apiClient, toast, buildGeneratePay
   async function loadTilePacks() {
     setText("#lora-character-sheet-status", "Loading…");
     setText("#lora-facial-expression-status", "Loading…");
+    setText("#lora-body-action-status", "Loading…");
     let data;
     try {
       data = await apiClient.fetchLoraTilePacks();
     } catch (err) {
       setText("#lora-character-sheet-status", "Failed to load character views.");
       setText("#lora-facial-expression-status", "Failed to load facial expressions.");
+      setText("#lora-body-action-status", "Failed to load body actions.");
       toast(`Could not load tile-packs: ${err.message || err}`, "err");
       return;
     }
 
     availableCharacterSheetTiles = data?.character_sheet || [];
     availableFacialExpressionTiles = data?.facial_expression || [];
+    availableBodyActionTiles = data?.body_action || [];
     if (availableCharacterSheetTiles.length === 0) {
       setText("#lora-character-sheet-status", "No character-view tiles available.");
     } else {
@@ -225,10 +231,17 @@ export function createLoraDatasetController({ apiClient, toast, buildGeneratePay
         `${availableFacialExpressionTiles.length} tile(s) available`
       );
     }
+    if (availableBodyActionTiles.length === 0) {
+      setText("#lora-body-action-status", "No body-action tiles available.");
+    } else {
+      setText("#lora-body-action-status", `${availableBodyActionTiles.length} tile(s) available`);
+    }
     selectedCharacterSheetKeys.clear();
     selectedFacialExpressionKeys.clear();
+    selectedBodyActionKeys.clear();
     renderCharacterSheetList();
     renderFacialExpressionList();
+    renderBodyActionList();
     refreshCreateButtonEnabled();
   }
 
@@ -286,6 +299,14 @@ export function createLoraDatasetController({ apiClient, toast, buildGeneratePay
     });
   }
 
+  function renderBodyActionList() {
+    renderTilePackList({
+      rootSelector: "#lora-body-action-list",
+      tiles: availableBodyActionTiles,
+      selectedKeys: selectedBodyActionKeys,
+    });
+  }
+
   /* ------------------------- runs ------------------------- */
 
   async function createRun() {
@@ -312,6 +333,7 @@ export function createLoraDatasetController({ apiClient, toast, buildGeneratePay
       location_policy_ids: Array.from(selectedLocationIds),
       character_sheet_keys: Array.from(selectedCharacterSheetKeys),
       facial_expression_keys: Array.from(selectedFacialExpressionKeys),
+      body_action_keys: Array.from(selectedBodyActionKeys),
     };
 
     setText("#lora-create-status", "Creating run…");

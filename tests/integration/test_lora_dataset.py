@@ -105,6 +105,7 @@ def _create_run_payload(*, location_ids: list[str]) -> dict:
         "location_policy_ids": location_ids,
         "character_sheet_keys": [],
         "facial_expression_keys": [],
+        "body_action_keys": [],
     }
 
 
@@ -536,12 +537,13 @@ class TestLoraTilePacks:
         # is exercised end-to-end rather than mocked out.
         _seed_tile_pack("lora_character_sheet.json")
         _seed_tile_pack("lora_facial_expressions.json")
+        _seed_tile_pack("lora_body_actions.json")
 
         resp = test_client.get("/api/lora-dataset/tile-packs")
         assert resp.status_code == 200, resp.text
         payload = resp.json()
         assert len(payload["facial_expression"]) == 5
-        assert isinstance(payload["body_action"], list)
+        assert len(payload["body_action"]) == 5
         keys = [tile["key"] for tile in payload["character_sheet"]]
         assert keys == ["front_view", "left_profile", "back_view", "right_profile"]
         front_view = next(
@@ -557,6 +559,10 @@ class TestLoraTilePacks:
         assert neutral["section_label"] == "Facial Expression"
         assert neutral["aspect_ratio_hint"] == "1:1"
         assert "neutral resting expression" in neutral["text"].lower()
+        walking = next(tile for tile in payload["body_action"] if tile["key"] == "walking_stride")
+        assert walking["section_label"] == "Body Action"
+        assert walking["aspect_ratio_hint"] == "3:4"
+        assert "walking stride" in walking["text"].lower()
 
     def test_create_run_with_character_sheet_tile_only(
         self, test_client, test_config, mock_model_manager
@@ -774,6 +780,119 @@ class TestLoraTilePacks:
             assert resp.status_code == 400
             assert "facial-expression" in resp.json()["detail"].lower()
 
+    def test_create_run_with_body_action_tiles_only(
+        self, test_client, test_config, mock_model_manager
+    ):
+        """A run can be created from body-action tiles alone."""
+        _seed_tile_pack("lora_body_actions.json")
+
+        with (
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json_anonymous",
+                side_effect=_fake_login_fetch,
+            ),
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json",
+                side_effect=_make_authenticated_fetch(_LOCATIONS),
+            ),
+            patch(
+                "pipeworks.api.main.get_model_runtime_support",
+                return_value=(True, None),
+            ),
+        ):
+            _login(test_client)
+            payload = _create_run_payload(location_ids=[])
+            payload["body_action_keys"] = [
+                "walking_stride",
+                "running_stride",
+                "crouched_balance",
+            ]
+            resp = test_client.post("/api/lora-dataset/runs", json=payload)
+            assert resp.status_code == 200, resp.text
+            manifest = resp.json()
+            assert manifest["slot_order"] == [
+                "walking_stride",
+                "running_stride",
+                "crouched_balance",
+            ]
+            slot = manifest["slots"]["walking_stride"]
+            assert slot["tile_kind"] == "body_action"
+            assert slot["section_label"] == "Body Action"
+            assert "walking stride" in slot["tile_text"].lower()
+            assert "Body Action:" in slot["compiled_prompt"]
+
+            generate = test_client.post(f"/api/lora-dataset/runs/{manifest['run_id']}/generate")
+            assert generate.status_code == 200, generate.text
+            assert generate.json()["status"] == "complete"
+
+            run_dir = test_config.outputs_dir / "lora_runs" / manifest["run_id"]
+            assert (run_dir / "00_walking_stride.png").exists()
+            assert (run_dir / "00_walking_stride.txt").exists()
+            assert (run_dir / "01_running_stride.png").exists()
+            assert (run_dir / "01_running_stride.txt").exists()
+            assert (run_dir / "02_crouched_balance.png").exists()
+            assert (run_dir / "02_crouched_balance.txt").exists()
+
+    def test_create_run_mixed_locations_views_expressions_and_actions(self, test_client):
+        """A run can mix canonical locations with all bundled tile-pack kinds."""
+        _seed_tile_pack("lora_character_sheet.json")
+        _seed_tile_pack("lora_facial_expressions.json")
+        _seed_tile_pack("lora_body_actions.json")
+
+        with (
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json_anonymous",
+                side_effect=_fake_login_fetch,
+            ),
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json",
+                side_effect=_make_authenticated_fetch(_LOCATIONS),
+            ),
+        ):
+            _login(test_client)
+            payload = _create_run_payload(
+                location_ids=["location:image.locations.environment:cozy_inn:v1"]
+            )
+            payload["character_sheet_keys"] = ["front_view"]
+            payload["facial_expression_keys"] = ["smiling_closeup"]
+            payload["body_action_keys"] = ["walking_stride", "leaning_stance"]
+            resp = test_client.post("/api/lora-dataset/runs", json=payload)
+            assert resp.status_code == 200, resp.text
+            manifest = resp.json()
+            assert manifest["slot_order"] == [
+                "cozy_inn",
+                "front_view",
+                "smiling_closeup",
+                "walking_stride",
+                "leaning_stance",
+            ]
+            assert manifest["slots"]["cozy_inn"]["tile_kind"] == "location"
+            assert manifest["slots"]["front_view"]["tile_kind"] == "character_sheet"
+            assert manifest["slots"]["smiling_closeup"]["tile_kind"] == "facial_expression"
+            assert manifest["slots"]["walking_stride"]["tile_kind"] == "body_action"
+            assert manifest["slots"]["walking_stride"]["section_label"] == "Body Action"
+
+    def test_create_run_rejects_unknown_body_action_key(self, test_client):
+        """Unknown body-action keys are rejected with a 400."""
+        _seed_tile_pack("lora_body_actions.json")
+
+        with (
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json_anonymous",
+                side_effect=_fake_login_fetch,
+            ),
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json",
+                side_effect=_make_authenticated_fetch(_LOCATIONS),
+            ),
+        ):
+            _login(test_client)
+            payload = _create_run_payload(location_ids=[])
+            payload["body_action_keys"] = ["vaulting_pose"]
+            resp = test_client.post("/api/lora-dataset/runs", json=payload)
+            assert resp.status_code == 400
+            assert "body-action" in resp.json()["detail"].lower()
+
     def test_create_run_rejects_no_tiles_at_all(self, test_client):
         """A run with neither locations nor character-sheet keys is rejected."""
         with (
@@ -790,6 +909,7 @@ class TestLoraTilePacks:
             payload = _create_run_payload(location_ids=[])
             payload["character_sheet_keys"] = []
             payload["facial_expression_keys"] = []
+            payload["body_action_keys"] = []
             resp = test_client.post("/api/lora-dataset/runs", json=payload)
             assert resp.status_code == 400
             assert "at least one tile" in resp.json()["detail"].lower()

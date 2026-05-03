@@ -511,11 +511,18 @@
 
         <div class="panel" style="margin-bottom:var(--sp-3)">
           <div class="panel__heading">4 · Body Actions</div>
-          <p class="lora-section-placeholder" style="font-size:var(--text-xs);color:var(--col-text-muted);line-height:1.6">
-            Coming soon. Full-body tiles varying the character's posture
-            (walking, running, sitting, leaning) on a plain white background.
-            Will populate once the body-action tile-pack JSON is authored.
+          <p style="font-size:var(--text-xs);color:var(--col-text-muted);line-height:1.6;margin-bottom:var(--sp-2)">
+            Full-body action references on a plain white background. These
+            isolate posture, gait, and stance changes without introducing
+            location clutter or competing scene composition.
           </p>
+          <div class="ctrl-row" style="margin-bottom:var(--sp-2)">
+            <span class="status-bar__text" id="lora-body-action-status">Loading…</span>
+          </div>
+          <div
+            id="lora-body-action-list"
+            class="lora-locations-list lora-locations-list--wide"
+          ></div>
         </div>
 
         <div class="panel" style="margin-bottom:var(--sp-3)">

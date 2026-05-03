@@ -270,6 +270,15 @@ class LoraRunCreateRequest(BaseModel):
             "tile-pack at run creation."
         ),
     )
+    body_action_keys: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Bundled body-action tile keys selected for this run, "
+            "e.g. ['walking_stride', 'seated_rest']. Resolved against "
+            "the bundled ``lora_body_actions.json`` tile-pack at run "
+            "creation."
+        ),
+    )
     share_seed_across_tiles: bool = Field(
         default=True,
         description=(
