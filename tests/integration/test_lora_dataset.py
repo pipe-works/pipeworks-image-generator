@@ -641,7 +641,9 @@ class TestLoraPlaceholderFreezing:
             manifest = resp.json()
             assert (
                 manifest["pinned_sections"][0]["manual_text"]
-                == payload["pinned_sections"][0]["manual_text"]
+                == "A goblin. Small humanoid proportions, upright posture.\n"
+                "Large pointed ears set high on the skull.\n"
+                "Wide-set forward-facing crimson eyes."
             )
 
 
@@ -844,6 +846,7 @@ class TestLoraTilePacks:
 
     def test_create_run_rejects_unknown_character_sheet_key(self, test_client):
         """Unknown character-sheet keys are rejected with a 400."""
+        _seed_tile_pack("lora_character_view_profiles.json")
         with (
             patch(
                 "pipeworks.api.main._fetch_mud_api_json_anonymous",
