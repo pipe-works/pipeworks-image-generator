@@ -83,6 +83,8 @@ Current Luminal-oriented host-managed example:
 - nginx front door in front of the backend
 - workspace-managed writable paths for models, outputs, gallery images, and
   gallery metadata
+- optional read-only host share at `/srv/share/image-generator/gallery`
+  exposing `/srv/work/pipeworks/runtime/image-generator/outputs`
 
 Do not treat the repo-local `7860` default as the host-managed service truth.
 
