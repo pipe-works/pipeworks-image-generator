@@ -1,5 +1,46 @@
 # Changelog
 
+## [0.15.0](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.14.3...pipeworks-image-generator-v0.15.0) (2026-05-04)
+
+
+### Features
+
+* **composer:** dynamic ordered policy slots replace 5 hardcoded sections ([05afab7](https://github.com/pipe-works/pipeworks-image-generator/commit/05afab71644a1a2398d68f6de99a16a8ca159935))
+* **composer:** dynamic ordered policy slots replace 5 hardcoded sections ([9e066ab](https://github.com/pipe-works/pipeworks-image-generator/commit/9e066ab912dcb1a18acc2e1eb51bffcd87dcf0a2))
+* **lora:** add body action dataset tiles ([b87921c](https://github.com/pipe-works/pipeworks-image-generator/commit/b87921ca6585c7e7beef54d4abf89f25feb1fc44))
+* **lora:** add facial expression dataset tiles ([922bed9](https://github.com/pipe-works/pipeworks-image-generator/commit/922bed93a15e130500593c22885947f4a9c07647))
+* **lora:** add LoRA Dataset tab driven by canonical `location` policies ([c8324ef](https://github.com/pipe-works/pipeworks-image-generator/commit/c8324ef736213c19b88e8d2c96b311e81939dfd2))
+* **lora:** add LoRA Dataset tab driven by canonical `location` policies ([61253d3](https://github.com/pipe-works/pipeworks-image-generator/commit/61253d3e45e369982d7b265e67763a03a5d9890a))
+* **lora:** default-on shared seed across tiles, with toggle next to Generate all ([99ac69e](https://github.com/pipe-works/pipeworks-image-generator/commit/99ac69eb70dd242d3e1330b2efd945f5dc2f0738))
+* **lora:** default-on shared seed across tiles, with toggle next to Generate all ([4aedd2a](https://github.com/pipe-works/pipeworks-image-generator/commit/4aedd2ab46a25bbe44bfa1b67bc4d1caaa16e731))
+* **lora:** freeze prompt placeholders at run creation, surface seed in tile UI ([c4fa3b8](https://github.com/pipe-works/pipeworks-image-generator/commit/c4fa3b82ffd586bf9df328808aeb201f0ee7bd4f))
+* **lora:** freeze prompt placeholders at run creation, surface seed in tile UI ([dd08920](https://github.com/pipe-works/pipeworks-image-generator/commit/dd08920769cdfabd3b0c2e448cca87f0eebfe043))
+* **lora:** generalise slots to tile-kind, add Character Sheet turnaround ([39153b6](https://github.com/pipe-works/pipeworks-image-generator/commit/39153b64a9e25e82cbc68f683c7d4f739a84a77b))
+* **lora:** generalise slots to tile-kind, add Character Sheet turnaround ([3a975c1](https://github.com/pipe-works/pipeworks-image-generator/commit/3a975c1f28cbec128a50a08c9765c2efdac0d0d0))
+* **lora:** split character sheet into directional views ([ffbeed9](https://github.com/pipe-works/pipeworks-image-generator/commit/ffbeed9fea9c69c0248387f07535f070e943a665))
+* **lora:** split character sheet into directional views ([0cfaf35](https://github.com/pipe-works/pipeworks-image-generator/commit/0cfaf3585a512d290961f053a57a21e1614d5489))
+* **prompt:** add v3 dynamic-section schema alongside v2 ([9c7ceb7](https://github.com/pipe-works/pipeworks-image-generator/commit/9c7ceb703c9fd3c18492074c869f372a5b108603))
+* **prompt:** add v3 dynamic-section schema alongside v2 ([6031c12](https://github.com/pipe-works/pipeworks-image-generator/commit/6031c12b7515168990e77ee35f7d11cff11d386a))
+* **snippets:** expose canonical `location` policy as prompt snippet ([707f7e4](https://github.com/pipe-works/pipeworks-image-generator/commit/707f7e475de8700907c73e4e7a521ec6df6be4ed))
+* **snippets:** expose canonical `location` policy as prompt snippet ([8943644](https://github.com/pipe-works/pipeworks-image-generator/commit/894364460fdcf2ea7f1b36caa85668cc5ee75c4e))
+* **snippets:** include tone_profile policies in prompt-composer dropdown ([#92](https://github.com/pipe-works/pipeworks-image-generator/issues/92)) ([571d921](https://github.com/pipe-works/pipeworks-image-generator/commit/571d9210a3636d37c9c541420c600007389ee528))
+* **ui:** keep selected snippet visible in dropdown + AGENTS.md refresh ([#90](https://github.com/pipe-works/pipeworks-image-generator/issues/90)) ([d58f3eb](https://github.com/pipe-works/pipeworks-image-generator/commit/d58f3eb3be72505f2afbbfb7828cc76c7d756409))
+
+
+### Fixes
+
+* **lightbox:** drop vestigial onImageChange callback throwing on render ([#96](https://github.com/pipe-works/pipeworks-image-generator/issues/96)) ([0b86485](https://github.com/pipe-works/pipeworks-image-generator/commit/0b86485fe18c6014ac8ac07828d4f2b7e405cc67))
+* **lora:** undefined tile labels, truncated picker preview, add tile lightbox ([d8c48d1](https://github.com/pipe-works/pipeworks-image-generator/commit/d8c48d1f5bcc4ad75328f3e8cfdd421dbb296078))
+* **lora:** undefined tile labels, truncated picker preview, add tile lightbox ([0c95a34](https://github.com/pipe-works/pipeworks-image-generator/commit/0c95a3437214d05e820c072f8296721ef65ecb94))
+* **lora:** use single-column layout for Character Sheet picker ([49dc138](https://github.com/pipe-works/pipeworks-image-generator/commit/49dc1384dd17674aa1f66a0fd387cd7a92b9f7ea))
+* **runtime:** correct image-generator share mounts ([bc10f8e](https://github.com/pipe-works/pipeworks-image-generator/commit/bc10f8e2fb10d586533d7a35d937b30258dcb8c8))
+
+
+### Documentation
+
+* add repository contributor guide ([4c2759b](https://github.com/pipe-works/pipeworks-image-generator/commit/4c2759bcf5e646b7e4de232f648c581130eadb77))
+* **deploy:** document read-only outputs share ([#108](https://github.com/pipe-works/pipeworks-image-generator/issues/108)) ([4f0642c](https://github.com/pipe-works/pipeworks-image-generator/commit/4f0642cbc8c46f29528bd44652c431a1ff78c798))
+
 ## [0.14.3](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.14.2...pipeworks-image-generator-v0.14.3) (2026-04-11)
 
 
