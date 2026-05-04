@@ -218,6 +218,7 @@ export function createRuntimeGpuController({
       const payload = await apiClient.getPolicyPrompts();
       state.policyPromptOptions = payload.policy_prompt_options || [];
       state.policyPromptGroups = payload.policy_prompt_groups || [];
+      state.policyPromptSlotKinds = payload.policy_prompt_slot_kinds || [];
       if (payload.runtime_auth) {
         state.runtimeAuth = payload.runtime_auth;
       }
@@ -230,6 +231,7 @@ export function createRuntimeGpuController({
     } catch (error) {
       state.policyPromptOptions = [];
       state.policyPromptGroups = [];
+      state.policyPromptSlotKinds = [];
       applyPolicyPromptDropdowns();
       applyRuntimeControls();
       if (!silent) {
@@ -328,6 +330,7 @@ export function createRuntimeGpuController({
     const cfg = state.config;
     state.policyPromptOptions = cfg.policy_prompt_options || [];
     state.policyPromptGroups = cfg.policy_prompt_groups || [];
+    state.policyPromptSlotKinds = cfg.policy_prompt_slot_kinds || [];
 
     const selModel = $("#sel-model");
     selModel.innerHTML = "";
