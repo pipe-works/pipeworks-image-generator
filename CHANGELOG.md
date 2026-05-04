@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.0](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.15.0...pipeworks-image-generator-v0.16.0) (2026-05-04)
+
+
+### Features
+
+* **composer:** scope snippet picker by slot kind ([#110](https://github.com/pipe-works/pipeworks-image-generator/issues/110)) ([e7dc26d](https://github.com/pipe-works/pipeworks-image-generator/commit/e7dc26d2a306ce9526a183c9f10af4230a874329))
+
 ## [0.15.0](https://github.com/pipe-works/pipeworks-image-generator/compare/pipeworks-image-generator-v0.14.3...pipeworks-image-generator-v0.15.0) (2026-05-04)
 
 
