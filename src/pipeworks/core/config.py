@@ -41,7 +41,7 @@ Directory Management
 The configuration automatically creates required directories on initialisation:
 
 - ``models_dir``  — Cached HuggingFace model files
-- ``outputs_dir`` — Generated images (used by the gallery)
+- ``outputs_dir`` — Runtime output artifacts such as LoRA dataset runs
 - ``gallery_dir`` — Web-accessible gallery images
 - ``gallery_db`` — JSON metadata for the gallery
 
@@ -171,7 +171,7 @@ class PipeworksConfig(BaseSettings):
         models_dir : Path
             Directory to cache downloaded HuggingFace models.
         outputs_dir : Path
-            Directory to save generated images.
+            Directory for runtime output artifacts such as LoRA dataset runs.
         static_dir : Path
             Root of the web-accessible static files directory.
         data_dir : Path
