@@ -42,6 +42,14 @@ _RUNTIME_SESSION_COOKIE_NAME = "pw_image_runtime_session"
 _RUNTIME_SESSION_MAX_AGE_SECONDS = 12 * 60 * 60
 
 
+def _content_field(policy_item: dict[str, object], field_name: str) -> object:
+    """Return ``policy_item.content.<field_name>`` or ``None`` when absent."""
+    content = policy_item.get("content")
+    if not isinstance(content, dict):
+        return None
+    return content.get(field_name)
+
+
 @dataclass(slots=True)
 class RuntimeBrowserSession:
     """Server-side runtime session binding for browser refresh persistence."""
@@ -367,6 +375,32 @@ class RuntimePolicyService:
             return ""
         return text_value.strip()
 
+    @staticmethod
+    def extract_policy_slot_kinds(policy_item: dict[str, object], namespace: str) -> list[str]:
+        """Resolve the slot_kinds list for one policy item.
+
+        Prefers the top-level ``slot_kinds`` field surfaced by the mud-server
+        policy API (cleaned/deduped server-side). Falls back to
+        ``content.slot_kinds`` for older mud-server versions or direct content
+        reads. Defaults to ``[namespace]`` when neither is present, matching
+        the mud-server default-on-serialization contract.
+        """
+        for source in (policy_item.get("slot_kinds"), _content_field(policy_item, "slot_kinds")):
+            if isinstance(source, list) and source:
+                seen: set[str] = set()
+                cleaned: list[str] = []
+                for entry in source:
+                    if not isinstance(entry, str):
+                        continue
+                    stripped = entry.strip()
+                    if not stripped or stripped in seen:
+                        continue
+                    seen.add(stripped)
+                    cleaned.append(stripped)
+                if cleaned:
+                    return cleaned
+        return [namespace] if namespace else []
+
     def load_policy_prompt_options(
         self,
         *,
@@ -420,6 +454,7 @@ class RuntimePolicyService:
 
             option_id = f"{policy_id}:{variant}"
             group = namespace or policy_type
+            slot_kinds = self.extract_policy_slot_kinds(item, namespace=group)
             options.append(
                 {
                     "id": option_id,
@@ -427,6 +462,7 @@ class RuntimePolicyService:
                     "value": text_value,
                     "group": group,
                     "path": option_id,
+                    "slot_kinds": slot_kinds,
                 }
             )
 
@@ -438,6 +474,19 @@ class RuntimePolicyService:
         return sorted(
             {str(option.get("group") or "").strip() for option in options if option.get("group")}
         )
+
+    @staticmethod
+    def load_policy_prompt_slot_kinds(options: list[dict]) -> list[str]:
+        """Aggregate the unique sorted slot_kinds across all snippet options."""
+        kinds: set[str] = set()
+        for option in options:
+            raw = option.get("slot_kinds")
+            if not isinstance(raw, list):
+                continue
+            for entry in raw:
+                if isinstance(entry, str) and entry.strip():
+                    kinds.add(entry.strip())
+        return sorted(kinds)
 
     def load_policy_prompts_for_request(
         self,

@@ -39,14 +39,47 @@ export function createPromptComposer({
     }
   }
 
-  function renderPolicyOptions(selectEl, currentValue) {
+  function optionMatchesSlotKind(option, slotKind) {
+    if (!slotKind) return true;
+    const kinds = Array.isArray(option.slot_kinds) ? option.slot_kinds : [];
+    return kinds.includes(slotKind);
+  }
+
+  function renderPolicyOptions(selectEl, currentValue, slotKind) {
     selectEl.innerHTML = "";
     const placeholder = document.createElement("option");
     placeholder.value = "";
-    placeholder.textContent = "— Add snippet from policies —";
+    placeholder.textContent = slotKind
+      ? `— Add ${slotKind} snippet —`
+      : "— Add snippet from policies —";
     selectEl.appendChild(placeholder);
 
-    const options = state.policyPromptOptions || [];
+    const options = (state.policyPromptOptions || []).filter(option =>
+      optionMatchesSlotKind(option, slotKind)
+    );
+
+    if (slotKind) {
+      // Filtered to a single slot kind: skip optgroup chrome — the list is
+      // already coherent and short.
+      if (options.length === 0) {
+        const empty = document.createElement("option");
+        empty.value = "";
+        empty.disabled = true;
+        empty.textContent = "— No snippets for this slot kind —";
+        selectEl.appendChild(empty);
+      } else {
+        options.forEach(option => {
+          const opt = document.createElement("option");
+          opt.value = option.id;
+          opt.textContent = option.label || option.id;
+          selectEl.appendChild(opt);
+        });
+      }
+      selectEl.value =
+        currentValue && options.some(option => option.id === currentValue) ? currentValue : "";
+      return;
+    }
+
     const declaredGroups = state.policyPromptGroups || [];
     const grouped = new Map();
     declaredGroups.forEach(group => {
@@ -82,6 +115,21 @@ export function createPromptComposer({
     selectEl.value = currentValue || "";
   }
 
+  function renderSlotKindOptions(selectEl, currentValue) {
+    selectEl.innerHTML = "";
+    const freeForm = document.createElement("option");
+    freeForm.value = "";
+    freeForm.textContent = "Free-form (all snippets)";
+    selectEl.appendChild(freeForm);
+    (state.policyPromptSlotKinds || []).forEach(kind => {
+      const opt = document.createElement("option");
+      opt.value = kind;
+      opt.textContent = kind;
+      selectEl.appendChild(opt);
+    });
+    selectEl.value = currentValue || "";
+  }
+
   function applySlotMode(slotEl, mode) {
     slotEl.querySelectorAll(".composer-slot__mode").forEach(btn => {
       btn.classList.toggle("is-active", btn.dataset.mode === mode);
@@ -102,8 +150,13 @@ export function createPromptComposer({
     const textarea = slotEl.querySelector(".composer-slot__textarea");
     textarea.value = slot.manualText || "";
 
+    const kindSelect = slotEl.querySelector(".composer-slot__kind-select");
+    if (kindSelect) {
+      renderSlotKindOptions(kindSelect, slot.slotKind);
+    }
+
     const select = slotEl.querySelector(".composer-slot__select");
-    renderPolicyOptions(select, slot.selectedPolicyId);
+    renderPolicyOptions(select, slot.selectedPolicyId, slot.slotKind);
 
     applySlotMode(slotEl, slot.mode);
 
@@ -141,6 +194,27 @@ export function createPromptComposer({
         schedulePromptPreview();
       });
     });
+
+    const kindSelect = slotEl.querySelector(".composer-slot__kind-select");
+    if (kindSelect) {
+      kindSelect.addEventListener("change", () => {
+        const nextKind = (kindSelect.value || "").trim() || null;
+        slot.slotKind = nextKind;
+        const select = slotEl.querySelector(".composer-slot__select");
+        renderPolicyOptions(select, slot.selectedPolicyId, slot.slotKind);
+        if (slot.selectedPolicyId) {
+          const stillVisible = (state.policyPromptOptions || []).some(
+            option =>
+              option.id === slot.selectedPolicyId &&
+              optionMatchesSlotKind(option, slot.slotKind)
+          );
+          if (!stillVisible) {
+            slot.selectedPolicyId = null;
+            select.value = "";
+          }
+        }
+      });
+    }
 
     const select = slotEl.querySelector(".composer-slot__select");
     select.addEventListener("change", () => {
@@ -253,8 +327,12 @@ export function createPromptComposer({
     state.sections.forEach(slot => {
       const slotEl = getSlotElement(slot.id);
       if (!slotEl) return;
+      const kindSelect = slotEl.querySelector(".composer-slot__kind-select");
+      if (kindSelect) {
+        renderSlotKindOptions(kindSelect, slot.slotKind);
+      }
       const select = slotEl.querySelector(".composer-slot__select");
-      renderPolicyOptions(select, slot.selectedPolicyId);
+      renderPolicyOptions(select, slot.selectedPolicyId, slot.slotKind);
     });
   }
 

@@ -181,6 +181,15 @@ class TestGetConfig:
         assert isinstance(data["policy_prompt_groups"], list)
         assert data["policy_prompt_groups"] == []
 
+    def test_config_returns_policy_prompt_slot_kinds(self, test_client):
+        """Without runtime login, policy snippet slot kinds should be empty."""
+        resp = test_client.get("/api/config")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "policy_prompt_slot_kinds" in data
+        assert isinstance(data["policy_prompt_slot_kinds"], list)
+        assert data["policy_prompt_slot_kinds"] == []
+
     def test_runtime_mode_switch_accepts_server_url_override(self, test_client):
         """Runtime mode endpoint should accept explicit dev/prod URL overrides."""
         resp = test_client.post(
@@ -288,6 +297,66 @@ class TestGetConfig:
                 options_by_id["species_block:image.blocks.species:goblin:v2"]["value"]
                 == "A goblin of pipe-works canon."
             )
+            # slot_kinds default to [namespace] when mud-server omits the field.
+            assert options_by_id["species_block:image.blocks.species:goblin:v2"]["slot_kinds"] == [
+                "image.blocks.species"
+            ]
+            assert payload["policy_prompt_slot_kinds"] == [
+                "image.blocks.species",
+                "image.prompts.creatures",
+            ]
+
+    def test_policy_prompts_honor_explicit_slot_kinds_field(self, test_client):
+        """Top-level mud-server slot_kinds should be surfaced verbatim to clients."""
+
+        def _fake_login_fetch(*, base_url, method, path, body):
+            return {
+                "session_id": "session-admin-1",
+                "role": "admin",
+                "available_worlds": [{"id": "pipeworks_web", "name": "Pipeworks Web"}],
+            }
+
+        def _fake_authenticated_fetch(*, runtime, method, path, query_params, json_payload=None):
+            if path == "/api/policy-capabilities":
+                return {
+                    "allowed_policy_types": ["tone_profile"],
+                    "allowed_statuses": ["draft", "active"],
+                }
+            if path == "/api/policies":
+                return {
+                    "items": [
+                        {
+                            "policy_id": "tone_profile:image.tone_profiles:ledger_engraving",
+                            "policy_type": "tone_profile",
+                            "namespace": "image.tone_profiles",
+                            "policy_key": "ledger_engraving",
+                            "variant": "v1",
+                            "slot_kinds": ["atmosphere", "lighting"],
+                            "content": {"prompt_block": "Etched ledger lines."},
+                        },
+                    ]
+                }
+            raise AssertionError(f"Unexpected path: {path}")
+
+        with (
+            patch(
+                "pipeworks.api.main._fetch_mud_api_json_anonymous", side_effect=_fake_login_fetch
+            ),
+            patch("pipeworks.api.main._fetch_mud_api_json", side_effect=_fake_authenticated_fetch),
+        ):
+            login_resp = test_client.post(
+                "/api/runtime-login",
+                json={"username": "admin", "password": "pw"},
+            )
+            assert login_resp.status_code == 200
+
+            snippets_resp = test_client.get("/api/policy-prompts")
+            assert snippets_resp.status_code == 200
+            payload = snippets_resp.json()
+            options_by_id = {option["id"]: option for option in payload["policy_prompt_options"]}
+            tone_id = "tone_profile:image.tone_profiles:ledger_engraving:v1"
+            assert options_by_id[tone_id]["slot_kinds"] == ["atmosphere", "lighting"]
+            assert payload["policy_prompt_slot_kinds"] == ["atmosphere", "lighting"]
 
     def test_tone_profile_snippet_uses_prompt_block_field(self, test_client):
         """tone_profile snippets pull text from canonical ``content.prompt_block``."""

@@ -19,6 +19,7 @@ export function defaultSlot() {
     mode: "manual",
     manualText: "",
     selectedPolicyId: null,
+    slotKind: null,
     tokens: 0,
   };
 }
@@ -37,6 +38,7 @@ export const State = {
   runtimeAuth: null,
   policyPromptOptions: [],
   policyPromptGroups: [],
+  policyPromptSlotKinds: [],
   selectedModel: null,
   selectedGpuWorkerId: null,
   sections: [defaultSlot()],

@@ -186,9 +186,11 @@ def create_runtime_router(deps: RuntimeRouterDependencies) -> APIRouter:
             explicit_session_id=session_id,
             normalize_base_url=deps.normalize_base_url,
         )
+        slot_kinds = deps.runtime_policy_service.load_policy_prompt_slot_kinds(options)
         return {
             "policy_prompt_options": options,
             "policy_prompt_groups": groups,
+            "policy_prompt_slot_kinds": slot_kinds,
             "runtime_auth": runtime_auth.model_dump(),
         }
 
@@ -223,6 +225,9 @@ def create_runtime_router(deps: RuntimeRouterDependencies) -> APIRouter:
             "prompt_sections": ["subject", "setting", "details", "lighting", "atmosphere"],
             "policy_prompt_options": policy_prompt_options,
             "policy_prompt_groups": policy_prompt_groups,
+            "policy_prompt_slot_kinds": deps.runtime_policy_service.load_policy_prompt_slot_kinds(
+                policy_prompt_options
+            ),
             "runtime_mode": _build_runtime_mode_response().model_dump(),
             "runtime_auth": runtime_auth.model_dump(),
         }
